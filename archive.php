@@ -4,9 +4,9 @@
 	<div class="page-information-card card bg-gradient-secondary shadow-lg border-0">
 		<div class="card-body">
 			<h3 class="text-black">	<?php the_archive_title();?> </h3>
-			<?php if (the_archive_description() != ''){ ?>
+			<?php $argon_archive_description = get_the_archive_description(); if ($argon_archive_description != ''){ ?>
 				<p class="text-black mt-3">
-					<?php the_archive_description(); ?>
+					<?php echo $argon_archive_description; ?>
 				</p>
 			<?php } ?>
 			<p class="text-black mt-3 mb-0 opacity-8">
@@ -33,7 +33,7 @@
 		?>
 		<?php
 	else :
-		get_template_part( 'template-parts/preview/content', 'none-tag' );
+		get_template_part( 'template-parts/content', 'none-tag' );
 	endif;
 	?>
 

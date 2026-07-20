@@ -3,7 +3,7 @@
 <div class="page-information-card-container">
 	<div class="page-information-card card bg-gradient-secondary shadow-lg border-0" <?php if (isset($_GET['post_type'])){echo 'style="animation: none;"';}?>>
 		<div class="card-body">
-			<h3 class="text-black mr-2 d-inline-block">	<?php echo get_search_query();?> </h3>
+			<h3 class="text-black mr-2 d-inline-block">	<?php echo esc_html( get_search_query() );?> </h3>
 			<p class="lead text-black mt-0 d-inline-block">
 				<?php _e('的搜索结果', 'argon');?>
 			</p>

@@ -143,7 +143,7 @@
 							<div class="input-group-prepend">
 								<span class="input-group-text"><i class="fa fa-key"></i></span>
 							</div>
-							<input id="post_comment_captcha" class="form-control" placeholder="<?php _e('验证码', 'argon');?>" type="text" <?php if (current_user_can('level_7')) {echo('value="' . get_comment_captcha_answer(get_comment_captcha_seed()) . '" disabled');}?>>
+							<input id="post_comment_captcha" class="form-control" placeholder="<?php _e('验证码', 'argon');?>" type="text" <?php if (current_user_can('manage_options')) {echo('value="' . get_comment_captcha_answer(get_comment_captcha_seed()) . '" disabled');}?>>
 							<style>
 								.post-comment-captcha-container:before{
 									content: attr(captcha);
@@ -228,7 +228,7 @@
 					<?php } ?>
 				</div>
 			</div>
-			<input id="post_comment_captcha_seed" value="<?php echo $commentCaptchaSeed;?>" style="display: none;"></input>
+			<input id="post_comment_captcha_seed" value="" style="display: none;"></input>
 			<input id="post_comment_post_id" value="<?php echo get_the_ID();?>" style="display: none;"></input>
 		</form>
 	</div>

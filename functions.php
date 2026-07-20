@@ -2,6 +2,22 @@
 if (version_compare( $GLOBALS['wp_version'], '4.4-alpha', '<' )) {
 	echo "<div style='background: #5e72e4;color: #fff;font-size: 30px;padding: 50px 30px;position: fixed;width: 100%;left: 0;right: 0;bottom: 0;z-index: 2147483647;'>" . __("Argon 主题不支持 Wordpress 4.4 以下版本，请更新 Wordpress", 'argon') . "</div>";
 }
+
+/**
+ * 带请求内静态缓存的 get_option 封装，避免同一请求中重复读取同一选项造成的多次数据库查询。
+ * 仅当选项确实存在（返回值不等于默认值）时才写入缓存，避免不同默认值的调用相互污染。
+ */
+function argon_get_option($option, $default = false) {
+	static $argon_option_cache = array();
+	if (!array_key_exists($option, $argon_option_cache)) {
+		$value = get_option($option, $default);
+		if ($value !== $default) {
+			$argon_option_cache[$option] = $value;
+		}
+		return $value;
+	}
+	return $argon_option_cache[$option];
+}
 function theme_slug_setup() {
 	add_theme_support('title-tag');
 	add_theme_support('post-thumbnails');
@@ -63,6 +79,7 @@ function argon_get_locate(){
 	if (is_admin()){
 		$determined_locale = get_user_locale();
 	}
+	return $determined_locale;
 }
 function theme_locale_hook($locate, $domain){
 	if ($domain == 'argon'){
@@ -422,7 +439,8 @@ function get_random_token(){
 function set_user_token_cookie(){
 	if (!isset($_COOKIE["argon_user_token"]) || strlen($_COOKIE["argon_user_token"]) != 32){
 		$newToken = get_random_token();
-		setcookie("argon_user_token", $newToken, time() + 10 * 365 * 24 * 60 * 60, "/");
+		$cookie_domain = defined('COOKIE_DOMAIN') ? COOKIE_DOMAIN : '';
+		setcookie("argon_user_token", $newToken, time() + 10 * 365 * 24 * 60 * 60, "/", $cookie_domain, is_ssl(), true);
 		$_COOKIE["argon_user_token"] = $newToken;
 	}
 }
@@ -487,7 +505,7 @@ function get_seo_keywords(){
 function get_og_image(){
 	global $post;
 	$postID = $post -> ID;
-	$argon_first_image_as_thumbnail = get_post_meta($postID, 'argon_first_image_as_thumbnail', 'true');
+	$argon_first_image_as_thumbnail = get_post_meta($postID, 'argon_first_image_as_thumbnail', true);
 	if (has_post_thumbnail() || $argon_first_image_as_thumbnail == 'true'){
 		return argon_get_post_thumbnail($postID);
 	}
@@ -534,9 +552,16 @@ function set_post_views(){
 		return;
 	}
 	$post_id = $post -> ID;
-	$count_key = 'views';
-	$count = get_post_meta($post_id, $count_key, true);
 	if (is_single() || is_page()) {
+		// 节流：同一访客 60s 内重复刷新同一文章只计数一次，降低数据库写放大
+		$viewed = isset($_COOKIE['argon_viewed_posts']) ? array_map('intval', explode(',', $_COOKIE['argon_viewed_posts'])) : array();
+		if (in_array($post_id, $viewed)){
+			return;
+		}
+		$viewed[] = $post_id;
+		setcookie('argon_viewed_posts', implode(',', array_slice($viewed, -20)), time() + 60, '/');
+		$count_key = 'views';
+		$count = get_post_meta($post_id, $count_key, true);
 		if ($count==''){
 			delete_post_meta($post_id, $count_key);
 			add_post_meta($post_id, $count_key, '0');
@@ -554,7 +579,7 @@ function get_article_words($str){
 	foreach ($codeSegments as $codeSegment){
 		$codeLines = preg_split('/\r\n|\n|\r/', $codeSegment);
 		foreach ($codeLines as $line){
-			if (strlen(trim($str)) > 0){
+			if (strlen(trim($line)) > 0){
 				$codeTotal++;
 			}
 		}
@@ -1014,19 +1039,36 @@ function set_comment_upvotes($id){
 	update_comment_meta($comment -> comment_ID, "upvotes", $upvotes);
 	return $upvotes;
 }
-function is_comment_upvoted($id){
-	$upvotedList = isset( $_COOKIE['argon_comment_upvoted'] ) ? $_COOKIE['argon_comment_upvoted'] : '';
-	if (in_array($id, explode(',', $upvotedList))){
-		return true;
+function argon_get_upvoted_comment_ids(){
+	// 已赞评论 ID 列表：登录用户走 user meta（服务端去重），匿名用户走 Cookie（尽力而为）
+	if (is_user_logged_in()){
+		$list = get_user_meta(get_current_user_id(), 'argon_upvoted_comments', true);
+		return is_array($list) ? $list : array();
 	}
-	return false;
+	$upvotedList = isset( $_COOKIE['argon_comment_upvoted'] ) ? $_COOKIE['argon_comment_upvoted'] : '';
+	return array_filter(array_map('intval', explode(',', $upvotedList)), function($v){ return $v > 0; });
+}
+function argon_mark_comment_upvoted($id){
+	if (is_user_logged_in()){
+		$list = argon_get_upvoted_comment_ids();
+		if (!in_array($id, $list, true)){
+			$list[] = (int) $id;
+			update_user_meta(get_current_user_id(), 'argon_upvoted_comments', $list);
+		}
+	}else{
+		$upvotedList = isset( $_COOKIE['argon_comment_upvoted'] ) ? $_COOKIE['argon_comment_upvoted'] : '';
+		setcookie('argon_comment_upvoted', $upvotedList . $id . "," , time() + 3153600000 , '/');
+	}
+}
+function is_comment_upvoted($id){
+	return in_array((int) $id, argon_get_upvoted_comment_ids(), true);
 }
 function upvote_comment(){
 	if (get_option("argon_enable_comment_upvote", "false") != "true"){
 		return;
 	}
 	header('Content-Type:application/json; charset=utf-8');
-	$ID = $_POST["comment_id"];
+	$ID = isset($_POST["comment_id"]) ? intval($_POST["comment_id"]) : 0;
 	$comment = get_comment($ID);
 	if ($comment == null){
 		exit(json_encode(array(
@@ -1035,8 +1077,7 @@ function upvote_comment(){
 			'total_upvote' => 0
 		)));
 	}
-	$upvotedList = isset( $_COOKIE['argon_comment_upvoted'] ) ? $_COOKIE['argon_comment_upvoted'] : '';
-	if (in_array($ID, explode(',', $upvotedList))){
+	if (is_comment_upvoted($ID)){
 		exit(json_encode(array(
 			'status' => 'failed',
 			'msg' => __('该评论已被赞过', 'argon'),
@@ -1044,7 +1085,7 @@ function upvote_comment(){
 		)));
 	}
 	set_comment_upvotes($ID);
-	setcookie('argon_comment_upvoted', $upvotedList . $ID . "," , time() + 3153600000 , '/');
+	argon_mark_comment_upvoted($ID);
 	exit(json_encode(array(
 		'ID' => $ID,
 		'status' => 'success',
@@ -1171,7 +1212,7 @@ function get_comment_captcha_seed($refresh = false){
 		}
 		return $res;
 	}
-	$captchaSeed = rand(0 , 500000000);
+	$captchaSeed = function_exists('random_int') ? random_int(0, 500000000) : mt_rand(0, 500000000);
 	$_SESSION['captchaSeed'] = $captchaSeed;
 	session_write_close();
 	return $captchaSeed;
@@ -1254,7 +1295,7 @@ function wrong_captcha(){
 	exit(json_encode(array(
 		'status' => 'failed',
 		'msg' => __('验证码错误', 'argon'),
-		'isAdmin' => current_user_can('level_7')
+		'isAdmin' => current_user_can('manage_options')
 	)));
 	//wp_die('验证码错误，评论失败');
 }
@@ -1271,7 +1312,7 @@ function check_comment_captcha($comment){
 		return $comment;
 	}
 	$answer = $_POST['comment_captcha'];
-	if(current_user_can('level_7')){
+	if(current_user_can('manage_options')){
 		return $comment;
 	}
 	$captcha = new captcha_calculation(get_comment_captcha_seed());
@@ -1287,7 +1328,7 @@ function ajax_get_captcha(){
 		return;
 	}
 	exit(json_encode(array(
-		'captcha' => get_comment_captcha(get_comment_captcha_seed())
+		'captcha' => get_comment_captcha()
 	)));
 }
 add_action('wp_ajax_get_captcha', 'ajax_get_captcha');
@@ -1301,7 +1342,7 @@ function ajax_post_comment(){
 			exit(json_encode(array(
 				'status' => 'failed',
 				'msg' =>  __('不能回复其他人的悄悄话评论', 'argon'),
-				'isAdmin' => current_user_can('level_7')
+				'isAdmin' => current_user_can('manage_options')
 			)));
 		}
 	}
@@ -1322,7 +1363,7 @@ function ajax_post_comment(){
 		exit(json_encode(array(
 			'status' => 'failed',
 			'msg' => $msg,
-			'isAdmin' => current_user_can('level_7')
+			'isAdmin' => current_user_can('manage_options')
 		)));
 	}
 	$user = wp_get_current_user();
@@ -1344,7 +1385,7 @@ function ajax_post_comment(){
 	);
 	$newCaptchaSeed = get_comment_captcha_seed(true);
 	$newCaptcha = get_comment_captcha($newCaptchaSeed);
-	if (current_user_can('level_7')){
+	if (current_user_can('manage_options')){
 		$newCaptchaAnswer = get_comment_captcha_answer($newCaptchaSeed);
 	}else{
 		$newCaptchaAnswer = "";
@@ -1354,11 +1395,11 @@ function ajax_post_comment(){
 		'html' => $html,
 		'id' => $comment -> comment_ID,
 		'parentID' => $comment -> comment_parent,
-		'commentOrder' => (get_option("comment_order") == "" ? "desc" : get_option("comment_order")),
+		'commentOrder' => (argon_get_option("comment_order") == "" ? "desc" : argon_get_option("comment_order")),
 		'newCaptchaSeed' => $newCaptchaSeed,
 		'newCaptcha' => $newCaptcha,
 		'newCaptchaAnswer' => $newCaptchaAnswer,
-		'isAdmin' => current_user_can('level_7'),
+		'isAdmin' => current_user_can('manage_options'),
 		'isLogin' => is_user_logged_in()
 	)));
 }
@@ -1393,9 +1434,11 @@ function comment_markdown_parse($comment_content){
 
 	$res = preg_replace(
 		'/<a (.*?)>(.*?)<\/a>/',
-		'<a $1 target="_blank">$2</a>',
+		'<a $1 target="_blank" rel="noopener nofollow">$2</a>',
 		$res
 	);
+	//防御兜底：对 Markdown 解析结果再做一次白名单净化，避免存储型 XSS
+	$res = wp_kses($res, $allowedtags);
 	return $res;
 }
 //评论发送处理
@@ -1403,7 +1446,7 @@ function post_comment_preprocessing($comment){
 	//保存评论未经 Markdown 解析的源码
 	$_POST['comment_content_source'] = $comment['comment_content'];
 	//Markdown
-	if ($_POST['use_markdown'] == 'true' && get_option("argon_comment_allow_markdown") != "false"){
+	if ($_POST['use_markdown'] == 'true' && argon_get_option("argon_comment_allow_markdown") != "false"){
 		$comment['comment_content'] = comment_markdown_parse($comment['comment_content']);
 	}
 	return $comment;
@@ -1447,7 +1490,7 @@ function comment_mail_notify($comment){
 								<div style="background: rgba(0, 0, 0, .15);height: 1px;width: 300px;margin: auto;margin-bottom: 35px;"></div>
 								<div style="font-size: 18px;border-left: 4px solid rgba(0, 0, 0, .15);width: max-content;width: -moz-max-content;margin: auto;padding: 20px 30px;background: rgba(0,0,0,.08);border-radius: 6px;box-shadow: 0 2px 4px rgba(0,0,0,.075)!important;min-width: 60%;max-width: 90%;margin-bottom: 40px;">
 									<div style="margin-bottom: 10px;"><strong><span style="color: #5e72e4;">@' . htmlspecialchars($commentAuthor) . '</span> ' . __('回复了你', "argon") . ':</strong></div>
-									' . str_replace('\n', '<div></div>', $content) . ' 
+									' . str_replace("\n", '<div></div>', $content) . ' 
 								</div>
 								<table width="100%" style="border-collapse:collapse;border:none;empty-cells:show;max-width:100%;box-sizing:border-box" cellspacing="0" cellpadding="0">
 									<tbody style="box-sizing:border-box">
@@ -1505,13 +1548,13 @@ function post_comment_updatemetas($id){
 	update_comment_meta($id, "user_token", $_COOKIE["argon_user_token"]);
 	//保存初次编辑记录
 	$editHistory = array(array(
-		'content' => $_POST['comment_content_source'],
+		'content' => htmlspecialchars(stripslashes($_POST['comment_content_source'])),
 		'time' => time(),
 		'isfirst' => true
 	));
 	update_comment_meta($id, "comment_edit_history", addslashes(json_encode($editHistory, JSON_UNESCAPED_UNICODE)));
 	//是否启用 Markdown
-	if ($_POST['use_markdown'] == 'true' && get_option("argon_comment_allow_markdown") != "false"){
+	if ($_POST['use_markdown'] == 'true' && argon_get_option("argon_comment_allow_markdown") != "false"){
 		update_comment_meta($id, "use_markdown", "true");
 	}else{
 		update_comment_meta($id, "use_markdown", "false");
@@ -1774,7 +1817,7 @@ function get_argon_comment_paginate_links_prev_url(){
 	return $url[1];
 }
 //评论重排序（置顶优先）
-$GLOBALS['comment_order'] = get_option('comment_order');
+$GLOBALS['comment_order'] = argon_get_option('comment_order');
 function argon_comment_cmp($a, $b){
 	$a_pinned = get_comment_meta($a -> comment_ID, 'pinned', true);
 	$b_pinned = get_comment_meta($b -> comment_ID, 'pinned', true);
@@ -1785,13 +1828,14 @@ function argon_comment_cmp($a, $b){
 		$b_pinned = "false";
 	}
 	if ($a_pinned == $b_pinned){
-		return ($a -> comment_date_gmt) > ($b -> comment_date_gmt);
-	}else{
-		if ($a_pinned == "true"){
-			return ($GLOBALS['comment_order'] == 'desc');
-		}else{
-			return ($GLOBALS['comment_order'] != 'desc');
+		// 同置顶状态：按时间排序（desc 新在前）
+		if ($GLOBALS['comment_order'] == 'desc'){
+			return $b -> comment_date_gmt <=> $a -> comment_date_gmt;
 		}
+		return $a -> comment_date_gmt <=> $b -> comment_date_gmt;
+	}else{
+		// 置顶评论始终排在前面
+		return ($a_pinned == "true") ? -1 : 1;
 	}
 }
 function argon_get_comments(){
@@ -1820,7 +1864,11 @@ function argon_get_comments(){
 	if (get_option("argon_enable_comment_pinning", "false") == "true"){
 		usort($comments, "argon_comment_cmp");
 	}else{
-		$comments = array_reverse($comments);
+		// 与前端新评论插入方向保持一致：仅当 comment_order 明确为 'asc'（旧在上）时才反转；
+		// 未设置或 'desc' 时保持 DESC（新在上），对应 argontheme.js 的 prepend 行为
+		if (argon_get_option('comment_order') == 'asc'){
+			$comments = array_reverse($comments);
+		}
 	}
 	
 	//向评论数组中填充 placeholder comments 以填满第一页
@@ -1912,7 +1960,7 @@ function argon_lazyload($content){
 }
 function argon_fancybox($content){
 	if(!is_feed() && !is_robots() && !is_home()){
-		if (get_option('argon_enable_lazyload') != 'false'){
+		if (argon_get_option('argon_enable_lazyload') != 'false'){
 			$content = preg_replace('/<img(.*?)data-original=[\'"](.*?)[\'"](.*?)((\/>)|>|(<\/img>))/i',"<div class='fancybox-wrapper lazyload-container-unload' data-fancybox='post-images' href='$2'>$0</div>" , $content);
 		}else{
 			$content = preg_replace('/<img(.*?)src=[\'"](.*?)[\'"](.*?)((\/>)|>|(<\/img>))/i',"<div class='fancybox-wrapper' data-fancybox='post-images' href='$2'>$0</div>" , $content);
@@ -1921,7 +1969,7 @@ function argon_fancybox($content){
 	return $content;
 }
 function the_content_filter($content){
-	if (get_option('argon_enable_lazyload') != 'false'){
+	if (argon_get_option('argon_enable_lazyload') != 'false'){
 		$content = argon_lazyload($content);
 	}
 	if (get_option('argon_enable_fancybox') != 'false' && get_option('argon_enable_zoomify') == 'false'){
@@ -1938,7 +1986,7 @@ function the_content_filter($content){
 add_filter('the_content' , 'the_content_filter',20);
 //使用 CDN 加速 gravatar
 function gravatar_cdn($url){
-	$cdn = get_option('argon_gravatar_cdn', 'gravatar.pho.ink/avatar/');
+	$cdn = argon_get_option('argon_gravatar_cdn', 'gravatar.pho.ink/avatar/');
 	$cdn = str_replace("http://", "", $cdn);
 	$cdn = str_replace("https://", "", $cdn);
 	if (substr($cdn, -1) != '/'){
@@ -1947,7 +1995,7 @@ function gravatar_cdn($url){
 	$url = preg_replace("/\/\/(.*?).gravatar.com\/avatar\//", "//" . $cdn, $url);
 	return $url;
 }
-if (get_option('argon_gravatar_cdn' , '') != ''){
+if (argon_get_option('argon_gravatar_cdn' , '') != ''){
 	add_filter('get_avatar_url', 'gravatar_cdn');
 }
 function text_gravatar($url){
@@ -2404,13 +2452,26 @@ function argon_init_gutenberg_blocks() {
 		array('wp-edit-blocks'),
 		filemtime(get_template_directory() . '/gutenberg/dist/blocks.editor.build.css')
 	);
-	register_block_type(
-		'argon/argon-gutenberg-block', array(
-			//'style'         => 'argon-gutenberg-block-frontend-css',
-			'editor_script' => 'argon-gutenberg-block-js',
-			'editor_style'  => 'argon-gutenberg-block-backend-css',
-		)
+	$argon_blocks = array(
+		'argon/alert',
+		'argon/admonition',
+		'argon/collapse',
+		'argon/github',
+		'argon/timeline',
+		'argon/progressbar',
+		'argon/todolist',
+		'argon/tabpanel',
 	);
+	foreach ( $argon_blocks as $argon_block ) {
+		register_block_type(
+			$argon_block,
+			array(
+				//'style'         => 'argon-gutenberg-block-frontend-css',
+				'editor_script' => 'argon-gutenberg-block-js',
+				'editor_style'  => 'argon-gutenberg-block-backend-css',
+			)
+		);
+	}
 }
 add_action('init', 'argon_init_gutenberg_blocks');
 function argon_add_gutenberg_category($block_categories, $editor_context) {
@@ -2511,7 +2572,7 @@ add_shortcode('checkbox','shortcode_checkbox');
 function shortcode_checkbox($attr,$content=""){
 	$content = shortcode_content_preprocess($attr, $content);
 	$checked = isset( $attr['checked'] ) ? $attr['checked'] : 'false';
-	$inline = isset($attr['inline']) ? $attr['checked'] : 'false';
+	$inline = isset($attr['inline']) ? $attr['inline'] : 'false';
 	$out = "<div class='shortcode-todo custom-control custom-checkbox";
 	if ($inline == 'true'){
 		$out .= " inline";
@@ -2897,7 +2958,7 @@ function shortcode_github($attr,$content=""){
 			$json = json_decode($json);
 			$description = esc_html($json -> description);
 			if (!empty($json -> homepage)){
-				$description .= esc_html(" <a href='" . $json -> homepage . "' target='_blank' no-pjax>" . $json -> homepage . "</a>");
+				$description .= " <a href='" . esc_url($json -> homepage) . "' target='_blank' rel='noopener nofollow' no-pjax>" . esc_html($json -> homepage) . "</a>";
 			}
 			$stars = $json -> stargazers_count;
 			$forks = $json -> forks_count;

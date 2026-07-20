@@ -1,13 +1,14 @@
 <!DOCTYPE html>
 <?php
 	$htmlclasses = "";
-	if (get_option('argon_page_layout') == "single"){
+	$argon_page_layout = get_option('argon_page_layout');
+	if ($argon_page_layout == "single"){
 		$htmlclasses .= "single-column ";
 	}
-	if (get_option('argon_page_layout') == "triple"){
+	if ($argon_page_layout == "triple"){
 		$htmlclasses .= "triple-column ";
 	}
-	if (get_option('argon_page_layout') == "double-reverse"){
+	if ($argon_page_layout == "double-reverse"){
 		$htmlclasses .= "double-column-reverse ";
 	}
 	if (get_option('argon_enable_immersion_color') == "true"){

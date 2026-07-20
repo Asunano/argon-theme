@@ -651,8 +651,9 @@ if (argonConfig.waterflow_columns != "1") {
 		$("html").removeClass("use-big-shadow");
 	}
 	//滤镜
+	var allowedBlogFilters = ["off", "sunset", "darkness", "grayscale"];
 	function setBlogFilter(name){
-		if (name == undefined || name == ""){
+		if (allowedBlogFilters.indexOf(name) == -1){
 			name = "off";
 		}
 		if (!$("html").hasClass("filter-" + name)){
@@ -1168,8 +1169,8 @@ if (argonConfig.waterflow_columns != "1") {
 				//复位评论表单
 				cancelReply();
 				$("#post_comment_content").val("");
-				$("#post_comment_captcha_seed").val(result.newCaptchaSeed);
-				$("#post_comment_captcha + style").html(".post-comment-captcha-container:before{content: '" + result.newCaptcha + "';}");
+			$("#post_comment_captcha_seed").val(result.newCaptchaSeed);
+			$("#post_comment_captcha + style").html(".post-comment-captcha-container:before{content: '" + String(result.newCaptcha).replace(/'/g, "\\'") + "';}");
 				$("#post_comment_captcha").val(result.newCaptchaAnswer);
 				$("body,html").animate({
 					scrollTop: $("#comment-" + result.id).offset().top - 100
@@ -1640,17 +1641,22 @@ $(document).on("submit" , ".post-password-form" , function(){
 
 /*URL 中 # 根据 ID 定位*/
 function gotoHash(hash, durtion, easing = 'easeOutExpo'){
-	if (hash.length == 0){
+	if (typeof hash !== 'string' || hash.length == 0 || hash.charAt(0) != '#'){
 		return;
 	}
-	if ($(hash).length == 0){
+	// 仅允许合法的 CSS ID 选择器，防止 location.hash 被当作任意 jQuery 选择器
+	if (!/^#[A-Za-z][A-Za-z0-9_\-:]*$/.test(hash)){
+		return;
+	}
+	var $target = $(hash);
+	if ($target.length == 0){
 		return;
 	}
 	if (durtion == null){
 		durtion = 200;
 	}
 	$("body,html").stop().animate({
-		scrollTop: $(hash).offset().top - 80
+		scrollTop: $target.offset().top - 80
 	}, durtion, easing);
 }
 function getHash(url){
@@ -2026,13 +2032,22 @@ function getGithubInfoCardContent(){
 				type : "GET",
 				dataType : "json",
 				success : function(result){
-					description = result.description;
-					if (result.homepage != "" && result.homepage != null){
-						description += " <a href='" + result.homepage + "' target='_blank' no-pjax>" + result.homepage + "</a>"
+					var $desc = $(".github-info-card-description", $this);
+					$desc.text(result.description != null ? result.description : "");
+					if (result.homepage != "" && result.homepage != null) {
+						var homepage = String(result.homepage);
+						if (/^https?:\/\//i.test(homepage)) {
+							$("<a>")
+								.attr("href", homepage)
+								.attr("target", "_blank")
+								.attr("rel", "noopener nofollow")
+								.attr("no-pjax", "")
+								.text(homepage)
+								.appendTo($desc);
+						}
 					}
-					$(".github-info-card-description" , $this).html(description);
-					$(".github-info-card-stars" , $this).html(result.stargazers_count);
-					$(".github-info-card-forks" , $this).html(result.forks_count);
+					$(".github-info-card-stars" , $this).text(result.stargazers_count);
+					$(".github-info-card-forks" , $this).text(result.forks_count);
 				},
 				error : function(xhr){
 					if (xhr.status == 404){

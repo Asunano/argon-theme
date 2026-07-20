@@ -1,5 +1,17 @@
 <?php
-	require(preg_replace('/wp-content(.*?)$/', '', dirname( __FILE__ )) . 'wp-blog-header.php');
+	$argon_wp_load_dir = dirname( __FILE__ );
+	while ( ! file_exists( $argon_wp_load_dir . '/wp-load.php' ) ) {
+		if ( $argon_wp_load_dir === dirname( $argon_wp_load_dir ) ) {
+			break;
+		}
+		$argon_wp_load_dir = dirname( $argon_wp_load_dir );
+	}
+	if ( file_exists( $argon_wp_load_dir . '/wp-load.php' ) ) {
+		require_once( $argon_wp_load_dir . '/wp-load.php' );
+	} else {
+		status_header( 500 );
+		exit( 'WordPress 环境未找到' );
+	}
 	header('HTTP/1.1 200 OK');
 	$id = intval($_GET['comment'] ?? -1);
 	$token = $_GET['token'] ?? "";

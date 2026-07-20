@@ -1,0 +1,68 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build & publish release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify version sync
+        run: |
+          STYLE_VER="$(grep -m1 '^Version:' style.css | sed 's/.*:[[:space:]]*//')"
+          INFO_VER="$(grep -m1 '"version"' info.json | sed -E 's/.*"version"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/')"
+          TAG="${GITHUB_REF_NAME#v}"
+          echo "style.css = $STYLE_VER"
+          echo "info.json = $INFO_VER"
+          echo "tag       = $TAG"
+          if [ "$STYLE_VER" != "$INFO_VER" ]; then
+            echo "::error::style.css Version ($STYLE_VER) 与 info.json version ($INFO_VER) 不一致，请先同步版本再发版"
+            exit 1
+          fi
+          if [ "$STYLE_VER" != "$TAG" ]; then
+            echo "::error::版本号 ($STYLE_VER) 与 tag ($TAG) 不一致"
+            exit 1
+          fi
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build Gutenberg blocks
+        working-directory: gutenberg
+        run: |
+          npm ci
+          npm run build
+
+      - name: Package theme zip
+        run: |
+          THEME=argon-theme
+          rm -rf dist-tmp "$THEME.zip"
+          mkdir -p "dist-tmp/$THEME"
+          for item in $(ls -A); do
+            case "$item" in
+              .git|.github|node_modules|.gitignore|CODE_REVIEW.md|CODEBUDDY.md|README.md|README_en.md)
+                continue ;;
+            esac
+            cp -a "$item" "dist-tmp/$THEME/"
+          done
+          ( cd dist-tmp && zip -r "../$THEME.zip" "$THEME" )
+          rm -rf dist-tmp
+          echo "=== 打包内容 ==="
+          unzip -l "$THEME.zip" | head -n 20
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: argon-theme.zip
+          generate_release_notes: true

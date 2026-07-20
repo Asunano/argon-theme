@@ -75,7 +75,11 @@
 				echo "<div class='argon-timeline archive-timeline'>";
 				$last_year = 0;
 				$last_month = 0;
-				$posts = get_posts('numberposts=-1&orderby=post_date&order=DESC');
+				$posts = get_posts( array(
+				'numberposts' => 200,
+				'orderby'     => 'post_date',
+				'order'       => 'DESC',
+			) );
 				foreach ($posts as $post){
 					setup_postdata($post);
 					$year = mysql2date('Y', $post -> post_date);
@@ -115,7 +119,7 @@
 			<?php
 				$tags = get_the_tags();
 				foreach ($tags as $tag) {
-					echo "<a href='" . get_category_link($tag -> term_id) . "' target='_blank' class='tag badge badge-secondary post-meta-detail-tag'>" . $tag -> name . "</a>";
+					echo "<a href='" . esc_url(get_tag_link($tag -> term_id)) . "' target='_blank' class='tag badge badge-secondary post-meta-detail-tag'>" . esc_html($tag -> name) . "</a>";
 				}
 			?>
 		</div>

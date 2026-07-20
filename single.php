@@ -58,28 +58,34 @@
 						}
 					}
 				}	
-				$query = new WP_Query(array(
-					'posts_per_page' => get_option('argon_related_post_limit' , '10'),
-					'order' => get_option('argon_related_post_sort_order', 'DESC'),
-					'orderby' => get_option('argon_related_post_sort_orderby', 'date'),
-					'meta_key' => 'views',
-					'post__not_in' => array($post -> ID),
-					'tax_query' => array(
-						'relation' => 'OR',
-						array(
-							'taxonomy' => 'category',
-							'field' => 'slug',
-							'terms' => $cat_array,
-							'include_children' => false
-						),
-						array(
-							'taxonomy' => 'post_tag',
+			$related_orderby = get_option('argon_related_post_sort_orderby', 'date');
+			$query_args = array(
+				'posts_per_page' => get_option('argon_related_post_limit' , '10'),
+				'order' => get_option('argon_related_post_sort_order', 'DESC'),
+				'post__not_in' => array($post -> ID),
+				'tax_query' => array(
+					'relation' => 'OR',
+					array(
+						'taxonomy' => 'category',
+						'field' => 'slug',
+						'terms' => $cat_array,
+						'include_children' => false
+					),
+					array(
+						'taxonomy' => 'post_tag',
 							'field' => 'slug',
 							'terms' => $tag_array,
-						)
 					)
-				));
-				if ($query -> have_posts()) {
+				)
+			);
+			if ($related_orderby == 'meta_value_num'){
+				$query_args['meta_key'] = 'views';
+				$query_args['orderby'] = 'meta_value_num';
+			}else{
+				$query_args['orderby'] = $related_orderby;
+			}
+			$query = new WP_Query($query_args);
+			if ($query -> have_posts()) {
 					echo '<div class="related-posts card shadow-sm">
                     <h2 class="post-comment-title" style="margin-top: 1.2rem;margin-left: 1.5rem;margin-right: 1.5rem;">
                     <i class="fa fa-book"></i>

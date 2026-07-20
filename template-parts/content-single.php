@@ -61,7 +61,7 @@
 								<div class="input-group-prepend">
 									<span class="input-group-text"><i class="fa fa-key"></i></span>
 								</div>
-								<input name="post_password" class="form-control" placeholder="<?php _e('密码', 'argon');?>" type="password" value="<?php if (current_user_can('level_7')){global $post;if (isset($post -> post_password)){echo esc_attr($post->post_password);}} ?>">
+								<input name="post_password" class="form-control" placeholder="<?php _e('密码', 'argon');?>" type="password" value="">
 							</div>
 							<?php
 								$post_password_hint = get_post_meta(get_the_ID(), 'password_hint', true);
@@ -117,7 +117,7 @@
 			<?php
 				$tags = get_the_tags();
 				foreach ($tags as $tag) {
-					echo "<a href='" . get_category_link($tag -> term_id) . "' target='_blank' class='tag badge badge-secondary post-meta-detail-tag'>" . $tag -> name . "</a>";
+					echo "<a href='" . esc_url(get_tag_link($tag -> term_id)) . "' target='_blank' class='tag badge badge-secondary post-meta-detail-tag'>" . esc_html($tag -> name) . "</a>";
 				}
 			?>
 		</div>

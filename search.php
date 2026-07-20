@@ -47,8 +47,8 @@
 <?php get_sidebar(); ?>
 
 <div id="primary" class="content-area">
-	<main id="main" class="site-main article-list search-result" role="main">
-	<?php if ( have_posts() ) : ?>
+		<main id="main" class="site-main article-list search-result" role="main">
+		<?php if ( have_posts() ) : ?>
 		<?php
 			while ( have_posts() ) :
 				the_post();

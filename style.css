@@ -3,7 +3,7 @@ Theme Name: argon
 Author: solstice23
 Author URI: https://solstice23.top/
 Description: 轻盈、简洁、美观的 Wordpress 主题
-Version: 1.3.5
+Version: 1.3.16
 License: GNU General Public License v3.0
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 Tags: 简约, 两栏, 侧栏在左边, 浮动侧栏, 文章目录, 自适应, 夜间模式, 可自定义
@@ -2543,6 +2543,14 @@ html.darkmode .has-thumbnail .related-post-title.clamp {
 	font-size: 14px;
 	transform: translateY(-1px);
 }
+.comment-ip {
+	display: inline-block;
+	font-weight: normal;
+	padding-left: 4px;
+	font-size: 14px;
+	transform: translateY(-1px);
+	color: #8898aa;
+}
 .comment-useragent > svg {
 	height: 18px;
 	width: 18px;
@@ -2583,6 +2591,41 @@ html.darkmode .comment-upvote {
 	margin-left: -2px !important;
 }
 .comment-upvote.comment-upvoting {
+	opacity: 0.5;
+	pointer-events: none;
+}
+/*文章点赞（Enhanced）*/
+.post-like-wrapper {
+	text-align: center;
+	margin: 1.5rem 0;
+}
+.post-like-wrapper.post-like-wrapper-preview {
+	text-align: left;
+	margin: 0.75rem 0 0;
+}
+.post-upvote {
+	white-space: nowrap;
+	border-radius: 100px;
+	padding: 4px 14px;
+	border-color: var(--themecolor) !important;
+	color: var(--themecolor);
+	background-color: rgba(var(--themecolor-rgbstr), 0.12);
+	transition: all 0.2s ease;
+}
+html.darkmode .post-upvote {
+	background-color: rgba(var(--themecolor-rgbstr), 0.22);
+	color: var(--themecolor-light);
+}
+.post-upvote:hover {
+	background-color: var(--themecolor) !important;
+	color: #fff !important;
+}
+.post-upvote.upvoted {
+	color: #fff !important;
+	background-color: var(--themecolor) !important;
+	pointer-events: none;
+}
+.post-upvote.post-upvoting {
 	opacity: 0.5;
 	pointer-events: none;
 }
@@ -5235,4 +5278,152 @@ html.using-safari #blog_setting_card_radius_to_default:before {
 }
 html.using-safari .friend-link-description:after {
 	display: none;
+}
+
+/*Live Search 实时搜索建议下拉（适配主题：圆角/阴影跟随主题，强调色用主题色）*/
+.argon-live-search-results {
+	position: fixed; /* 用 getBoundingClientRect + fixed 定位，规避 transform/fixed 祖先影响 */
+	z-index: 2000;
+	background: #fff;
+	border: 1px solid rgba(0, 0, 0, .08);
+	border-radius: var(--card-radius);
+	box-shadow: 0 .5rem 1rem rgba(0, 0, 0, .15); /* 与主题 .shadow 一致 */
+	padding: 6px;
+	min-width: 240px; /* 避免窄搜索框（如 input-group 内）浮出框过小 */
+	max-width: 420px; /* 避免宽搜索框（如导航栏整行 input-group）浮出框过大 */
+	overflow: hidden; /* 外层始终裁切圆角，内层负责滚动 */
+	transform-origin: top center;
+	animation: argon-live-search-show 0.18s ease-out;
+}
+.argon-live-search-scroll {
+	max-height: 360px;
+	overflow-y: auto;
+}
+@keyframes argon-live-search-show {
+	0% {
+		opacity: 0;
+		transform: translateY(-8px) scale(0.96);
+	}
+	100% {
+		opacity: 1;
+		transform: translateY(0) scale(1);
+	}
+}
+.argon-live-search-item {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 8px;
+	border-radius: calc(var(--card-radius) - 2px);
+	color: #32325d;
+	text-decoration: none;
+	line-height: 1.35;
+	transition: background .15s ease, color .15s ease;
+}
+.argon-live-search-item:hover,
+.argon-live-search-item.active {
+	background: rgba(var(--themecolor-rgbstr), .1);
+}
+.argon-live-search-thumb {
+	width: 44px;
+	height: 44px;
+	object-fit: cover;
+	border-radius: calc(var(--card-radius) - 2px);
+	flex: 0 0 auto;
+	background: rgba(0, 0, 0, .05);
+}
+.argon-live-search-body {
+	min-width: 0;
+	flex: 1 1 auto;
+}
+.argon-live-search-title {
+	font-weight: 500;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.argon-live-search-excerpt {
+	font-size: 12px;
+	color: #8898aa;
+	margin-top: 2px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.argon-live-search-title mark,
+.argon-live-search-excerpt mark {
+	background: rgba(var(--themecolor-rgbstr), .18);
+	color: inherit;
+	padding: 0 1px;
+	border-radius: 2px;
+}
+.argon-live-search-type {
+	flex: 0 0 auto;
+	font-size: 11px;
+	color: var(--themecolor);
+	background: rgba(var(--themecolor-rgbstr), .12);
+	border-radius: 10px;
+	padding: 1px 8px;
+}
+.argon-live-search-all {
+	display: block;
+	text-align: center;
+	padding: 8px;
+	margin-top: 4px;
+	font-size: 13px;
+	color: var(--themecolor);
+	text-decoration: none;
+	border-top: 1px solid rgba(0, 0, 0, .06);
+}
+.argon-live-search-all:hover {
+	text-decoration: underline;
+}
+.argon-live-search-loading,
+.argon-live-search-empty {
+	padding: 12px 8px;
+	text-align: center;
+	color: #8898aa;
+	font-size: 13px;
+}
+/*暗色模式适配*/
+html.darkmode .argon-live-search-results {
+	background: var(--color-foreground);
+	border-color: rgba(255, 255, 255, .1);
+}
+html.darkmode .argon-live-search-item {
+	color: var(--color-text-deeper);
+}
+html.darkmode .argon-live-search-excerpt,
+html.darkmode .argon-live-search-loading,
+html.darkmode .argon-live-search-empty {
+	color: #adb5bd;
+}
+html.darkmode .argon-live-search-thumb {
+	background: rgba(255, 255, 255, .08);
+}
+html.darkmode .argon-live-search-all {
+	border-top-color: rgba(255, 255, 255, .1);
+}
+
+/* K. 文章图片悬浮放大 + 柔和阴影渐变（Enhanced，由 body.argon-image-hover 控制开关）*/
+.argon-image-hover .post-content .wp-block-image img {
+	transition: transform 0.3s ease, box-shadow 0.3s ease;
+	border-radius: 6px; /* 轻微圆角更美观，可删除 */
+}
+.argon-image-hover .post-content .wp-block-image img:hover {
+	transform: scale(1.03);
+	box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15); /* 柔和阴影，渐变动画显示 */
+}
+
+/* L. 滚动模糊（Enhanced，由 body.argon-scroll-blur 控制开关；仅作用于 #content 装饰层 ::before/::after）*/
+.argon-scroll-blur #content::before,
+.argon-scroll-blur #content::after {
+	transition: filter .3s ease, transform .3s ease !important;
+	filter: blur(0px);
+	transform: scale(1.02);
+}
+.argon-scroll-blur #content.scrolled::before,
+.argon-scroll-blur #content.scrolled::after {
+	filter: blur(8px);
+	transform: scale(1.02);
 }

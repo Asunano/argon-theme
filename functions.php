@@ -144,31 +144,19 @@ $argon_update_source = get_option('argon_update_source');
 switch ($argon_update_source) {
 	case "stop":
 		break;
-    case "fastgit":
-	    $argonThemeUpdateChecker = Puc_v4_Factory::buildUpdateChecker(
-			'https://api.solstice23.top/argon/info.json?source=fastgit',
-			get_template_directory() . '/functions.php',
-			'argon'
-		);
-        break;
-    case "cfworker":
-	    $argonThemeUpdateChecker = Puc_v4_Factory::buildUpdateChecker(
-			'https://api.solstice23.top/argon/info.json?source=cfworker',
-			get_template_directory() . '/functions.php',
-			'argon'
-		);
-        break;
-	case "solstice23top":
+	case "ghproxy":
+		/* 镜像源：在原地址前加 https://v4.gh-proxy.org/ 转发 */
 		$argonThemeUpdateChecker = Puc_v4_Factory::buildUpdateChecker(
-			'https://api.solstice23.top/argon/info.json?source=0',
+			'https://v4.gh-proxy.org/https://raw.githubusercontent.com/Asunano/argon-theme/master/version.json',
 			get_template_directory() . '/functions.php',
 			'argon'
 		);
 		break;
 	case "github":
     default:
+		/* 本分支（Asunano/argon-theme）自有更新源：仓库根目录的 version.json（master 分支），由 release 工作流在发版时自动同步 */
 		$argonThemeUpdateChecker = Puc_v4_Factory::buildUpdateChecker(
-			'https://raw.githubusercontent.com/solstice23/argon-theme/master/info.json',
+			'https://raw.githubusercontent.com/Asunano/argon-theme/master/version.json',
 			get_template_directory() . '/functions.php',
 			'argon'
 		);
@@ -468,6 +456,59 @@ function get_seo_description(){
 		return get_option('argon_seo_description');
 	}
 }
+//结构化数据 (JSON-LD)
+function argon_output_structured_data(){
+	if (argon_get_option('argon_enable_structured_data') == 'false'){
+		return;
+	}
+	if (!is_singular('post')){
+		return;
+	}
+	global $post;
+	$schema = array(
+		'@context' => 'https://schema.org',
+		'@type' => 'Article',
+		'@id' => get_permalink($post -> ID) . '#article',
+		'headline' => get_the_title($post -> ID),
+		'datePublished' => get_the_date('c', $post -> ID),
+		'dateModified' => get_the_modified_date('c', $post -> ID),
+		'author' => array(
+			'@type' => 'Person',
+			'name' => get_the_author_meta('display_name', $post -> post_author),
+			'url' => get_author_posts_url($post -> post_author),
+		),
+		'publisher' => array(
+			'@type' => 'Organization',
+			'name' => get_bloginfo('name'),
+		),
+		'mainEntityOfPage' => array(
+			'@type' => 'WebPage',
+			'@id' => get_permalink($post -> ID),
+		),
+	);
+	$thumbnail_id = get_post_thumbnail_id($post -> ID);
+	if ($thumbnail_id){
+		$thumbnail_url = wp_get_attachment_image_url($thumbnail_id, 'full');
+		if ($thumbnail_url){
+			$schema['image'] = array(
+				'@type' => 'ImageObject',
+				'url' => $thumbnail_url,
+				'width' => 1200,
+				'height' => 800,
+			);
+			$schema['publisher']['logo'] = array(
+				'@type' => 'ImageObject',
+				'url' => $thumbnail_url,
+			);
+		}
+	}
+	$excerpt = get_the_excerpt($post -> ID);
+	if ($excerpt){
+		$schema['description'] = wp_strip_all_tags($excerpt);
+	}
+	echo '<script type="application/ld+json">' . wp_json_encode($schema, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . '</script>' . "\n";
+}
+add_action('wp_head', 'argon_output_structured_data');
 //页面 Keywords
 function get_seo_keywords(){
 	if (is_single()){
@@ -511,6 +552,90 @@ function get_og_image(){
 	}
 	return '';
 }
+//社交分享图（SEO/OG/Twitter 共用）：优先站点 OG 封面图，其次文章特色图，再次作者/管理员头像
+function argon_get_social_image(){
+	$cover = get_option('argon_og_cover_image', '');
+	if (is_singular() && !is_front_page()){
+		$img = get_og_image();
+		if ($img != ''){
+			return $img;
+		}
+		if ($cover != ''){
+			return $cover;
+		}
+		global $post;
+		$avatar = get_avatar_url($post -> post_author, array('size' => 300));
+		if ($avatar){
+			return $avatar;
+		}
+	}
+	if ($cover != ''){
+		return $cover;
+	}
+	$admins = get_users(array('role' => 'administrator', 'number' => 1, 'orderby' => 'ID'));
+	if (!empty($admins)){
+		$avatar = get_avatar_url($admins[0] -> ID, array('size' => 300));
+		if ($avatar){
+			return $avatar;
+		}
+	}
+	return '';
+}
+
+//动态输出 Web App Manifest（复用站点名称、Description Meta 与主题色、站点图标）
+function argon_manifest_query_vars($vars){
+	$vars[] = 'argon_manifest';
+	return $vars;
+}
+add_filter('query_vars', 'argon_manifest_query_vars');
+
+function argon_output_manifest(){
+	if (get_query_var('argon_manifest') !== '1'){
+		return;
+	}
+	header('Content-Type: application/manifest+json');
+	$name = get_bloginfo('name');
+	$description = get_seo_description();
+	if ($description == ''){
+		$description = get_bloginfo('description');
+	}
+	$themecolor = get_option('argon_theme_color', '#5e72e4');
+	$icon = get_site_icon_url();
+	$manifest = array(
+		'name' => $name,
+		'short_name' => $name,
+		'description' => $description,
+		'start_url' => home_url('/'),
+		'display' => 'standalone',
+		'background_color' => '#ffffff',
+		'theme_color' => $themecolor,
+	);
+	if ($icon != ''){
+		$manifest['icons'] = array(
+			array(
+				'src' => $icon,
+				'sizes' => '512x512',
+				'type' => 'image/png',
+				'purpose' => 'any'
+			)
+		);
+	}
+	echo json_encode($manifest);
+	exit;
+}
+add_action('template_redirect', 'argon_output_manifest');
+
+//Enhanced 视觉类功能：通过 body class 控制 CSS 开关（文章图片悬浮放大 / 滚动模糊）
+function argon_enhanced_body_class($classes){
+	if (get_option('argon_enable_image_hover', 'true') != 'false'){
+		$classes[] = 'argon-image-hover';
+	}
+	if (get_option('argon_enable_scroll_blur', 'true') != 'false'){
+		$classes[] = 'argon-scroll-blur';
+	}
+	return $classes;
+}
+add_filter('body_class', 'argon_enhanced_body_class');
 //页面浏览量
 function get_post_views($post_id){
 	$count_key = 'views';
@@ -813,6 +938,75 @@ function parse_ua_and_icon($userAgent){
 	$out .= "</div>";
 	return apply_filters("argon_comment_ua_icon", $out);
 }
+
+/* 获取真实客户端 IP（适配 CDN / 反向代理，可在后台选择来源） */
+function argon_get_real_client_ip(){
+	$source = get_option('argon_comment_ip_source', 'default');
+	$custom = trim(get_option('argon_comment_ip_custom_header', ''));
+	$ip = '';
+	switch ($source){
+		case 'cloudflare':
+			$ip = isset($_SERVER['HTTP_CF_CONNECTING_IP']) ? trim($_SERVER['HTTP_CF_CONNECTING_IP']) : '';
+			break;
+		case 'eo':
+			$ip = isset($_SERVER['HTTP_EO_CONNECTING_IP']) ? trim($_SERVER['HTTP_EO_CONNECTING_IP']) : '';
+			break;
+		case 'custom':
+			if ($custom != ''){
+				$key = 'HTTP_' . strtoupper(preg_replace('/[^a-zA-Z0-9]/', '_', $custom));
+				$ip = isset($_SERVER[$key]) ? trim($_SERVER[$key]) : '';
+			}
+			break;
+		case 'default':
+		default:
+			$forward_keys = array('HTTP_X_FORWARDED_FOR', 'HTTP_X_REAL_IP', 'HTTP_CLIENT_IP');
+			foreach ($forward_keys as $key){
+				if (empty($_SERVER[$key])){
+					continue;
+				}
+				$candidates = explode(',', $_SERVER[$key]);
+				foreach ($candidates as $candidate){
+					$candidate = trim($candidate);
+					if (filter_var($candidate, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)){
+						return $candidate;
+					}
+				}
+			}
+			break;
+	}
+	$ip = trim($ip);
+	if ($ip != '' && strpos($ip, ',') !== false){
+		$ip = trim(explode(',', $ip)[0]);
+	}
+	if ($ip != '' && filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)){
+		return $ip;
+	}
+	if (!empty($_SERVER['REMOTE_ADDR'])){
+		return $_SERVER['REMOTE_ADDR'];
+	}
+	return '';
+}
+/* 评论保存时写入真实客户端 IP（覆盖 WordPress 默认写入的代理 IP） */
+function argon_preprocess_comment_ip($commentdata){
+	$ip = argon_get_real_client_ip();
+	if (!empty($ip)){
+		$commentdata['comment_author_IP'] = $ip;
+	}
+	return $commentdata;
+}
+add_filter('preprocess_comment', 'argon_preprocess_comment_ip');
+
+/* 渲染评论者 IP（需在设置中开启 argon_comment_show_ip；紧跟 UA 之后显示） */
+function argon_render_comment_ip($comment){
+	if (get_option('argon_comment_show_ip', 'false') != 'true'){
+		return;
+	}
+	$ip = isset($comment -> comment_author_IP) ? $comment -> comment_author_IP : '';
+	if (empty($ip)){
+		return;
+	}
+	echo '<span class="comment-ip" title="' . esc_attr__('IP 地址', 'argon') . '"><i class="fa fa-map-marker" aria-hidden="true"></i> ' . esc_html($ip) . '</span>';
+}
 //发送邮件
 function send_mail($to, $subject, $content){
 	wp_mail($to, $subject, $content, array('Content-Type: text/html; charset=UTF-8'));
@@ -956,6 +1150,51 @@ function get_comment_edit_history(){
 }
 add_action('wp_ajax_get_comment_edit_history', 'get_comment_edit_history');
 add_action('wp_ajax_nopriv_get_comment_edit_history', 'get_comment_edit_history');
+//实时搜索建议 AJAX
+function argon_ajax_live_search(){
+	$q = isset($_REQUEST['q']) ? sanitize_text_field(wp_unslash($_REQUEST['q'])) : '';
+	if ($q === ''){
+		wp_send_json(array());
+	}
+	$post_types = array('post', 'page');
+	$filter = get_option('argon_search_post_filter', 'post,page');
+	if ($filter && $filter != 'off'){
+		$post_types = explode(',', $filter);
+	}
+	$allowed = get_post_types(array('public' => true));
+	$post_types = array_values(array_intersect($post_types, $allowed));
+	if (empty($post_types)){
+		$post_types = array('post');
+	}
+	$query = new WP_Query(array(
+		's' => $q,
+		'posts_per_page' => 8,
+		'post_type' => $post_types,
+		'post_status' => 'publish',
+	));
+	$results = array();
+	if ($query -> have_posts()){
+		while ($query -> have_posts()){
+			$query -> the_post();
+			$thumbnail = has_post_thumbnail() ? get_the_post_thumbnail_url(get_the_ID(), 'thumbnail') : '';
+			$excerpt = wp_strip_all_tags(get_the_excerpt());
+			if ($excerpt === get_the_title()){
+				$excerpt = '';
+			}
+			$results[] = array(
+				'title' => get_the_title(),
+				'url' => get_permalink(),
+				'thumbnail' => $thumbnail,
+				'type' => get_post_type(),
+				'excerpt' => $excerpt ? wp_trim_words($excerpt, 14, '…') : '',
+			);
+		}
+	}
+	wp_reset_postdata();
+	wp_send_json($results);
+}
+add_action('wp_ajax_argon_live_search', 'argon_ajax_live_search');
+add_action('wp_ajax_nopriv_argon_live_search', 'argon_ajax_live_search');
 //是否可以置顶/取消置顶
 function is_comment_pinable($id){
 	if (get_comment($id) -> comment_approved != "1"){
@@ -1140,6 +1379,7 @@ function argon_comment_format($comment, $args, $depth){
 					?>
 					<?php
 						echo parse_ua_and_icon($comment -> comment_agent);
+						argon_render_comment_ip($comment);
 					?>
 				</div>
 				<div class="comment-info">
@@ -3255,4 +3495,86 @@ function argon_login_page_style() {
 }
 if (get_option('argon_enable_login_css') == 'true'){
 	add_action('login_head', 'argon_login_page_style');
+}
+
+/* ============================================================
+   Enhanced 功能（本分支新增，区别于原版 Argon）
+   仅保留「文章级点赞」（评论/说说点赞原版已有，文章级为新增）
+   其余 Enhanced 功能（A 结构化数据 / D 实时搜索 / 文章点赞）开关
+   统一在后台「Enhanced」分组
+   ============================================================ */
+
+/* ---------- 文章级点赞（区别于评论/说说点赞，原版缺失） ---------- */
+function get_post_upvotes($ID){
+	$count = get_post_meta($ID, 'argon_post_upvotes', true);
+	if ($count === '' || $count === null || $count === false){
+		$count = 0;
+	}
+	return intval($count);
+}
+function set_post_upvotes($ID){
+	$count = get_post_upvotes($ID);
+	update_post_meta($ID, 'argon_post_upvotes', $count + 1);
+	return $count + 1;
+}
+function argon_get_upvoted_post_ids(){
+	if (is_user_logged_in()){
+		$list = get_user_meta(get_current_user_id(), 'argon_upvoted_posts', true);
+		return is_array($list) ? $list : array();
+	}
+	$list = isset($_COOKIE['argon_post_upvoted']) ? $_COOKIE['argon_post_upvoted'] : '';
+	return array_filter(array_map('intval', explode(',', $list)), function($v){ return $v > 0; });
+}
+function argon_mark_post_upvoted($ID){
+	if (is_user_logged_in()){
+		$list = argon_get_upvoted_post_ids();
+		if (!in_array((int)$ID, $list, true)){
+			$list[] = (int) $ID;
+			update_user_meta(get_current_user_id(), 'argon_upvoted_posts', $list);
+		}
+	}else{
+		$list = isset($_COOKIE['argon_post_upvoted']) ? $_COOKIE['argon_post_upvoted'] : '';
+		setcookie('argon_post_upvoted', $list . $ID . ',', time() + 3153600000, '/');
+	}
+}
+function is_post_upvoted($ID){
+	return in_array((int) $ID, argon_get_upvoted_post_ids(), true);
+}
+function upvote_post(){
+	header('Content-Type:application/json; charset=utf-8');
+	if (get_option('argon_enable_post_like', 'true') != 'true'){
+		exit(json_encode(array('status' => 'failed', 'msg' => __('文章点赞未启用', 'argon'), 'total_upvote' => 0)));
+	}
+	$ID = isset($_POST['post_id']) ? intval($_POST['post_id']) : 0;
+	$post = get_post($ID);
+	if ($post == null || !in_array($post -> post_type, array('post', 'page'))){
+		exit(json_encode(array('status' => 'failed', 'msg' => __('文章不存在', 'argon'), 'total_upvote' => 0)));
+	}
+	if (is_post_upvoted($ID)){
+		exit(json_encode(array('status' => 'failed', 'msg' => __('该文章已被赞过', 'argon'), 'total_upvote' => get_post_upvotes($ID))));
+	}
+	set_post_upvotes($ID);
+	argon_mark_post_upvoted($ID);
+	exit(json_encode(array(
+		'ID' => $ID,
+		'status' => 'success',
+		'msg' => __('点赞成功', 'argon'),
+		'total_upvote' => format_number_in_kilos(get_post_upvotes($ID))
+	)));
+}
+add_action('wp_ajax_upvote_post', 'upvote_post');
+add_action('wp_ajax_nopriv_upvote_post', 'upvote_post');
+
+function argon_render_post_like($ID = 0){
+	if (get_option('argon_enable_post_like', 'true') != 'true'){
+		return;
+	}
+	if (!$ID){
+		$ID = get_the_ID();
+	}
+	$upvoted = is_post_upvoted($ID) ? ' upvoted' : '';
+	echo '<button class="post-upvote btn btn-icon btn-outline-primary btn-sm' . $upvoted . '" type="button" data-id="' . esc_attr($ID) . '">'
+		. '<span class="btn-inner--icon"><i class="fa fa-heart' . ($upvoted ? '' : '-o') . '"></i></span>'
+		. '<span class="btn-inner--text"><span class="post-upvote-num">' . format_number_in_kilos(get_post_upvotes($ID)) . '</span></span>'
+		. '</button>';
 }

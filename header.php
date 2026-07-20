@@ -77,30 +77,62 @@
 	<?php }else{ ?>
 		<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5">
 	<?php } ?>
+	<!-- SEO / OG / Twitter -->
+	<?php if (get_option('argon_enable_social_meta', 'true') != 'false'){ ?>
+	<?php
+		$argon_site_icon = get_site_icon_url();
+		if ($argon_site_icon != ''){
+	?>
+	<link rel="icon" href="<?php echo esc_url($argon_site_icon); ?>">
+	<?php } ?>
+	<link rel="manifest" href="<?php echo esc_url(home_url('?argon_manifest=1')); ?>">
 	<meta property="og:site_name" content="<?php echo get_bloginfo('name');?>">
 	<meta property="og:title" content="<?php echo wp_get_document_title();?>">
-	<meta property="og:type" content="article">
+	<meta property="og:type" content="<?php echo is_singular() ? 'article' : 'website'; ?>">
 	<meta property="og:url" content="<?php echo home_url(add_query_arg(array(),$wp->request));?>">
+	<meta property="og:locale" content="<?php echo get_locale(); ?>">
 	<?php
 		$seo_description = get_seo_description();
 		if ($seo_description != ''){ ?>
 			<meta name="description" content="<?php echo $seo_description?>">
 			<meta property="og:description" content="<?php echo $seo_description?>">
+			<meta name="twitter:description" content="<?php echo $seo_description?>">
 	<?php } ?>
 
 	<?php
 		$seo_keywords = get_seo_keywords();
 		if ($seo_keywords != ''){ ?>
-			<meta name="keywords" content="<?php echo get_seo_keywords();?>">
+			<meta name="keywords" content="<?php echo $seo_keywords;?>">
 	<?php } ?>
 
 	<?php
-		if (is_single() || is_page()){
-			$og_image = get_og_image();
-			if ($og_image != ''){ ?>
-				<meta property="og:image" content="<?php echo $og_image?>" />
-	<?php 	}
-		} ?>
+		$og_image = argon_get_social_image();
+		if ($og_image != ''){ ?>
+			<meta property="og:image" content="<?php echo $og_image?>" />
+			<meta name="twitter:image" content="<?php echo $og_image?>" />
+	<?php } ?>
+
+	<?php if (is_singular() && !is_front_page()){ ?>
+		<?php
+			global $post;
+			$author_id = $post -> post_author;
+			$author_url = get_author_posts_url($author_id);
+			$cats = get_the_category($post -> ID);
+			$cat = !empty($cats) ? $cats[0] -> name : '';
+			$tags = get_the_tags($post -> ID);
+		?>
+		<meta property="article:section" content="<?php echo esc_attr($cat); ?>">
+		<meta property="article:author" content="<?php echo esc_url($author_url); ?>">
+		<meta property="article:published_time" content="<?php echo get_the_date('c', $post -> ID); ?>">
+		<meta property="article:modified_time" content="<?php echo get_the_modified_date('c', $post -> ID); ?>">
+		<?php if ($tags){ foreach ($tags as $t){ ?>
+			<meta property="article:tag" content="<?php echo esc_attr($t -> name); ?>">
+		<?php } } ?>
+	<?php } ?>
+
+	<meta name="twitter:card" content="summary_large_image">
+	<meta name="twitter:title" content="<?php echo wp_get_document_title();?>">
+	<?php } ?>
 
 	<meta name="theme-color" content="<?php echo $themecolor; ?>">
 	<meta name="theme-color-rgb" content="<?php echo hex2str($themecolor); ?>">

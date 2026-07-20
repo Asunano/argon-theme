@@ -2,11 +2,49 @@
 						<?php
 							echo get_option('argon_footer_html');
 						?>
-						<div>Theme <a href="https://github.com/solstice23/argon-theme" target="_blank"><strong>Argon</strong></a><?php if (get_option('argon_hide_footer_author') != 'true') {echo " By solstice23"; }?></div>
+						<?php
+							$argon_show_footer_author = (get_option('argon_hide_footer_author') != 'true');
+						?>
+						<div>Theme <a href="https://github.com/solstice23/argon-theme" target="_blank"><strong>Argon</strong></a><?php
+							if ($argon_show_footer_author){ echo ' By solstice23'; }
+							echo ($argon_show_footer_author ? ' | ' : ' ') . 'Enhanced By <a href="https://github.com/Asunano/argon-theme" target="_blank"><strong>Asunano</strong></a>';
+						?></div>
+						<?php if (get_option('argon_enable_runtime') == 'true' || get_option('argon_enable_runtime') == '') { ?>
+						<div class="argon-runtime"><strong><span id="showsectime" style="color:#FFFFFF;"></span></strong></div>
+						<?php } ?>
 					</footer>
 				</main>
 			</div>
 		</div>
+		<?php
+			$argon_live_search_config = array(
+				'enabled'   => (get_option('argon_enable_live_search') != 'false'),
+				'ajaxUrl'   => admin_url('admin-ajax.php'),
+				'searchUrl' => home_url('/'),
+				'minChars'  => 1,
+				'maxResults'=> 8,
+				'i18n'      => array(
+					'loading' => __('搜索中…', 'argon'),
+					'empty'   => __('没有找到相关结果', 'argon'),
+					'all'     => __('查看全部搜索结果', 'argon'),
+				),
+			);
+		?>
+		<script>window.argonLiveSearchConfig = <?php echo wp_json_encode($argon_live_search_config, JSON_UNESCAPED_UNICODE); ?>;</script>
+		<?php
+			$argon_scroll_blur_config = array(
+				'enabled'         => (get_option('argon_enable_scroll_blur') == 'true' || get_option('argon_enable_scroll_blur') == ''),
+				'isHome'          => is_home(),
+				'homeThreshold'   => 0.8,
+				'otherThreshold'  => 0.2,
+			);
+			$argon_runtime_config = array(
+				'enabled'   => (get_option('argon_enable_runtime') == 'true' || get_option('argon_enable_runtime') == ''),
+				'startDate' => get_option('argon_runtime_start_date', '2020-10-31'),
+			);
+		?>
+		<script>window.argonScrollBlurConfig = <?php echo wp_json_encode($argon_scroll_blur_config, JSON_UNESCAPED_UNICODE); ?>;</script>
+		<script>window.argonRuntimeConfig = <?php echo wp_json_encode($argon_runtime_config, JSON_UNESCAPED_UNICODE); ?>;</script>
 		<script src="<?php echo $GLOBALS['assets_path']; ?>/argontheme.js?v<?php echo $GLOBALS['theme_version']; ?>"></script>
 		<?php if (get_option('argon_math_render') == 'mathjax3') { /*Mathjax V3*/?>
 			<script>

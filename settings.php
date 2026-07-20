@@ -1793,13 +1793,11 @@ window.pjaxLoaded = function(){
 						<td>
 							<select name="argon_update_source">
 								<?php $argon_update_source = get_option('argon_update_source'); ?>
-								<option value="github" <?php if ($argon_update_source=='github'){echo 'selected';} ?>>Github</option>
-								<option value="fastgit" <?php if ($argon_update_source=='fastgit'){echo 'selected';} ?>>Fastgit</option>
-								<option value="cfworker" <?php if ($argon_update_source=='cfworker'){echo 'selected';} ?>>CF Worker</option>
-								<option value="solstice23top" <?php if ($argon_update_source=='solstice23top'){echo 'selected';} ?>>solstice23.top</option>
+								<option value="github" <?php if ($argon_update_source=='' || $argon_update_source=='github'){echo 'selected';} ?>>GitHub (Asunano/argon-theme)</option>
+								<option value="ghproxy" <?php if ($argon_update_source=='ghproxy'){echo 'selected';} ?>>GitHub 镜像 (v4.gh-proxy.org)</option>
 								<option value="stop" <?php if ($argon_update_source=='stop'){echo 'selected';} ?>><?php _e('暂停更新 (不推荐)', 'argon');?></option>
 							</select>
-							<p class="description"><?php _e('如更新主题速度较慢，可考虑更换更新源。', 'argon');?></p>
+							<p class="description"><?php _e('更新源指向本分支仓库 Asunano/argon-theme 根目录的 version.json，由 Release 工作流在打 tag 发版时自动同步版本与下载地址。', 'argon');?></p>
 						</td>
 					</tr>
 					<tr>
@@ -1811,6 +1809,86 @@ window.pjaxLoaded = function(){
 								<option value="true" <?php if ($argon_hide_footer_author=='true'){echo 'selected';} ?>>Theme Argon</option>
 							</select>
 							<p class="description"></p>
+						</td>
+					</tr>
+					<tr><th class="subtitle"><h2>Enhanced</h2></th></tr>
+					<tr>
+						<th colspan="2"><p class="description"><?php _e('以下为针对原版 Argon 的增强功能（本分支新增），集中置于底部便于测试开关。', 'argon');?></p></th>
+					</tr>
+					<tr>
+						<th><label><?php _e('A. 结构化数据 JSON-LD', 'argon');?></label></th>
+						<td>
+							<input type="checkbox" name="argon_enable_structured_data" value="true" <?php $argon_enable_structured_data = get_option('argon_enable_structured_data'); if ($argon_enable_structured_data!='false'){echo 'checked';}?>/> <?php _e('输出 schema.org 结构化数据（Article），利于搜索引擎理解与收录', 'argon');?>
+						</td>
+					</tr>
+					<tr>
+						<th><label><?php _e('D. 实时搜索建议', 'argon');?></label></th>
+						<td>
+							<input type="checkbox" name="argon_enable_live_search" value="true" <?php $argon_enable_live_search = get_option('argon_enable_live_search'); if ($argon_enable_live_search!='false'){echo 'checked';}?>/> <?php _e('在搜索框输入时实时下拉展示匹配文章（默认开启）', 'argon');?>
+						</td>
+					</tr>
+					<tr>
+						<th><label><?php _e('文章级点赞', 'argon');?></label></th>
+						<td>
+							<input type="checkbox" name="argon_enable_post_like" value="true" <?php $argon_enable_post_like = get_option('argon_enable_post_like'); if ($argon_enable_post_like!='false'){echo 'checked';}?>/> <?php _e('文章末尾添加点赞按钮（评论/说说已有，文章级为新增）', 'argon');?>
+						</td>
+					</tr>
+					<tr>
+						<th><label><?php _e('I. 评论者 IP 显示', 'argon');?></label></th>
+						<td>
+							<input type="checkbox" name="argon_comment_show_ip" value="true" <?php $argon_comment_show_ip = get_option('argon_comment_show_ip', 'false'); if ($argon_comment_show_ip=='true'){echo 'checked';}?>/> <?php _e('在评论区显示评论者 IP 地址（默认关闭，需下方选择 CDN 来源）', 'argon');?>
+						</td>
+					</tr>
+					<tr>
+						<th><label><?php _e('获取真实 IP 的来源', 'argon');?></label></th>
+						<td>
+							<select name="argon_comment_ip_source" id="argon_comment_ip_source">
+								<?php $argon_comment_ip_source = get_option('argon_comment_ip_source', 'default'); ?>
+								<option value="default" <?php if ($argon_comment_ip_source=='default'){echo 'selected';} ?>><?php _e('通用（X-Forwarded-For / X-Real-IP / 反向代理）', 'argon');?></option>
+								<option value="cloudflare" <?php if ($argon_comment_ip_source=='cloudflare'){echo 'selected';} ?>><?php _e('Cloudflare（CF-Connecting-IP）', 'argon');?></option>
+								<option value="eo" <?php if ($argon_comment_ip_source=='eo'){echo 'selected';} ?>><?php _e('腾讯云 EdgeOne（EO-Connecting-IP）', 'argon');?></option>
+								<option value="custom" <?php if ($argon_comment_ip_source=='custom'){echo 'selected';} ?>><?php _e('自定义请求头', 'argon');?></option>
+							</select>
+							<p class="description"><?php _e('不同 CDN 透传真实 IP 的请求头不同，请按实际架构选择；全部走反代可选「通用」。', 'argon');?></p>
+						</td>
+					</tr>
+					<tr class="argon-ip-custom-row">
+						<th><label><?php _e('自定义 IP 请求头', 'argon');?></label></th>
+						<td>
+							<input type="text" name="argon_comment_ip_custom_header" class="form-control" style="max-width:280px;" value="<?php echo esc_attr(get_option('argon_comment_ip_custom_header', '')); ?>" placeholder="例如 X-Forwarded-For">
+							<p class="description"><?php _e('仅当上方选择「自定义请求头」时生效，填写 CDN 透传 IP 的请求头名称（不含 HTTP_ 前缀，例如 EO-Connecting-IP）。', 'argon');?></p>
+						</td>
+					</tr>
+					<tr>
+						<th><label><?php _e('J. SEO / OG / Twitter 社交元标签', 'argon');?></label></th>
+						<td>
+							<input type="checkbox" name="argon_enable_social_meta" value="true" <?php $argon_enable_social_meta = get_option('argon_enable_social_meta', 'true'); if ($argon_enable_social_meta!='false'){echo 'checked';}?>/> <?php _e('输出 Open Graph / Twitter Card 等社交分享元标签（自动复用站点描述、文章特色图与作者头像）', 'argon');?>
+							<br>
+							<label style="margin-top:8px;display:inline-block;"><?php _e('社交分享封面图（og:image）URL：', 'argon');?></label>
+							<input type="text" name="argon_og_cover_image" class="regular-text" style="margin-top:6px;" value="<?php echo get_option('argon_og_cover_image', '');?>" placeholder="/assets/og-cover.png">
+							<p class="description"><?php _e('分享到 QQ / 微信等时显示的封面图，留空则自动回退到文章特色图或作者头像。', 'argon');?></p>
+						</td>
+					</tr>
+					<tr>
+						<th><label><?php _e('K. 文章图片悬浮放大', 'argon');?></label></th>
+						<td>
+							<input type="checkbox" name="argon_enable_image_hover" value="true" <?php $argon_enable_image_hover = get_option('argon_enable_image_hover', 'true'); if ($argon_enable_image_hover!='false'){echo 'checked';}?>/> <?php _e('文章内 .wp-block-image 图片悬浮时轻微放大并浮现柔和阴影（带圆角）', 'argon');?>
+						</td>
+					</tr>
+					<tr>
+						<th><label><?php _e('L. 滚动模糊', 'argon');?></label></th>
+						<td>
+							<input type="checkbox" name="argon_enable_scroll_blur" value="true" <?php $argon_enable_scroll_blur = get_option('argon_enable_scroll_blur', 'true'); if ($argon_enable_scroll_blur!='false'){echo 'checked';}?>/> <?php _e('页面滚动后模糊 #content 装饰层（首页滚动约 80% 视口高才触发，其余页面约 20% 即触发）', 'argon');?>
+						</td>
+					</tr>
+					<tr>
+						<th><label><?php _e('M. 网站运行时长', 'argon');?></label></th>
+						<td>
+							<input type="checkbox" name="argon_enable_runtime" value="true" <?php $argon_enable_runtime = get_option('argon_enable_runtime', 'true'); if ($argon_enable_runtime!='false'){echo 'checked';}?>/> <?php _e('在页脚显示「本站已安全运行 X天X小时X分X秒」（每秒刷新）', 'argon');?>
+							<br>
+							<label style="margin-top:8px;display:inline-block;"><?php _e('建站日期（年-月-日）：', 'argon');?></label>
+							<input type="text" name="argon_runtime_start_date" class="regular-text" style="margin-top:6px;" value="<?php echo esc_attr(get_option('argon_runtime_start_date', '2020-10-31'));?>" placeholder="2020-10-31">
+							<p class="description"><?php _e('用于计算运行时长，格式为 年-月-日。', 'argon');?></p>
 						</td>
 					</tr>
 				</tbody>
@@ -2087,6 +2165,15 @@ window.pjaxLoaded = function(){
 				alert("<?php _e('已导入，请保存更改', 'argon');?>\n" + res)
 			}
 		}
+		/* 评论 IP：选择「自定义请求头」时才显示自定义输入框 */
+		function toggleIpCustomRow(){
+			var val = $("#argon_comment_ip_source").val();
+			$(".argon-ip-custom-row").toggle(val === "custom");
+		}
+		$(function(){
+			$("#argon_comment_ip_source").on("change", toggleIpCustomRow);
+			toggleIpCustomRow();
+		});
 	</script>
 <?php
 }
@@ -2153,6 +2240,7 @@ function argon_update_themeoptions(){
 		argon_update_option_checkbox('argon_show_customize_theme_color_picker');
 		argon_update_option_allow_tags('argon_seo_description');
 		argon_update_option('argon_seo_keywords');
+		argon_update_option_checkbox('argon_enable_structured_data');
 		argon_update_option('argon_enable_mobile_scale');
 		argon_update_option('argon_page_background_url');
 		argon_update_option('argon_page_background_dark_url');
@@ -2175,6 +2263,17 @@ function argon_update_themeoptions(){
 		argon_update_option('argon_home_show_shuoshuo');
 		argon_update_option('argon_enable_search_filters');
 		argon_update_option('argon_search_filters_type');
+		argon_update_option_checkbox('argon_enable_live_search');
+		argon_update_option_checkbox('argon_enable_post_like');
+		argon_update_option_checkbox('argon_comment_show_ip');
+		argon_update_option('argon_comment_ip_source');
+		argon_update_option('argon_comment_ip_custom_header');
+		argon_update_option_checkbox('argon_enable_social_meta');
+		argon_update_option('argon_og_cover_image');
+		argon_update_option_checkbox('argon_enable_image_hover');
+		argon_update_option_checkbox('argon_enable_scroll_blur');
+		argon_update_option_checkbox('argon_enable_runtime');
+		argon_update_option('argon_runtime_start_date');
 		argon_update_option('argon_darkmode_autoswitch');
 		argon_update_option('argon_enable_amoled_dark');
 		argon_update_option('argon_outdated_info_time_type');

@@ -19,17 +19,11 @@ jobs:
       - name: Verify version sync
         run: |
           STYLE_VER="$(grep -m1 '^Version:' style.css | sed 's/.*:[[:space:]]*//')"
-          INFO_VER="$(grep -m1 '"version"' info.json | sed -E 's/.*"version"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/')"
           TAG="${GITHUB_REF_NAME#v}"
           echo "style.css = $STYLE_VER"
-          echo "info.json = $INFO_VER"
           echo "tag       = $TAG"
-          if [ "$STYLE_VER" != "$INFO_VER" ]; then
-            echo "::error::style.css Version ($STYLE_VER) 与 info.json version ($INFO_VER) 不一致，请先同步版本再发版"
-            exit 1
-          fi
           if [ "$STYLE_VER" != "$TAG" ]; then
-            echo "::error::版本号 ($STYLE_VER) 与 tag ($TAG) 不一致"
+            echo "::error::style.css Version ($STYLE_VER) 与 tag ($TAG) 不一致，请先同步版本再发版"
             exit 1
           fi
 
@@ -60,6 +54,26 @@ jobs:
           rm -rf dist-tmp
           echo "=== 打包内容 ==="
           unzip -l "$THEME.zip" | head -n 20
+
+      - name: Sync version.json
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          cat > version.json <<EOF
+          {
+            "version": "$TAG",
+            "details_url": "https://github.com/Asunano/argon-theme/releases",
+            "download_url": "https://github.com/Asunano/argon-theme/releases/download/v$TAG/argon-theme.zip"
+          }
+          EOF
+          echo "version.json -> $TAG"
+
+      - name: Commit version.json back to default branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add version.json
+          git commit -m "chore: sync version.json to ${GITHUB_REF_NAME} [skip ci]" || echo "no change"
+          git push origin "HEAD:${{ github.event.repository.default_branch }}"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

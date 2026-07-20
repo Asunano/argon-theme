@@ -5,7 +5,7 @@
 <?php get_sidebar(); ?>
 
 <div id="primary" class="content-area">
-	<main id="main" class="site-main" role="main">
+		<main id="main" class="site-main" role="main">
 		<?php
 		while ( have_posts() ) :
 			the_post();
@@ -14,6 +14,12 @@
 
 			if (get_option("argon_show_sharebtn") != 'false') {
 				get_template_part( 'template-parts/share' );
+			}
+
+			if (is_singular('post') && get_option('argon_enable_post_like', 'true') == 'true') {
+				echo '<div class="post-like-wrapper">';
+				argon_render_post_like();
+				echo '</div>';
 			}
 
 			if (comments_open() || get_comments_number()) {

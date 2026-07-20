@@ -1411,6 +1411,61 @@ $(document).on("click" , ".comment-upvote" , function(){
 		}
 	});
 });
+/*文章点赞*/
+$(document).on("click", ".post-upvote", function(){
+	if ($(this).hasClass("upvoted")){
+		return;
+	}
+	$this = $(this);
+	ID = $this.attr("data-id");
+	$this.addClass("post-upvoting");
+	$.ajax({
+		url: argonConfig.wp_path + "wp-admin/admin-ajax.php",
+		type: "POST",
+		dataType: "json",
+		data: {
+			action: "upvote_post",
+			post_id: ID
+		},
+		success: function(result){
+			$this.removeClass("post-upvoting");
+			if (result.status == "success"){
+				$(".post-upvote-num", $this).html(result.total_upvote);
+				$this.addClass("upvoted");
+				$this.find("i").removeClass("fa-heart-o").addClass("fa-heart");
+			}else{
+				$(".post-upvote-num", $this).html(result.total_upvote);
+				iziToast.show({
+					title: result.msg,
+					class: 'shadow-sm',
+					position: 'topRight',
+					backgroundColor: '#f5365c',
+					titleColor: '#ffffff',
+					messageColor: '#ffffff',
+					iconColor: '#ffffff',
+					progressBarColor: '#ffffff',
+					icon: 'fa fa-close',
+					timeout: 5000
+				});
+			}
+		},
+		error: function(xhr){
+			$this.removeClass("post-upvoting");
+			iziToast.show({
+				title: __("点赞失败"),
+				class: 'shadow-sm',
+				position: 'topRight',
+				backgroundColor: '#f5365c',
+				titleColor: '#ffffff',
+				messageColor: '#ffffff',
+				iconColor: '#ffffff',
+				progressBarColor: '#ffffff',
+				icon: 'fa fa-close',
+				timeout: 5000
+			});
+		}
+	});
+});
 /*评论表情面板*/
 function lazyloadStickers(){
 	$(".emotion-keyboard .emotion-group:not(d-none) .emotion-item > img.lazyload").lazyload({threshold: 500, effect: "fadeIn"}).removeClass("lazyload");
@@ -1954,6 +2009,7 @@ $(document).pjax("a[href]:not([no-pjax]):not(.no-pjax):not([target='_blank']):no
 }).on('pjax:end', function() {
 	waterflowInit();
 	lazyloadInit();
+	liveSearchInit();
 });
 
 /*Reference 跳转*/
@@ -2629,3 +2685,218 @@ setInterval(function(){
 	console.log('%cVersion%c' + $("meta[name='theme-version']").attr("content"), 'color:#fff; background: #5e72e4;font-size: 12px;border-radius:5px 0 0 5px;padding:3px 10px 3px 10px;','color:#fff; background: #92a1f4;font-size: 12px;border-radius:0 5px 5px 0;padding:3px 10px 3px 10px;');
 	console.log('%chttps://github.com/solstice23/argon-theme', 'font-size: 12px;border-radius:5px;padding:3px 10px 3px 10px;border:1px solid #5e72e4;');
 }();
+
+/*Live Search 实时搜索建议*/
+function liveSearchInit(){
+	if (typeof window.argonLiveSearchConfig == 'undefined' || !window.argonLiveSearchConfig.enabled){
+		return;
+	}
+	if (window.argonLiveSearchInited){
+		return;
+	}
+	window.argonLiveSearchInited = true;
+	var cfg = window.argonLiveSearchConfig;
+	var i18n = cfg.i18n || { loading: '搜索中…', empty: '没有找到相关结果', all: '查看全部搜索结果' };
+	var TYPE_LABELS = { post: '文章', page: '页面', shuoshuo: '说说' };
+	/* All search inputs that should trigger live suggestions */
+	var SELECTORS = ['#argon_serach_form input[name="s"]', '#navbar_search_input', '#leftbar_search_input'];
+	var $box = null;        /* 外层：圆角 + 阴影 + 定位 */
+	var $boxScroll = null;  /* 内层：滚动容器，保证外层圆角始终裁切内容（修复“搜索中”下边框丢圆角） */
+	var timer = null;
+	var activeIndex = -1;
+	var currentQ = '';
+
+	function escapeHtml(s){
+		return String(s).replace(/[&<>"']/g, function(c){
+			return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+		});
+	}
+	function highlight(text, q){
+		if (!q){ return escapeHtml(text); }
+		var idx = String(text).toLowerCase().indexOf(String(q).toLowerCase());
+		if (idx === -1){ return escapeHtml(text); }
+		return escapeHtml(text.slice(0, idx)) + '<mark>' + escapeHtml(text.slice(idx, idx + q.length)) + '</mark>' + escapeHtml(text.slice(idx + q.length));
+	}
+	function getBox(){
+		if (!$box || $box.closest('body').length === 0){
+			$box = $('<div class="argon-live-search-results"></div>').appendTo('body').hide();
+			$boxScroll = $('<div class="argon-live-search-scroll"></div>').appendTo($box);
+		}
+		return $box;
+	}
+	function positionBox($input){
+		var $b = getBox();
+		/* 定位参考容器：
+		   - 在 .input-group 内（如导航栏带 input-group-prepend 的搜索框）：取整个 input-group
+		   - 侧边栏搜索框内嵌于按钮 #leftbar_search_container，且 input 为 position:absolute，
+		     直接量 input 矩形会因绝对定位的包含块异常（可能撑到视口宽），故取该按钮作为参考
+		   - 其余情况取 input 的父容器
+		   统一改用参考容器的 getBoundingClientRect() + position:fixed，避免被 transform/fixed 祖先影响定位与宽度 */
+		var $wrap = $input.closest('.input-group');
+		if (!$wrap.length){
+			$wrap = $input.closest('#leftbar_search_container').length ? $input.closest('#leftbar_search_container') : $input.parent();
+		}
+		var rect = $wrap[0].getBoundingClientRect();
+		$b.css({
+			position: 'fixed',
+			top: rect.bottom,
+			left: rect.left,
+			width: rect.width
+		});
+	}
+	function updateActive(items){
+		items.removeClass('active');
+		if (activeIndex >= 0 && activeIndex < items.length){
+			items.eq(activeIndex).addClass('active');
+		}
+	}
+	function showLoading($input){
+		var $b = getBox();
+		$boxScroll.html('<div class="argon-live-search-loading">' + escapeHtml(i18n.loading) + '</div>');
+		positionBox($input);
+		$b.show();
+	}
+	function allResultsUrl(q){
+		var base = cfg.searchUrl || (typeof window.location !== 'undefined' ? window.location.origin + '/' : '/');
+		var sep = base.indexOf('?') === -1 ? '?' : '&';
+		return base + sep + 's=' + encodeURIComponent(q);
+	}
+	function render(results, $input, q){
+		var $b = getBox();
+		$boxScroll.empty();
+		activeIndex = -1;
+		if (!results || results.length === 0){
+			$boxScroll.html('<div class="argon-live-search-empty">' + escapeHtml(i18n.empty) + '</div>');
+			positionBox($input);
+			$b.show();
+			return;
+		}
+		$.each(results, function(i, item){
+			var $a = $('<a class="argon-live-search-item" href="' + item.url + '"></a>');
+			if (item.thumbnail){
+				$a.append('<img class="argon-live-search-thumb" src="' + item.thumbnail + '" alt="" loading="lazy">');
+			}
+			var $body = $('<div class="argon-live-search-body"></div>');
+			$body.append('<div class="argon-live-search-title">' + highlight(item.title, q) + '</div>');
+			if (item.excerpt){
+				$body.append('<div class="argon-live-search-excerpt">' + highlight(item.excerpt, q) + '</div>');
+			}
+			$a.append($body);
+			$a.append('<span class="argon-live-search-type">' + escapeHtml(TYPE_LABELS[item.type] || item.type) + '</span>');
+			$boxScroll.append($a);
+		});
+		var $all = $('<a class="argon-live-search-all" href="' + allResultsUrl(q) + '">' + escapeHtml(i18n.all) + ' &raquo;</a>');
+		$boxScroll.append($all);
+		positionBox($input);
+		$b.show();
+	}
+	function search(q, $input){
+		$.getJSON(cfg.ajaxUrl, { action: 'argon_live_search', q: q }, function(results){
+			if (q !== currentQ){ return; }
+			render(results, $input, q);
+		}).fail(function(){
+			if (q === currentQ){ getBox().hide(); }
+		});
+	}
+	function onInput($input){
+		var q = $.trim($input.val());
+		currentQ = q;
+		if (timer){ clearTimeout(timer); }
+		if (q.length < cfg.minChars){
+			getBox().hide();
+			return;
+		}
+		showLoading($input);
+		timer = setTimeout(function(){ search(q, $input); }, 250);
+	}
+	function onKeydown(e){
+		var items = getBox().find('.argon-live-search-item');
+		if (e.key === 'ArrowDown'){
+			e.preventDefault();
+			if (items.length === 0){ return; }
+			activeIndex = (activeIndex + 1) % items.length;
+			updateActive(items);
+		} else if (e.key === 'ArrowUp'){
+			e.preventDefault();
+			if (items.length === 0){ return; }
+			activeIndex = (activeIndex - 1 + items.length) % items.length;
+			updateActive(items);
+		} else if (e.key === 'Enter'){
+			if (activeIndex >= 0 && activeIndex < items.length){
+				e.preventDefault();
+				window.location.href = items.eq(activeIndex).attr('href');
+			}
+		} else if (e.key === 'Escape'){
+			getBox().hide();
+		}
+	}
+	SELECTORS.forEach(function(sel){
+		$(document).on('input', sel, function(){ onInput($(this)); });
+		$(document).on('keydown', sel, function(e){ onKeydown(e); });
+	});
+	$(document).on('click', function(e){
+		if (!$(e.target).closest(SELECTORS.join(',') + ', .argon-live-search-results').length){
+			getBox().hide();
+		}
+	});
+	/* 点击搜索结果 / 查看全部后先收起（随后链接跳转或 Pjax 切换） */
+	$(document).on('click', '.argon-live-search-item, .argon-live-search-all', function(){
+		getBox().hide();
+	});
+	/* Pjax 切换页面后收起（避免跳转后浮层残留） */
+	$(document).on('pjax:end', function(){
+		if ($box){ $box.hide(); }
+	});
+}
+liveSearchInit();
+
+/* ===== Enhanced：滚动模糊 + 网站运行时长 ===== */
+function scrollBlurInit(){
+	if (!(window.argonScrollBlurConfig && window.argonScrollBlurConfig.enabled)){ return; }
+	var cfg = window.argonScrollBlurConfig;
+	var threshold = cfg.isHome ? cfg.homeThreshold : cfg.otherThreshold;
+	function onScroll(){
+		var $content = document.getElementById('content');
+		if (!$content){ return; }
+		if (window.scrollY > window.innerHeight * threshold){
+			$content.classList.add('scrolled');
+		} else {
+			$content.classList.remove('scrolled');
+		}
+	}
+	window.addEventListener('scroll', onScroll, { passive: true });
+	onScroll();
+}
+
+function runtimeInit(){
+	if (!(window.argonRuntimeConfig && window.argonRuntimeConfig.enabled)){ return; }
+	var startDateStr = window.argonRuntimeConfig.startDate || '2020-10-31';
+	var parts = ('' + startDateStr).split('-');
+	var birthDay = new Date();
+	birthDay.setUTCFullYear(parseInt(parts[0], 10), (parseInt(parts[1], 10) || 1) - 1, parseInt(parts[2], 10) || 1);
+	birthDay.setUTCHours(0, 0, 0, 0);
+	var el = document.getElementById('showsectime');
+	if (!el){ return; }
+	function pad(n){ return n < 10 ? '0' + n : '' + n; }
+	function update(){
+		var today = new Date();
+		var timeold = today.getTime() - birthDay.getTime();
+		var msPerDay = 24 * 60 * 60 * 1000;
+		var e_daysold = timeold / msPerDay;
+		var daysold = Math.floor(e_daysold);
+		var e_hrsold = (daysold - e_daysold) * -24;
+		var hrsold = Math.floor(e_hrsold);
+		var e_minsold = (hrsold - e_hrsold) * -60;
+		var minsold = Math.floor(e_minsold);
+		var seconds = Math.floor((minsold - e_minsold) * -60);
+		el.innerHTML = "本站已安全运行" + daysold + "天" + hrsold + "小时" + minsold + "分" + pad(seconds) + "秒";
+		setTimeout(update, 1000);
+	}
+	update();
+}
+
+function enhancedInit(){
+	scrollBlurInit();
+	runtimeInit();
+}
+enhancedInit();

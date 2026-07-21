@@ -1811,10 +1811,16 @@ window.pjaxLoaded = function(){
 							<p class="description"></p>
 						</td>
 					</tr>
-					<tr><th class="subtitle"><h2>Enhanced</h2></th></tr>
-					<tr>
-						<th colspan="2"><p class="description"><?php _e('以下为针对原版 Argon 的增强功能（本分支新增），集中置于底部便于测试开关。', 'argon');?></p></th>
-					</tr>
+				<tr><th class="subtitle"><h2>Enhanced</h2></th></tr>
+				<tr>
+					<th colspan="2"><p class="description"><?php _e('以下为针对原版 Argon 的增强功能（本分支新增），集中置于底部便于测试开关。', 'argon');?></p></th>
+				</tr>
+				<tr>
+					<th><label><?php _e('预加载界面', 'argon');?></label></th>
+					<td>
+						<input type="checkbox" name="argon_enable_preloader" value="true" <?php $argon_enable_preloader = get_option('argon_enable_preloader'); if ($argon_enable_preloader != 'false'){echo 'checked';}?>/> <?php _e('访问时先显示全屏加载遮罩，待 CSS/JS/字体就绪后再展示内容（消除首屏样式抖动）', 'argon');?>
+					</td>
+				</tr>
 					<tr>
 						<th><label><?php _e('A. 结构化数据 JSON-LD', 'argon');?></label></th>
 						<td>
@@ -2286,6 +2292,7 @@ function argon_update_themeoptions(){
 		argon_update_option_checkbox('argon_enable_runtime');
 		argon_update_option('argon_runtime_start_date');
 		argon_update_option_checkbox('argon_enable_lightbox_thumbnails');
+		argon_update_option_checkbox('argon_enable_preloader');
 		argon_update_option('argon_darkmode_autoswitch');
 		argon_update_option('argon_enable_amoled_dark');
 		argon_update_option('argon_outdated_info_time_type');

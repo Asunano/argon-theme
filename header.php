@@ -75,6 +75,36 @@
 	<link rel="preconnect" href="https://fonts.googleapis.com">
 	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 	<link rel="dns-prefetch" href="https://fonts.googleapis.com">
+	<?php /* 预加载遮罩：关键样式内联，确保首屏瞬时出现、不依赖异步 CSS，避免遮罩自身闪烁 */ ?>
+	<?php if (get_option('argon_enable_preloader') != 'false') { ?>
+	<style>
+	#argon-preloader{position:fixed;inset:0;z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--argon-preloader-bg,#f6f7fb);transition:opacity .5s ease, filter .5s ease;will-change:opacity,filter;}
+	#argon-preloader.ar--hidden,#argon-preloader.argon-preloader--hidden{opacity:0;filter:blur(12px);transform:scale(1.03);pointer-events:none;animation:none;}
+	.darkmode{--argon-preloader-bg:#15171c;}
+	.amoled-dark{--argon-preloader-bg:#000;}
+	.argon-preloader__inner{display:flex;flex-direction:column;align-items:center;animation:argon-preloader-in .45s ease both;}
+	.argon-preloader__spinner{width:44px;height:44px;border:4px solid rgba(94,114,228,.25);border-top-color:var(--themecolor,#5e72e4);border-radius:50%;animation:argon-spin .8s linear infinite,argon-glow 1.6s ease-in-out infinite;}
+	.argon-preloader__text{margin-top:16px;color:var(--themecolor,#5e72e4);font-size:14px;letter-spacing:.18em;}
+	.argon-preloader__text::after{content:'';animation:argon-dots 1.4s steps(1,end) infinite;}
+	@keyframes argon-spin{to{transform:rotate(360deg);}}
+	/* 旋转圈外发光脉冲（不影响 transform，避免与旋转冲突） */
+	@keyframes argon-glow{0%,100%{box-shadow:0 0 0 0 rgba(94,114,228,0);}50%{box-shadow:0 0 18px 2px rgba(94,114,228,.35);}}
+	/* 内层渐入：透明度 + 轻微上移/缩放 */
+	@keyframes argon-preloader-in{from{opacity:0;transform:translateY(8px) scale(.96);}to{opacity:1;transform:none;}}
+	/* 加载文字动态省略号 */
+	@keyframes argon-dots{0%{content:'';}25%{content:'.';}50%{content:'..';}75%{content:'...';}100%{content:'';}}
+	/* 兜底：JS 异常时 10s 后淡出（含模糊），避免永久遮挡内容 */
+	@keyframes argon-preloader-failsafe{0%,92%{opacity:1;filter:blur(0)}100%{opacity:0;filter:blur(12px)}}
+	#argon-preloader{animation:argon-preloader-failsafe 10s linear forwards;}
+	@media (prefers-reduced-motion: reduce){
+		#argon-preloader{transition:none;}
+		.argon-preloader__inner,.argon-preloader__spinner,.argon-preloader__text::after{animation:none;}
+		.argon-preloader__inner{opacity:1;transform:none;}
+		#argon-preloader.ar--hidden,#argon-preloader.argon-preloader--hidden{filter:none;transform:none;}
+	}
+	</style>
+	<noscript><style>#argon-preloader{display:none!important;}</style></noscript>
+	<?php } ?>
 	<meta charset="<?php bloginfo( 'charset' ); ?>">
 	<?php if (get_option('argon_enable_mobile_scale') != 'true'){ ?>
 		<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
@@ -326,6 +356,42 @@
 
 <body <?php body_class(); ?>>
 <?php /*wp_body_open();*/ ?>
+<?php if (get_option('argon_enable_preloader') != 'false') { ?>
+<div id="argon-preloader" aria-hidden="true">
+	<div class="argon-preloader__inner">
+		<div class="argon-preloader__spinner"></div>
+		<div class="argon-preloader__text"><?php _e('加载中', 'argon'); ?></div>
+	</div>
+</div>
+<script>
+(function(){
+	var el = document.getElementById('argon-preloader');
+	if (!el) return;
+	var hidden = false;
+	function hide(){
+		if (hidden) return; hidden = true;
+		// 取消 10s 兜底 CSS 动画，否则 animation 会覆盖 transition 对 opacity/filter 的控制，
+		// 导致模糊淡出失效、预加载被"锁住"后突然消失
+		el.style.animation = 'none';
+		el.classList.add('argon-preloader--hidden');
+		setTimeout(function(){ if (el && el.parentNode) el.parentNode.removeChild(el); }, 550);
+	}
+	var start = Date.now();
+	var fontsReady = (document.fonts && document.fonts.ready) ? document.fonts.ready : Promise.resolve();
+	function minDelay(){ return new Promise(function(res){ setTimeout(res, Math.max(0, 900 - (Date.now() - start))); }); }
+	// 关键 CSS 为渲染阻塞，首屏绘制前必已应用；DOMContentLoaded + 字体就绪 + 最短展示(900ms，确保旋转动画可见) 后带模糊淡出
+	function ready(){ Promise.all([fontsReady, minDelay()]).then(hide); }
+	if (document.readyState === 'loading') {
+		document.addEventListener('DOMContentLoaded', ready);
+	} else {
+		ready();
+	}
+	window.addEventListener('load', hide);
+	// 兜底：10s 仍异常则强制隐藏，避免永久遮罩
+	setTimeout(hide, 10000);
+})();
+</script>
+<?php } ?>
 <div id="toolbar">
 	<header class="header-global">
 		<nav id="navbar-main" class="navbar navbar-main navbar-expand-lg navbar-transparent navbar-light bg-primary headroom--not-bottom headroom--not-top headroom--pinned">

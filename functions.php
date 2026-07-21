@@ -39,10 +39,9 @@ add_filter('script_loader_tag', function ($tag, $handle) {
 	return $tag;
 }, 10, 2);
 
-// 仅让 Google Fonts 以非阻塞方式加载（media=print + onload 切换），降低外链字体对首屏的阻塞。
-// 关键主题样式 style.css 与本地设计系统样式 argon_css_merged 均保持渲染阻塞：
-// 二者为本地文件、体积小，阻塞代价极低；若改为异步会在样式到达前先无样式再跳变，产生布局偏移(CLS)/FOUC。
-// googlefont 已带 &display=swap，文本先以回退字体显示再交换，CLS 影响极小，故可安全异步。
+// 仅 googlefont 异步加载（media=print + onload 切回 all），其余样式保持渲染阻塞，
+// 保证首屏必定已样式化、绝不出现整页无样式(空白/异常)。预加载遮罩的瞬时出现由
+// 内联样式 + 遮罩自身不依赖外部 CSS 来保证；关键 CSS 渲染阻塞可彻底避免无样式闪烁。
 add_filter('style_loader_tag', function ($tag, $handle) {
 	if (in_array($handle, array('googlefont'), true)) {
 		$deferred = str_replace("media='all'", "media='print' onload=\"this.media='all'\"", $tag);

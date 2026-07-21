@@ -25,6 +25,32 @@ function theme_slug_setup() {
 }
 add_action('after_setup_theme','theme_slug_setup');
 
+// 条件加载的 vendor 脚本以 defer 加载，解除 <head> 渲染阻塞。
+// argon_js_merged 不在其中(见下方注释)：它同步于 <head> 输出，作为全局基础包。
+add_filter('script_loader_tag', function ($tag, $handle) {
+	// 条件加载的 vendor 脚本统一以 defer 加载，解除 <head> 渲染阻塞。
+	// 注意：argon_js_merged 不能 defer —— 它在全局定义 jQuery($) 与 socialShare，
+	// 而 footer 的 argonjs 与正文内联脚本(如 share.php 的 socialShare(...))在解析期同步执行，
+	// 早于 defer 脚本，defer 会导致 "$ is not defined" / "socialShare is not defined"。
+	// 其余脚本均在 argontheme.js(pjax:complete) 中按需调用，延迟至文档解析后执行无副作用。
+	if (in_array($handle, array('fancybox5', 'highlight', 'highlight-ln', 'nouislider', 'pickr'), true)) {
+		return str_replace(' src=', ' defer src=', $tag);
+	}
+	return $tag;
+}, 10, 2);
+
+// 仅让 Google Fonts 以非阻塞方式加载（media=print + onload 切换），降低外链字体对首屏的阻塞。
+// 关键主题样式 style.css 与本地设计系统样式 argon_css_merged 均保持渲染阻塞：
+// 二者为本地文件、体积小，阻塞代价极低；若改为异步会在样式到达前先无样式再跳变，产生布局偏移(CLS)/FOUC。
+// googlefont 已带 &display=swap，文本先以回退字体显示再交换，CLS 影响极小，故可安全异步。
+add_filter('style_loader_tag', function ($tag, $handle) {
+	if (in_array($handle, array('googlefont'), true)) {
+		$deferred = str_replace("media='all'", "media='print' onload=\"this.media='all'\"", $tag);
+		return $deferred . '<noscript>' . $tag . '</noscript>';
+	}
+	return $tag;
+}, 10, 2);
+
 $argon_version = !(wp_get_theme() -> Template) ? wp_get_theme() -> Version : wp_get_theme(wp_get_theme() -> Template) -> Version;
 $GLOBALS['theme_version'] = $argon_version;
 $argon_assets_path = get_option("argon_assets_path");
@@ -636,6 +662,15 @@ function argon_enhanced_body_class($classes){
 	return $classes;
 }
 add_filter('body_class', 'argon_enhanced_body_class');
+
+//Enhanced 滚动模糊：将模糊强度以 CSS 变量注入 <head>，供设置项 argon_scroll_blur_radius 调节
+function argon_scroll_blur_css_var(){
+	$radius = intval(get_option('argon_scroll_blur_radius', 8));
+	if ($radius < 0){ $radius = 0; }
+	if ($radius > 40){ $radius = 40; }
+	echo '<style>:root{--argon-scroll-blur-radius:' . $radius . 'px;}</style>' . "\n";
+}
+add_action('wp_head', 'argon_scroll_blur_css_var');
 //页面浏览量
 function get_post_views($post_id){
 	$count_key = 'views';
@@ -1224,7 +1259,7 @@ function argon_get_comment_text($comment_ID = 0, $args = array()) {
 	);
 	$comment_text = preg_replace(
 		'/<img src="(.*?)" alt="(.*?)" \/>/',
-		'<a href="$1" title="$2" data-fancybox="comment-' . $comment -> comment_ID . '-image" class="comment-image" rel="nofollow">
+		'<a href="$1" title="$2" class="comment-image" data-fancybox="comment-images" rel="nofollow">
 			<i class="fa fa-image" aria-hidden="true"></i>
 			' . __('查看图片', 'argon') . '
 			<img src="" alt="$2" class="comment-image-preview">
@@ -2201,9 +2236,9 @@ function argon_lazyload($content){
 function argon_fancybox($content){
 	if(!is_feed() && !is_robots() && !is_home()){
 		if (argon_get_option('argon_enable_lazyload') != 'false'){
-			$content = preg_replace('/<img(.*?)data-original=[\'"](.*?)[\'"](.*?)((\/>)|>|(<\/img>))/i',"<div class='fancybox-wrapper lazyload-container-unload' data-fancybox='post-images' href='$2'>$0</div>" , $content);
+			$content = preg_replace('/<img(.*?)data-original=[\'"](.*?)[\'"](.*?)((\/>)|>|(<\/img>))/i',"<a class='argon-lightbox-img' data-fancybox='post-images' href='$2'>$0</a>" , $content);
 		}else{
-			$content = preg_replace('/<img(.*?)src=[\'"](.*?)[\'"](.*?)((\/>)|>|(<\/img>))/i',"<div class='fancybox-wrapper' data-fancybox='post-images' href='$2'>$0</div>" , $content);
+			$content = preg_replace('/<img(.*?)src=[\'"](.*?)[\'"](.*?)((\/>)|>|(<\/img>))/i',"<a class='argon-lightbox-img' data-fancybox='post-images' href='$2'>$0</a>" , $content);
 		}
 	}
 	return $content;

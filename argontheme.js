@@ -1755,38 +1755,36 @@ function zoomifyInit(){
 }
 zoomifyInit();
 
-/*Fancybox*/
-$.fancybox.defaults.transitionEffect = "slide";
-$.fancybox.defaults.buttons = ["zoom", "fullScreen", "thumbs", "close"];
-$.fancybox.defaults.lang = argonConfig.language;
-$.fancybox.defaults.i18n = {
-	en_US: {
-		CLOSE: "Close",
-		NEXT: "Next",
-		PREV: "Previous",
-		ERROR: "The requested content cannot be loaded. <br/> Please try again later.",
-		PLAY_START: "Start slideshow",
-		PLAY_STOP: "Pause slideshow",
-		FULL_SCREEN: "Full screen",
-		THUMBS: "Thumbnails",
-		DOWNLOAD: "Download",
-		SHARE: "Share",
-		ZOOM: "Zoom"
-	},
-	zh_CN: {
-		CLOSE: "关闭",
-		NEXT: "下一张",
-		PREV: "上一张",
-		ERROR: "图片加载失败",
-		PLAY_START: "开始幻灯片展示",
-		PLAY_STOP: "暂停幻灯片展示",
-		FULL_SCREEN: "全屏",
-		THUMBS: "缩略图",
-		DOWNLOAD: "下载",
-		SHARE: "分享",
-		ZOOM: "缩放"
+/* Fancybox v5 灯箱：原生底部缩略图条（Thumbs 组件），由设置项 argon_enable_lightbox_thumbnails 控制 */
+/* Fancybox.bind 采用事件委托，Pjax 加载的新内容无需重新绑定 */
+var argonLightboxBound = false;
+function argonLightboxInit(){
+	if (typeof(Fancybox) == "undefined"){
+		return;
 	}
-};
+	if (argonLightboxBound){
+		return;
+	}
+	var showThumbs = !!(window.argonLightboxConfig && window.argonLightboxConfig.enabled);
+	try {
+		Fancybox.bind('[data-fancybox]', {
+			Thumbs: {
+				showOnStart: showThumbs,
+				type: "classic"
+			}
+		});
+		argonLightboxBound = true;
+	} catch (err) {
+		/* 第三方库异常不应阻断 Pjax 初始化链（pangu / tippy 等） */
+		argonLightboxBound = true;
+		if (window.console){ console.warn('Fancybox init failed:', err); }
+	}
+}
+function argonLightboxReload(){
+	/* 事件委托已覆盖 Pjax 新内容，无需重复绑定；仅确保首次加载时已完成绑定 */
+	argonLightboxInit();
+}
+argonLightboxInit();
 
 /*Lazyload*/
 function lazyloadInit(){
@@ -1987,6 +1985,7 @@ $(document).pjax("a[href]:not([no-pjax]):not(.no-pjax):not([target='_blank']):no
 	lazyloadInit();
 	zoomifyInit();
 	highlightJsRender();
+	argonLightboxReload();
 	panguInit();
 	clampInit();
 	tippyInit();

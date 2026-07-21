@@ -45,7 +45,13 @@
 		?>
 		<script>window.argonScrollBlurConfig = <?php echo wp_json_encode($argon_scroll_blur_config, JSON_UNESCAPED_UNICODE); ?>;</script>
 		<script>window.argonRuntimeConfig = <?php echo wp_json_encode($argon_runtime_config, JSON_UNESCAPED_UNICODE); ?>;</script>
-		<script src="<?php echo $GLOBALS['assets_path']; ?>/argontheme.js?v<?php echo $GLOBALS['theme_version']; ?>"></script>
+		<?php
+			$argon_lightbox_config = array(
+				'enabled' => (get_option('argon_enable_lightbox_thumbnails') == 'true' || get_option('argon_enable_lightbox_thumbnails') == ''),
+			);
+		?>
+		<script>window.argonLightboxConfig = <?php echo wp_json_encode($argon_lightbox_config, JSON_UNESCAPED_UNICODE); ?>;</script>
+		<script defer src="<?php echo $GLOBALS['assets_path']; ?>/argontheme.js?v<?php echo $GLOBALS['theme_version']; ?>"></script>
 		<?php if (get_option('argon_math_render') == 'mathjax3') { /*Mathjax V3*/?>
 			<script>
 				window.MathJax = {

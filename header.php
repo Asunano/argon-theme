@@ -71,6 +71,10 @@
 	}
 ?>
 <head>
+	<?php /* 字体域名资源提示：加速异步 googlefont 的 DNS/连接建立，减少 FOUT 时长（不影响渲染阻塞） */ ?>
+	<link rel="preconnect" href="https://fonts.googleapis.com">
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link rel="dns-prefetch" href="https://fonts.googleapis.com">
 	<meta charset="<?php bloginfo( 'charset' ); ?>">
 	<?php if (get_option('argon_enable_mobile_scale') != 'true'){ ?>
 		<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
@@ -154,7 +158,21 @@
 		wp_enqueue_style("style", $GLOBALS['assets_path'] . "/style.css", null, $GLOBALS['theme_version']);
 		if (get_option('argon_disable_googlefont') != 'true') {wp_enqueue_style("googlefont", "//fonts.googleapis.com/css?family=Open+Sans:300,400,600,700|Noto+Serif+SC:300,600&display=swap");}
 		wp_enqueue_script("argon_js_merged", $GLOBALS['assets_path'] . "/assets/argon_js_merged.js", null, $GLOBALS['theme_version']);
-		wp_enqueue_script("argonjs", $GLOBALS['assets_path'] . "/assets/js/argon.min.js", null, $GLOBALS['theme_version']);
+		/* 条件加载：仅在使用到的功能开启时才请求对应 vendor，降低首屏 JS 体积 */
+		if (get_option('argon_enable_fancybox') != 'false' && get_option('argon_enable_zoomify') == 'false'){
+			wp_enqueue_style("fancybox5", $GLOBALS['assets_path'] . "/assets/vendor/fancybox5/fancybox.css", null, $GLOBALS['theme_version']);
+			wp_enqueue_script("fancybox5", $GLOBALS['assets_path'] . "/assets/vendor/fancybox5/fancybox.umd.js", null, $GLOBALS['theme_version']);
+		}
+		if (get_option('argon_enable_code_highlight') == 'true'){
+			wp_enqueue_script("highlight", $GLOBALS['assets_path'] . "/assets/vendor/highlight/highlight.pack.js", null, $GLOBALS['theme_version']);
+			wp_enqueue_script("highlight-ln", $GLOBALS['assets_path'] . "/assets/vendor/highlight/highlightjs-line-numbers.min.js", null, $GLOBALS['theme_version']);
+			wp_enqueue_style("highlight-style", $GLOBALS['assets_path'] . "/assets/vendor/highlight/styles/" . (get_option('argon_code_theme') == '' ? 'vs2015' : get_option('argon_code_theme')) . ".css", null, $GLOBALS['theme_version']);
+		}
+		if (get_option('argon_show_customize_theme_color_picker') != 'false'){
+			wp_enqueue_style("pickr-style", $GLOBALS['assets_path'] . "/assets/vendor/pickr/themes/monolith.min.css", null, $GLOBALS['theme_version']);
+			wp_enqueue_script("nouislider", $GLOBALS['assets_path'] . "/assets/vendor/nouislider/js/nouislider.min.js", null, $GLOBALS['theme_version']);
+			wp_enqueue_script("pickr", $GLOBALS['assets_path'] . "/assets/vendor/pickr/pickr.es5.min.js", null, $GLOBALS['theme_version']);
+		}
 	?>
 	<?php wp_head(); ?>
 	<?php $GLOBALS['wp_path'] = get_option('argon_wp_path') == '' ? '/' : get_option('argon_wp_path'); ?>

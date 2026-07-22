@@ -685,10 +685,11 @@ function set_post_views(){
 	if (!is_single() && !is_page()) {
 		return;
 	}
-	if (!isset($post_id)){
-		global $post;
-		$post_id = $post -> ID;
+	global $post;
+	if (!isset($post) || !isset($post -> ID)) {
+		return;
 	}
+	$post_id = $post -> ID;
 	if (post_password_required($post_id)){
 		return;
 	}
@@ -1341,7 +1342,14 @@ function argon_mark_comment_upvoted($id){
 		}
 	}else{
 		$upvotedList = isset( $_COOKIE['argon_comment_upvoted'] ) ? $_COOKIE['argon_comment_upvoted'] : '';
-		setcookie('argon_comment_upvoted', $upvotedList . $id . "," , time() + 3153600000 , '/');
+		$ids = array_filter(array_map('intval', explode(',', $upvotedList)));
+		if (!in_array((int) $id, $ids, true)) {
+			$ids[] = (int) $id;
+		}
+		// 去重 + 保留最近 200 个，防止 Cookie 累积超限导致请求头过大 (HTTP 400)
+		$ids = array_unique($ids);
+		$ids = array_slice($ids, -200);
+		setcookie('argon_comment_upvoted', implode(',', $ids) . ',', time() + 3153600000, '/');
 	}
 }
 function is_comment_upvoted($id){
@@ -2339,7 +2347,8 @@ function upvote_shuoshuo(){
 	header('Content-Type:application/json; charset=utf-8');
 	$ID = $_POST["shuoshuo_id"];
 	$upvotedList = isset( $_COOKIE['argon_shuoshuo_upvoted'] ) ? $_COOKIE['argon_shuoshuo_upvoted'] : '';
-	if (in_array($ID, explode(',', $upvotedList))){
+	$ids = array_filter(array_map('intval', explode(',', $upvotedList)));
+	if (in_array((int) $ID, $ids, true)){
 		exit(json_encode(array(
 			'status' => 'failed',
 			'msg' => __('该说说已被赞过', 'argon'),
@@ -2347,7 +2356,11 @@ function upvote_shuoshuo(){
 		)));
 	}
 	set_shuoshuo_upvotes($ID);
-	setcookie('argon_shuoshuo_upvoted', $upvotedList . $ID . "," , time() + 3153600000 , '/');
+	$ids[] = (int) $ID;
+	// 去重 + 保留最近 200 个，防止 Cookie 累积超限导致请求头过大 (HTTP 400)
+	$ids = array_unique($ids);
+	$ids = array_slice($ids, -200);
+	setcookie('argon_shuoshuo_upvoted', implode(',', $ids) . ',', time() + 3153600000 , '/');
 	exit(json_encode(array(
 		'ID' => $ID,
 		'status' => 'success',
@@ -3599,7 +3612,14 @@ function argon_mark_post_upvoted($ID){
 		}
 	}else{
 		$list = isset($_COOKIE['argon_post_upvoted']) ? $_COOKIE['argon_post_upvoted'] : '';
-		setcookie('argon_post_upvoted', $list . $ID . ',', time() + 3153600000, '/');
+		$ids = array_filter(array_map('intval', explode(',', $list)));
+		if (!in_array((int) $ID, $ids, true)) {
+			$ids[] = (int) $ID;
+		}
+		// 去重 + 保留最近 200 个，防止 Cookie 累积超限导致请求头过大 (HTTP 400)
+		$ids = array_unique($ids);
+		$ids = array_slice($ids, -200);
+		setcookie('argon_post_upvoted', implode(',', $ids) . ',', time() + 3153600000, '/');
 	}
 }
 function is_post_upvoted($ID){

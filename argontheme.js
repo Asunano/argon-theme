@@ -472,13 +472,21 @@ if (argonConfig.headroom == "true"){
 }
 
 /*瀑布流布局*/
+let waterflowRaf = null;
+function waterflowInitDebounced(){
+	if (waterflowRaf) cancelAnimationFrame(waterflowRaf);
+	waterflowRaf = requestAnimationFrame(waterflowInit);
+}
 function waterflowInit() {
 	if (argonConfig.waterflow_columns == "1") {
 		return;
 	}
 	$("#main.article-list img").each(function(index, ele){
-		ele.onload = function(){
-			waterflowInit();
+		if (!ele._waterflowBound) {
+			ele._waterflowBound = true; // 每张图片只绑定一次，避免指数级重复绑定
+			ele.onload = function(){
+				waterflowInitDebounced();
+			}
 		}
 	});
 	let columns;
@@ -1735,7 +1743,7 @@ function showPostOutdateToast(){
 	if ($("#primary #post_outdate_toast").length > 0){
 		iziToast.show({
 			title: '',
-			message: $("#primary #post_outdate_toast").data("text"),
+			message: escapeHtml($("#primary #post_outdate_toast").data("text")),
 			class: 'shadow-sm',
 			position: 'topRight',
 			backgroundColor: 'var(--themecolor)',
@@ -1909,8 +1917,8 @@ if ($("html").hasClass("banner-as-cover")){
 /*Pjax*/
 var pjaxScrollTop = 0, pjaxLoading = false;
 $.pjax.defaults.timeout = 10000;
-$.pjax.defaults.container = ['#primary', '#leftbar_part1_menu', '#leftbar_part2_inner', '.page-information-card-container', '#rightbar', '#wpadminbar'];
-$.pjax.defaults.fragment = ['#primary', '#leftbar_part1_menu', '#leftbar_part2_inner', '.page-information-card-container', '#rightbar', '#wpadminbar'];
+$.pjax.defaults.container = ['#primary', '#leftbar_part1_menu', '#leftbar_part2_inner', '.page-information-card-container', '#rightbar'];
+$.pjax.defaults.fragment = ['#primary', '#leftbar_part1_menu', '#leftbar_part2_inner', '.page-information-card-container', '#rightbar'];
 $(document).pjax("a[href]:not([no-pjax]):not(.no-pjax):not([target='_blank']):not([download]):not(.reference-link):not(.reference-list-backlink)")
 .on('pjax:click', function(e, f, g){
 	if (argonConfig.disable_pjax == true){
@@ -2312,6 +2320,7 @@ function rgb2hex(r,g,b){
 }
 function hex2rgb(hex){
 	//hex: #XXXXXX
+	hex = hex.toUpperCase(); // 转换为大写，兼容小写十六进制（如 #5e72e4）
 	let dec = {
 		'0': 0, '1': 1, '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, 'A': 10, 'B': 11, 'C': 12, 'D': 13, 'E': 14, 'F': 15
 	};
@@ -2805,9 +2814,9 @@ function liveSearchInit(){
 			return;
 		}
 		$.each(results, function(i, item){
-			var $a = $('<a class="argon-live-search-item" href="' + item.url + '"></a>');
+			var $a = $('<a class="argon-live-search-item"></a>').attr('href', item.url);
 			if (item.thumbnail){
-				$a.append('<img class="argon-live-search-thumb" src="' + item.thumbnail + '" alt="" loading="lazy">');
+				$a.append($('<img class="argon-live-search-thumb" alt="" loading="lazy">').attr('src', item.thumbnail));
 			}
 			var $body = $('<div class="argon-live-search-body"></div>');
 			$body.append('<div class="argon-live-search-title">' + highlight(item.title, q) + '</div>');

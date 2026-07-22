@@ -192,13 +192,15 @@ function post_analytics_info(){
 	if(function_exists('file_get_contents')){
 		$contexts = stream_context_create(
 			array(
-				'http' => array(
+				'https' => array(
 					'method'=>"GET",
 					'header'=>"User-Agent: ArgonTheme\r\n"
 				)
 			)
 		);
-		$result = file_get_contents('http://api.solstice23.top/argon_analytics/index.php?domain=' . urlencode($_SERVER['HTTP_HOST']) . '&version='. urlencode($GLOBALS['theme_version']), false, $contexts);
+		$host = isset($_SERVER['HTTP_HOST']) ? $_SERVER['HTTP_HOST'] : '';
+		$host = preg_replace('/[^a-zA-Z0-9.\-]/', '', $host); // 仅允许域名合法字符，防 Host header 注入
+		$result = file_get_contents('https://api.solstice23.top/argon_analytics/index.php?domain=' . urlencode($host) . '&version='. urlencode($GLOBALS['theme_version']), false, $contexts);
 		update_option('argon_has_inited', 'true');
 		return $result;
 	}else{
@@ -364,12 +366,12 @@ function get_additional_content_after_post(){
 	if ($res == ""){
 		$res = get_option("argon_additional_content_after_post");
 	}
-	$res = str_replace("\n", "</br>", $res);
+	$res = str_replace("\n", "<br>", $res);
 	$res = str_replace("%url%", get_permalink($postID), $res);
 	$res = str_replace("%link%", '<a href="' . get_permalink($postID) . '" target="_blank">' . get_permalink($postID) . '</a>', $res);
 	$res = str_replace("%title%", get_the_title(), $res);
 	$res = str_replace("%author%", get_the_author(), $res);
-	return $res;
+	return wp_kses_post($res);
 }
 //输出分页页码
 function get_argon_formatted_paginate_links($maxPageNumbers, $extraClasses = ''){
@@ -378,40 +380,39 @@ function get_argon_formatted_paginate_links($maxPageNumbers, $extraClasses = '')
 		'next_text' => '',
 		'before_page_number' => '',
 		'after_page_number' => '',
-		'show_all' => True
+		'show_all' => True,
+		'type' => 'array'
 	);
-	$res = paginate_links($args);
-	//单引号转双引号 & 去除上一页和下一页按钮
-	$res = preg_replace(
-		'/\'/',
-		'"',
-		$res
-	);
-	$res = preg_replace(
-		'/<a class="prev page-numbers" href="(.*?)">(.*?)<\/a>/',
-		'',
-		$res
-	);
-	$res = preg_replace(
-		'/<a class="next page-numbers" href="(.*?)">(.*?)<\/a>/',
-		'',
-		$res
-	);
-	//寻找所有页码标签
-	preg_match_all('/<(.*?)>(.*?)<\/(.*?)>/' , $res , $pages);
-	$total = count($pages[0]);
-	$current = 0;
-	$urls = array();
-	for ($i = 0; $i < $total; $i++){
-		if (preg_match('/<span(.*?)>(.*?)<\/span>/' , $pages[0][$i])){
-			$current = $i + 1;
-		}else{
-			preg_match('/<a(.*?)href="(.*?)">(.*?)<\/a>/' , $pages[0][$i] , $tmp);
-			$urls[$i + 1] = $tmp[2];
+	$links = paginate_links($args);
+	if (empty($links)){
+		return "";
+	}
+	//直接解析 paginate_links 返回的链接数组，避免对整段 HTML 做脆弱的正则匹配
+	$pages = array(); // 页码 => array('url' => , 'current' => bool)
+	foreach ($links as $link){
+		if (preg_match('/class="[^"]*(prev|next)[^"]*"/', $link)){
+			continue; // 跳过上一页/下一页
+		}
+		if (preg_match('/<span[^>]*class="[^"]*current[^"]*"[^>]*>(.*?)<\/span>/', $link, $m)){
+			$num = (int) $m[1];
+			$pages[$num] = array('url' => '', 'current' => true);
+		}elseif (preg_match('/<a[^>]*href="([^"]*)"[^>]*>(.*?)<\/a>/', $link, $m)){
+			$num = (int) $m[2];
+			$pages[$num] = array('url' => $m[1], 'current' => false);
 		}
 	}
-
+	$total = count($pages);
 	if ($total == 0){
+		return "";
+	}
+	$current = 0;
+	foreach ($pages as $num => $p){
+		if ($p['current']){
+			$current = $num;
+			break;
+		}
+	}
+	if ($current == 0){
 		return "";
 	}
 
@@ -424,24 +425,24 @@ function get_argon_formatted_paginate_links($maxPageNumbers, $extraClasses = '')
 	}
 	//生成新页码
 	$html = "";
-	if ($from > 1){
-		$html .= '<li class="page-item"><a aria-label="First Page" class="page-link" href="' . $urls[1] . '"><i class="fa fa-angle-double-left" aria-hidden="true"></i></a></li>';
+	if ($from > 1 && isset($pages[1])){
+		$html .= '<li class="page-item"><a aria-label="First Page" class="page-link" href="' . esc_url($pages[1]['url']) . '"><i class="fa fa-angle-double-left" aria-hidden="true"></i></a></li>';
 	}
-	if ($current > 1){
-		$html .= '<li class="page-item"><a aria-label="Previous Page" class="page-link" href="' . $urls[$current - 1] . '"><i class="fa fa-angle-left" aria-hidden="true"></i></a></li>';
+	if ($current > 1 && isset($pages[$current - 1])){
+		$html .= '<li class="page-item"><a aria-label="Previous Page" class="page-link" href="' . esc_url($pages[$current - 1]['url']) . '"><i class="fa fa-angle-left" aria-hidden="true"></i></a></li>';
 	}
 	for ($i = $from; $i <= $to; $i++){
 		if ($current == $i){
 			$html .= '<li class="page-item active"><span class="page-link" style="cursor: default;">' . $i . '</span></li>';
 		}else{
-			$html .= '<li class="page-item"><a class="page-link" href="' . $urls[$i] . '">' . $i . '</a></li>';
+			$html .= '<li class="page-item"><a class="page-link" href="' . esc_url($pages[$i]['url']) . '">' . $i . '</a></li>';
 		}
 	}
-	if ($current < $total){
-		$html .= '<li class="page-item"><a aria-label="Next Page" class="page-link" href="' . $urls[$current + 1] . '"><i class="fa fa-angle-right" aria-hidden="true"></i></a></li>';
+	if ($current < $total && isset($pages[$current + 1])){
+		$html .= '<li class="page-item"><a aria-label="Next Page" class="page-link" href="' . esc_url($pages[$current + 1]['url']) . '"><i class="fa fa-angle-right" aria-hidden="true"></i></a></li>';
 	}
-	if ($to < $total){
-		$html .= '<li class="page-item"><a aria-label="Last Page" class="page-link" href="' . $urls[$total] . '"><i class="fa fa-angle-double-right" aria-hidden="true"></i></a></li>';
+	if ($to < $total && isset($pages[$total])){
+		$html .= '<li class="page-item"><a aria-label="Last Page" class="page-link" href="' . esc_url($pages[$total]['url']) . '"><i class="fa fa-angle-double-right" aria-hidden="true"></i></a></li>';
 	}
 	return '<nav><ul class="pagination' . $extraClasses . '">' . $html . '</ul></nav>';
 }
@@ -462,12 +463,13 @@ function set_user_token_cookie(){
 }
 function session_init(){
 	set_user_token_cookie();
-	if (!session_id()){
+	// 仅在需要 Session 的页面（文章/页面/留言板）启动，避免每次请求都锁定 Session 文件、增加 I/O
+	// 必须在主查询解析后（wp 钩子）判断 is_singular()，否则条件恒为 false
+	if (!session_id() && (is_singular() || is_page_template('msgboard.php'))){
 		session_start();
 	}
 }
-session_init();
-//add_action('init', 'session_init');
+add_action('wp', 'session_init');
 //页面 Description Meta
 function get_seo_description(){
 	global $post;
@@ -710,10 +712,6 @@ function set_post_views(){
 	if ($noPostView == 'true'){
 		return;
 	}
-	global $post;
-	if (!isset($post -> ID)){
-		return;
-	}
 	$post_id = $post -> ID;
 	if (is_single() || is_page()) {
 		// 节流：同一访客 60s 内重复刷新同一文章只计数一次，降低数据库写放大
@@ -723,17 +721,31 @@ function set_post_views(){
 		}
 		$viewed[] = $post_id;
 		setcookie('argon_viewed_posts', implode(',', array_slice($viewed, -20)), time() + 60, '/');
+		// 先累加进 Object Cache，再由 shutdown 钩子统一落库；
+		// 配合持久化对象缓存（Redis/Memcached）可将 DB 写频率降至每请求至多一次
 		$count_key = 'views';
-		$count = get_post_meta($post_id, $count_key, true);
-		if ($count==''){
-			delete_post_meta($post_id, $count_key);
-			add_post_meta($post_id, $count_key, '0');
-		} else {
-			update_post_meta($post_id, $count_key, $count + 1);
+		$cache_key = 'argon_views_' . $post_id;
+		$count = wp_cache_get($cache_key, 'argon');
+		if ($count === false){
+			$count = (int) get_post_meta($post_id, $count_key, true);
 		}
+		$count++;
+		wp_cache_set($cache_key, $count, 'argon', 300);
+		$GLOBALS['argon_dirty_views'][$post_id] = $count;
 	}
 }
 add_action('get_header', 'set_post_views');
+//请求结束前批量落库，减少数据库写操作
+function argon_flush_post_views(){
+	if (empty($GLOBALS['argon_dirty_views'])){
+		return;
+	}
+	foreach ($GLOBALS['argon_dirty_views'] as $post_id => $count){
+		update_post_meta($post_id, 'views', $count);
+	}
+	$GLOBALS['argon_dirty_views'] = array();
+}
+add_action('shutdown', 'argon_flush_post_views');
 //字数和预计阅读时间
 function get_article_words($str){
 	preg_match_all('/<pre(.*?)>[\S\s]*?<code(.*?)>([\S\s]*?)<\/code>[\S\s]*?<\/pre>/im', $str, $codeSegments, PREG_PATTERN_ORDER);
@@ -892,6 +904,7 @@ function get_article_meta($type){
 function get_article_reading_time_meta($post_content_full){
 	$post_content_full = apply_filters("argon_html_before_wordcount", $post_content_full);
 	$words = get_article_words($post_content_full);
+	$total = $words['cn'] + $words['en'] + $words['code'];
 	$res = '</br><div class="post-meta-detail post-meta-detail-words">
 		<i class="fa fa-file-word-o" aria-hidden="true"></i>';
 	if ($words['code'] > 0){
@@ -899,13 +912,13 @@ function get_article_reading_time_meta($post_content_full){
 	}else{
 		$res .= '<span>';
 	}
-	$res .= ' ' . get_article_words_total($post_content_full) . " " . __("字", 'argon');
+	$res .= ' ' . $total . " " . __("字", 'argon');
 	$res .= '</span>
 		</div>
 		<div class="post-meta-devide">|</div>
 		<div class="post-meta-detail post-meta-detail-words">
 			<i class="fa fa-hourglass-end" aria-hidden="true"></i>
-			' . get_reading_time(get_article_words($post_content_full)) . '
+			' . get_reading_time($words) . '
 		</div>
 	';
 	return $res;
@@ -1285,7 +1298,9 @@ function argon_get_comment_text($comment_ID = 0, $args = array()) {
 	if (get_option("argon_comment_emotion_keyboard", "true") != "false"){
 		global $emotionListDefault;
 		$emotionList = apply_filters("argon_emotion_list", $emotionListDefault);
-		foreach ($emotionList as $groupIndex => $group){ 
+		$search = array();
+		$replace = array();
+		foreach ($emotionList as $groupIndex => $group){
 			foreach ($group['list'] as $index => $emotion){
 				if ($emotion['type'] != 'sticker'){
 					continue;
@@ -1296,8 +1311,12 @@ function argon_get_comment_text($comment_ID = 0, $args = array()) {
 				if (!isset($emotion['src']) || mb_strlen($emotion['src']) == 0){
 					continue;
 				}
-				$comment_text = str_replace(':' . $emotion['code'] . ':', "<img class='comment-sticker lazyload' src='data:image/svg+xml;base64,PHN2ZyBjbGFzcz0iZW1vdGlvbi1sb2FkaW5nIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIGZpbGw9Im5vbmUiIHZpZXdCb3g9Ii04IC04IDQwIDQwIiBzdHJva2U9IiM4ODgiIG9wYWNpdHk9Ii41IiB3aWR0aD0iNjAiIGhlaWdodD0iNjAiPgogIDxwYXRoIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIgc3Ryb2tlLXdpZHRoPSIxLjUiIGQ9Ik0xNC44MjggMTQuODI4YTQgNCAwIDAxLTUuNjU2IDBNOSAxMGguMDFNMTUgMTBoLjAxTTIxIDEyYTkgOSAwIDExLTE4IDAgOSA5IDAgMDExOCAweiIvPgo8L3N2Zz4=' data-original='" . $emotion['src'] . "'/><noscript><img class='comment-sticker' src='" . $emotion['src'] . "'/></noscript>", $comment_text);
+				$search[] = ':' . $emotion['code'] . ':';
+				$replace[] = "<img class='comment-sticker lazyload' src='data:image/svg+xml;base64,PHN2ZyBjbGFzcz0iZW1vdGlvbi1sb2FkaW5nIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIGZpbGw9Im5vbmUiIHZpZXdCb3g9Ii04IC04IDQwIDQwIiBzdHJva2U9IiM4ODgiIG9wYWNpdHk9Ii41IiB3aWR0aD0iNjAiIGhlaWdodD0iNjAiPgogIDxwYXRoIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIgc3Ryb2tlLXdpZHRoPSIxLjUiIGQ9Ik0xNC44MjggMTQuODI4YTQgNCAwIDAxLTUuNjU2IDBNOSAxMGguMDFNMTUgMTBoLjAxTTIxIDEyYTkgOSAwIDExLTE4IDAgOSA5IDAgMDExOCAweiIvPgo8L3N2Zz4=' data-original='" . $emotion['src'] . "'/><noscript><img class='comment-sticker' src='" . $emotion['src'] . "'/></noscript>";
 			}
+		}
+		if (!empty($search)){
+			$comment_text = str_replace($search, $replace, $comment_text); // 一次性替换，避免对每个表情遍历整段评论文本
 		}
 	}
 	return apply_filters( 'comment_text', $comment_text, $comment, $args );
@@ -1509,7 +1528,13 @@ function get_comment_captcha_seed($refresh = false){
 		}
 		return $res;
 	}
-	$captchaSeed = function_exists('random_int') ? random_int(0, 500000000) : mt_rand(0, 500000000);
+	if (function_exists('random_int')){
+		$captchaSeed = random_int(0, 500000000);
+	}elseif (function_exists('openssl_random_pseudo_bytes')){
+		$captchaSeed = abs(hexdec(bin2hex(openssl_random_pseudo_bytes(4)))) % 500000001; // 加密级后备，避免可预测的 mt_rand
+	}else{
+		$captchaSeed = mt_rand(0, 500000000); // 极旧环境最后兜底
+	}
 	$_SESSION['captchaSeed'] = $captchaSeed;
 	session_write_close();
 	return $captchaSeed;
@@ -2267,9 +2292,40 @@ function argon_lazyload($content){
 	$lazyload_loading_style = "lazyload-style-" . $lazyload_loading_style;
 
 	if(!is_feed() && !is_robots() && !is_home()){
-		$content = preg_replace('/<img(.*?)src=[\'"](.*?)[\'"](.*?)((\/>)|(<\/img>))/i',"<img class=\"lazyload " . $lazyload_loading_style . "\" src=\"data:image/svg+xml;base64,PCEtLUFyZ29uTG9hZGluZy0tPgo8c3ZnIHdpZHRoPSIxIiBoZWlnaHQ9IjEiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIgc3Ryb2tlPSIjZmZmZmZmMDAiPjxnPjwvZz4KPC9zdmc+\" \$1data-original=\"\$2\" src=\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsQAAA7EAZUrDhsAAAANSURBVBhXYzh8+PB/AAffA0nNPuCLAAAAAElFTkSuQmCC\"\$3$4" , $content);
-		$content = preg_replace('/<img(.*?)data-full-url=[\'"]([^\'"]+)[\'"](.*)>/i',"<img$1data-full-url=\"$2\" data-original=\"$2\"$3>" , $content);
-		$content = preg_replace('/<img(.*?)srcset=[\'"](.*?)[\'"](.*?)>/i',"<img$1$3>" , $content);
+		$use_dom = class_exists('DOMDocument') && $content != '';
+		if ($use_dom){
+			$dom = new DOMDocument();
+			$prev = libxml_use_internal_errors(true);
+			// 以 HTML 片段方式解析，避免回溯爆炸（ReDoS），并保留 UTF-8
+			@$dom->loadHTML(mb_convert_encoding($content, 'HTML-ENTITIES', 'UTF-8'), LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
+			libxml_clear_errors();
+			libxml_use_internal_errors($prev);
+			$imgs = $dom->getElementsByTagName('img');
+			foreach ($imgs as $img){
+				$full_url = $img->getAttribute('data-full-url');
+				if ($full_url != ''){
+					$img->setAttribute('data-original', $full_url);
+				}else{
+					$src = $img->getAttribute('src');
+					if ($src != ''){
+						$img->setAttribute('data-original', $src);
+					}
+				}
+				$img->removeAttribute('srcset'); // 移除 srcset，避免浏览器提前加载
+				$existing_class = $img->getAttribute('class');
+				$img->setAttribute('class', trim('lazyload ' . $lazyload_loading_style . ' ' . $existing_class));
+				$img->setAttribute('src', 'data:image/svg+xml;base64,PCEtLUFyZ29uTG9hZGluZy0tPgo8c3ZnIHdpZHRoPSIxIiBoZWlnaHQ9IjEiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIgc3Ryb2tlPSIjZmZmZmZmMDAiPjxnPjwvZz4KPC9zdmc+');
+			}
+			$content = $dom->saveHTML();
+			if ($content == ''){
+				$use_dom = false; // 解析失败则回退正则
+			}
+		}
+		if (!$use_dom){
+			$content = preg_replace('/<img(.*?)src=[\'"](.*?)[\'"](.*?)((\/>)|(<\/img>))/i',"<img class=\"lazyload " . $lazyload_loading_style . "\" src=\"data:image/svg+xml;base64,PCEtLUFyZ29uTG0aG9hZGluZy8tPgo8c3ZnIHdpZHRoPSIxIiBoZWlnaHQ9IjEiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIgc3Ryb2tlPSIjZmZmZmZmMDAiPjxnPjwvZz4KPC9zdmc+\" \$1data-original=\"\$2\" src=\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsQAAA7EAZUrDhsAAAANSURBVBhXYzh8+PB/AAffA0nNPuCLAAAAAElFTkSuQmCC\"\$3$4" , $content);
+			$content = preg_replace('/<img(.*?)data-full-url=[\'"]([^\'"]+)[\'"](.*)>/i',"<img$1data-full-url=\"$2\" data-original=\"$2\"$3>" , $content);
+			$content = preg_replace('/<img(.*?)srcset=[\'"](.*?)[\'"](.*?)>/i',"<img$1$3>" , $content);
+		}
 	}
 	return $content;
 }
@@ -2380,9 +2436,19 @@ function alert_footer_copyright_changed(){ ?>
 	</div>
 <?php }
 function check_footer_copyright(){
+	$cached = get_transient('argon_footer_copyright_check');
+	if ($cached !== false){
+		if ($cached === 'changed'){
+			add_action('admin_notices', 'alert_footer_copyright_changed');
+		}
+		return;
+	}
 	$footer = file_get_contents(get_theme_root() . "/" . wp_get_theme() -> template . "/footer.php");
 	if ((strpos($footer, "github.com/solstice23/argon-theme") === false) && (strpos($footer, "solstice23.top") === false)){
+		set_transient('argon_footer_copyright_check', 'changed', DAY_IN_SECONDS);
 		add_action('admin_notices', 'alert_footer_copyright_changed');
+	}else{
+		set_transient('argon_footer_copyright_check', 'ok', DAY_IN_SECONDS);
 	}
 }
 check_footer_copyright();
@@ -2638,12 +2704,12 @@ function argon_save_meta_data($post_id){
 			return $post_id;
 		}
 	}
-	update_post_meta($post_id, 'argon_hide_readingtime', $_POST['argon_meta_hide_readingtime']);
-	update_post_meta($post_id, 'argon_meta_simple', $_POST['argon_meta_simple']);
-	update_post_meta($post_id, 'argon_first_image_as_thumbnail', $_POST['argon_first_image_as_thumbnail']);
-	update_post_meta($post_id, 'argon_show_post_outdated_info', $_POST['argon_show_post_outdated_info']);
-	update_post_meta($post_id, 'argon_after_post', $_POST['argon_after_post']);
-	update_post_meta($post_id, 'argon_custom_css', $_POST['argon_custom_css']);
+	update_post_meta($post_id, 'argon_hide_readingtime', sanitize_text_field($_POST['argon_meta_hide_readingtime']));
+	update_post_meta($post_id, 'argon_meta_simple', sanitize_text_field($_POST['argon_meta_simple']));
+	update_post_meta($post_id, 'argon_first_image_as_thumbnail', sanitize_text_field($_POST['argon_first_image_as_thumbnail']));
+	update_post_meta($post_id, 'argon_show_post_outdated_info', sanitize_text_field($_POST['argon_show_post_outdated_info']));
+	update_post_meta($post_id, 'argon_after_post', sanitize_text_field($_POST['argon_after_post']));
+	update_post_meta($post_id, 'argon_custom_css', wp_strip_all_tags($_POST['argon_custom_css']));
 }
 add_action('save_post', 'argon_save_meta_data');
 function update_post_meta_ajax(){
@@ -2729,8 +2795,8 @@ function argon_get_post_outdated_info(){
 	global $post;
 	$post_show_outdated_info_status = strval(get_post_meta($post -> ID, 'argon_show_post_outdated_info', true));
 	if (get_option("argon_outdated_info_tip_type") == "toast"){
-		$before = "<div id='post_outdate_toast' style='display:none;' data-text='";
-		$after = "'></div>";
+		$before = '<div id="post_outdate_toast" style="display:none;" data-text="';
+		$after = '"></div>';
 	}else{
 		$before = "<div class='post-outdated-info'><i class='fa fa-info-circle' aria-hidden='true'></i>";
 		$after = "</div>";
@@ -2753,7 +2819,12 @@ function argon_get_post_outdated_info(){
 	$content = str_replace("%date_delta%", $date_delta, $content);
 	$content = str_replace("%modify_date_delta%", $modify_date_delta, $content);
 	$content = str_replace("%post_date_delta%", $post_date_delta, $content);
-	return $before . esc_html($content) . $after;
+	if (get_option("argon_outdated_info_tip_type") == "toast"){
+		// 用于 HTML 属性上下文；JS 端会再用 escapeHtml 转义后注入 toast，避免 data 属性来回解码导致脚本注入
+		return $before . esc_attr($content) . $after;
+	}else{
+		return $before . esc_html($content) . $after;
+	}
 }
 //Gutenberg 编辑器区块
 function argon_init_gutenberg_blocks() {
@@ -2807,7 +2878,7 @@ function argon_add_gutenberg_category($block_categories, $editor_context) {
 }
 add_filter('block_categories_all', 'argon_add_gutenberg_category', 10, 2);
 function argon_admin_i18n_info(){
-	echo "<script>var argon_language = '" . argon_get_locate() . "';</script>";
+	echo "<script>var argon_language = '" . esc_js(argon_get_locate()) . "';</script>";
 }
 add_filter('admin_head', 'argon_admin_i18n_info');
 //主题文章短代码解析

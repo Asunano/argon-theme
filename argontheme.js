@@ -2075,6 +2075,79 @@ $(document).pjax("a[href]:not([no-pjax]):not(.no-pjax):not([target='_blank']):no
 	calcHumanTimesOnPage();
 	foldLongComments();
 	foldLongShuoshuo();
+	/* PJAX 后重新初始化分享面板（inline 脚本不执行，故全部重设） */
+	// 分享面板开关
+	var $shareShow = $("#share_show");
+	if ($shareShow.length > 0){
+		$shareShow[0].onclick = function(){
+			$("#share_container").addClass("opened");
+		};
+	}
+	// 复制链接
+	var $copyLink = $("#share_copy_link");
+	if ($copyLink.length > 0){
+		$copyLink[0].onclick = function(){
+			var input = document.createElement("input");
+			document.body.appendChild(input);
+			input.setAttribute("value", window.location.href);
+			input.setAttribute("readonly", "readonly");
+			input.setAttribute("style", "opacity: 0;pointer-events:none;");
+			input.select();
+			if (document.execCommand("copy")){
+				iziToast.show({
+					title: escapeHtml("链接已复制"),
+					class: "shadow",
+					position: "topRight",
+					backgroundColor: "#2dce89",
+					titleColor: "#ffffff",
+					messageColor: "#ffffff",
+					iconColor: "#ffffff",
+					progressBarColor: "#ffffff",
+					icon: "fa fa-check",
+					timeout: 5000
+				});
+			}else{
+				iziToast.show({
+					title: escapeHtml("复制失败"),
+					class: "shadow",
+					position: "topRight",
+					backgroundColor: "#f5365c",
+					titleColor: "#ffffff",
+					messageColor: "#ffffff",
+					iconColor: "#ffffff",
+					progressBarColor: "#ffffff",
+					icon: "fa fa-close",
+					timeout: 5000
+				});
+			}
+			document.body.removeChild(input);
+		};
+	}
+	// 其他分享按钮：恢复弹出窗口行为
+	$("#share a[target='_blank']").each(function(){
+		var $a = $(this);
+		$a.off("click.share-pjax").on("click.share-pjax", function(e){
+			e.preventDefault();
+			window.open($a.attr("href") || "", "share", "width=600,height=400");
+		});
+	});
+	// 微信分享二维码（重新生成，使用当前 URL）
+	$(".icon-wechat").each(function(){
+		var $wrap = $(this).children(".wechat-qrcode");
+		if ($wrap.length === 0){
+			$wrap = $('<div class="wechat-qrcode"><h4>' + escapeHtml("分享到微信") + '</h4><div class="qrcode"></div><div class="help">' + escapeHtml("微信扫描二维码") + '</div></div>');
+			$(this).append($wrap);
+		}else{
+			$wrap.find(".qrcode").empty();
+		}
+		if (typeof QRCode !== "undefined"){
+			new QRCode($wrap.find(".qrcode")[0], {
+				text: window.location.href,
+				width: 100,
+				height: 100
+			});
+		}
+	});
 	$("html").trigger("resize");
 
 	if (typeof(window.pjaxLoaded) == "function"){

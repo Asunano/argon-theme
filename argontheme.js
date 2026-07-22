@@ -2390,6 +2390,33 @@ if ($("meta[name='argon-enable-custom-theme-color']").attr("content") == 'true')
 		updateThemeColor($("meta[name='theme-color-origin']").attr("content").toUpperCase(), false);
 		setCookie("argon_custom_theme_color", "", 0);
 	});
+	// 修正 Pickr 浮动面板错位：vendor 的 Nanopop 用 document.body.getBoundingClientRect() 作定位容器，
+	// 页面滚动后 body.top 为负，导致 position:fixed 的面板整体偏移一个滚动量，update 失败后还会兜底居中到屏幕正中。
+	// Pickr 在 show 后、以及自身的 requestAnimationFrame 里都会再调一次 _rePositioningPicker() 把位置算偏，
+	// 因此这里直接覆写实例的 _rePositioningPicker，让它在每次重定位之后都用按钮真实视口坐标纠正一次，无论 Pickr 何时调用都生效。
+	function argonFixPickrPosition(pickrInstance){
+		var root = pickrInstance.getRoot();
+		if(!root || !root.app) return;
+		var app = root.app;
+		// 注意：.pcr-app 是 position:fixed，其 offsetParent 恒为 null，不能用它判断是否可见
+		if(app.style.visibility === 'hidden') return;
+		var arect = app.getBoundingClientRect();
+		if(!arect.width || !arect.height) return;
+		var marginBottom = 100;
+		var marginRight = 175;
+		// 固定在视口右下角（底部间距 95px，右侧间距 150px）
+		var top = window.innerHeight - arect.height - marginBottom;
+		var left = window.innerWidth - arect.width - marginRight;
+		if(top < marginBottom) top = marginBottom;
+		if(left < marginRight) left = marginRight;
+		app.style.top = top + 'px';
+		app.style.left = left + 'px';
+	}
+	var _argonOrigReposition = themeColorPicker._rePositioningPicker.bind(themeColorPicker);
+	themeColorPicker._rePositioningPicker = function(){
+		_argonOrigReposition();
+		argonFixPickrPosition(themeColorPicker);
+	};
 }
 function pickrObjectToHEX(color){
 	let HEXA = color.toHEXA();

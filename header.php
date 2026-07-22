@@ -78,32 +78,59 @@
 	<?php /* 预加载遮罩：关键样式内联，确保首屏瞬时出现、不依赖异步 CSS，避免遮罩自身闪烁 */ ?>
 	<?php if (get_option('argon_enable_preloader') != 'false') { ?>
 	<style>
-	#argon-preloader{position:fixed;inset:0;z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--argon-preloader-bg,#f6f7fb);transition:opacity .5s ease, filter .5s ease;will-change:opacity,filter;}
-	#argon-preloader.ar--hidden,#argon-preloader.argon-preloader--hidden{opacity:0;filter:blur(12px);transform:scale(1.03);pointer-events:none;animation:none;}
-	.darkmode{--argon-preloader-bg:#15171c;}
-	.amoled-dark{--argon-preloader-bg:#000;}
-	.argon-preloader__inner{display:flex;flex-direction:column;align-items:center;animation:argon-preloader-in .45s ease both;}
-	.argon-preloader__spinner{width:44px;height:44px;border:4px solid rgba(94,114,228,.25);border-top-color:var(--themecolor,#5e72e4);border-radius:50%;animation:argon-spin .8s linear infinite,argon-glow 1.6s ease-in-out infinite;}
-	.argon-preloader__text{margin-top:16px;color:var(--themecolor,#5e72e4);font-size:14px;letter-spacing:.18em;}
-	.argon-preloader__text::after{content:'';animation:argon-dots 1.4s steps(1,end) infinite;}
+	/* 背景跟随主题深浅：浅色白(#fff)，深色统一用有设计的深灰(非纯黑) */
+	#argon-preloader{position:fixed;inset:0;z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--argon-preloader-bg,#fff);transition:opacity .6s ease;will-change:opacity;}
+	/* 退出：遮罩整体淡出；模糊作用在内层内容(纯色遮罩模糊不可见) */
+	#argon-preloader.ar--hidden,#argon-preloader.argon-preloader--hidden{opacity:0;pointer-events:none;}
+	/* 仅当深浅开关真正打开(.darkmode)时用深色(纯黑)，amoled-dark 只是纯黑变体修饰，不能单独生效 */
+	.darkmode{--argon-preloader-bg:#000;}
+	.darkmode.amoled-dark{--argon-preloader-bg:#000;}
+	.argon-preloader__inner{display:flex;flex-direction:column;align-items:center;animation:argon-preloader-in 1.2s ease both;}
+	#argon-preloader.ar--hidden .argon-preloader__inner,#argon-preloader.argon-preloader--hidden .argon-preloader__inner{animation:argon-preloader-out 2s ease forwards;}
+	/* 旋转圈：主题色弧 + 主题色浅轨道，浅底深底都清晰可见 */
+	.argon-preloader__spinner{width:56px;height:56px;border:5px solid rgba(94,114,228,.25);border-top-color:var(--themecolor,#5e72e4);border-radius:50%;animation:argon-spin 1s linear infinite,argon-glow 2.4s ease-in-out infinite;}
+	.argon-preloader__text{margin-top:18px;color:var(--themecolor,#5e72e4);font-size:15px;letter-spacing:.2em;}
+	.argon-preloader__text::after{content:'';animation:argon-dots 1.8s steps(1,end) infinite;}
 	@keyframes argon-spin{to{transform:rotate(360deg);}}
-	/* 旋转圈外发光脉冲（不影响 transform，避免与旋转冲突） */
-	@keyframes argon-glow{0%,100%{box-shadow:0 0 0 0 rgba(94,114,228,0);}50%{box-shadow:0 0 18px 2px rgba(94,114,228,.35);}}
-	/* 内层渐入：透明度 + 轻微上移/缩放 */
-	@keyframes argon-preloader-in{from{opacity:0;transform:translateY(8px) scale(.96);}to{opacity:1;transform:none;}}
+	/* 旋转圈外发光脉冲 */
+	@keyframes argon-glow{0%,100%{box-shadow:0 0 0 0 rgba(94,114,228,0);}50%{box-shadow:0 0 16px 2px rgba(94,114,228,.4);}}
+	/* 内层渐入：从深模糊浮现，渐变转浅模糊再清晰（与消失动画同款渐变模糊） */
+	@keyframes argon-preloader-in{
+		0%   {opacity:0;   filter:blur(16px);transform:scale(1.04);}  /* 深模糊浮现 */
+		60%  {opacity:1;   filter:blur(4px); transform:scale(1.02);}  /* 渐变转浅模糊 */
+		100% {opacity:1;   filter:blur(0);   transform:scale(1);}     /* 清晰 */
+	}
+	/* 内层渐出：先迅速加深到深模糊，再渐变回落到浅模糊并淡出（优雅的渐变模糊） */
+	@keyframes argon-preloader-out{
+		0%   {opacity:1;   filter:blur(0);   transform:none;}
+		40%  {opacity:1;   filter:blur(16px);transform:scale(1.04);}  /* 深模糊 */
+		100% {opacity:0;   filter:blur(4px); transform:scale(1.05);}  /* 渐变转浅模糊后淡出 */
+	}
 	/* 加载文字动态省略号 */
 	@keyframes argon-dots{0%{content:'';}25%{content:'.';}50%{content:'..';}75%{content:'...';}100%{content:'';}}
-	/* 兜底：JS 异常时 10s 后淡出（含模糊），避免永久遮挡内容 */
-	@keyframes argon-preloader-failsafe{0%,92%{opacity:1;filter:blur(0)}100%{opacity:0;filter:blur(12px)}}
-	#argon-preloader{animation:argon-preloader-failsafe 10s linear forwards;}
-	@media (prefers-reduced-motion: reduce){
-		#argon-preloader{transition:none;}
-		.argon-preloader__inner,.argon-preloader__spinner,.argon-preloader__text::after{animation:none;}
-		.argon-preloader__inner{opacity:1;transform:none;}
-		#argon-preloader.ar--hidden,#argon-preloader.argon-preloader--hidden{filter:none;transform:none;}
-	}
 	</style>
 	<noscript><style>#argon-preloader{display:none!important;}</style></noscript>
+	<script>
+	/* 早期(无 jQuery 依赖)依据存储/选项把深浅类加到 <html>，确保首屏预加载即跟随主题、不闪。
+	   原深色脚本依赖 jQuery(合并 JS 在页尾)，首屏绘制前可能未执行，故此处先行判定。 */
+	(function(){
+		try{
+			var html=document.documentElement;
+			var auto="<?php echo (get_option('argon_darkmode_autoswitch')==''?'false':get_option('argon_darkmode_autoswitch'));?>";
+			var s=sessionStorage.getItem('Argon_Enable_Dark_Mode');
+			var dark=false;
+			if(s==='true'){dark=true;}
+			else if(s==='false'){dark=false;}
+			else if(auto==='alwayson'){dark=true;}
+			else if(auto==='system'){dark=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches;}
+			else if(auto==='time'){var h=new Date().getHours();dark=(<?php echo apply_filters('argon_darkmode_time_check','hour < 7 || hour >= 22');?>);}
+			if(dark){html.classList.add('darkmode');}
+			var a=localStorage.getItem('Argon_Enable_Amoled_Dark_Mode');
+			if(a==='true'){html.classList.add('amoled-dark');}
+			else if(a==='false'){html.classList.remove('amoled-dark');}
+		}catch(e){}
+	})();
+	</script>
 	<?php } ?>
 	<meta charset="<?php bloginfo( 'charset' ); ?>">
 	<?php if (get_option('argon_enable_mobile_scale') != 'true'){ ?>
@@ -199,7 +226,9 @@
 			wp_enqueue_style("highlight-style", $GLOBALS['assets_path'] . "/assets/vendor/highlight/styles/" . (get_option('argon_code_theme') == '' ? 'vs2015' : get_option('argon_code_theme')) . ".css", null, $GLOBALS['theme_version']);
 		}
 		if (get_option('argon_show_customize_theme_color_picker') != 'false'){
-			wp_enqueue_style("pickr-style", $GLOBALS['assets_path'] . "/assets/vendor/pickr/themes/monolith.min.css", null, $GLOBALS['theme_version']);
+			/* pickr JS 已为 1.8.2，而 vendor 的 monolith.min.css 仍是 1.5.0(取色变量/面板结构不匹配，
+			   导致色块变黑、面板错位)。此处改用主题自有的、与 JS 同版本的 1.8.2 主题 CSS，避免改动 vendor 文件 */
+			wp_enqueue_style("pickr-style", $GLOBALS['assets_path'] . "/assets/css/pickr-monolith-1.8.2.css", null, $GLOBALS['theme_version']);
 			wp_enqueue_script("nouislider", $GLOBALS['assets_path'] . "/assets/vendor/nouislider/js/nouislider.min.js", null, $GLOBALS['theme_version']);
 			wp_enqueue_script("pickr", $GLOBALS['assets_path'] . "/assets/vendor/pickr/pickr.es5.min.js", null, $GLOBALS['theme_version']);
 		}
@@ -370,17 +399,29 @@
 	var hidden = false;
 	function hide(){
 		if (hidden) return; hidden = true;
-		// 取消 10s 兜底 CSS 动画，否则 animation 会覆盖 transition 对 opacity/filter 的控制，
-		// 导致模糊淡出失效、预加载被"锁住"后突然消失
-		el.style.animation = 'none';
 		el.classList.add('argon-preloader--hidden');
-		setTimeout(function(){ if (el && el.parentNode) el.parentNode.removeChild(el); }, 550);
+		// 退出动画(内层模糊 2s)播完后再移除节点
+		setTimeout(function(){ if (el && el.parentNode) el.parentNode.removeChild(el); }, 2100);
 	}
 	var start = Date.now();
 	var fontsReady = (document.fonts && document.fonts.ready) ? document.fonts.ready : Promise.resolve();
-	function minDelay(){ return new Promise(function(res){ setTimeout(res, Math.max(0, 900 - (Date.now() - start))); }); }
-	// 关键 CSS 为渲染阻塞，首屏绘制前必已应用；DOMContentLoaded + 字体就绪 + 最短展示(900ms，确保旋转动画可见) 后带模糊淡出
-	function ready(){ Promise.all([fontsReady, minDelay()]).then(hide); }
+	// 最短可见时长(正常 600ms)；主结束时机仍是资源(JS/CSS)加载完毕
+	var minVisible = 600;
+	function minDelay(){ return new Promise(function(res){ setTimeout(res, Math.max(0, minVisible - (Date.now() - start))); }); }
+	// 等待所有样式表加载完成（合并 JS 为解析阻塞脚本，已在 DOMContentLoaded 前执行完毕）
+	function stylesheetsReady(){
+		var links = document.querySelectorAll('link[rel="stylesheet"]');
+		var pending = [];
+		for (var i = 0; i < links.length; i++){
+			(function(l){
+				if (l.sheet) return;
+				pending.push(new Promise(function(res){ l.addEventListener('load', res); l.addEventListener('error', res); }));
+			})(links[i]);
+		}
+		return Promise.all(pending);
+	}
+	// 结束时机：DOMContentLoaded(JS+CSS 已就绪) + 样式表加载 + 字体就绪 + 最短可见时长，随后带模糊淡出
+	function ready(){ Promise.all([stylesheetsReady(), fontsReady, minDelay()]).then(hide); }
 	if (document.readyState === 'loading') {
 		document.addEventListener('DOMContentLoaded', ready);
 	} else {

@@ -1805,10 +1805,10 @@ window.pjaxLoaded = function(){
 						<td>
 							<select name="argon_hide_footer_author">
 								<?php $argon_hide_footer_author = get_option('argon_hide_footer_author'); ?>
-								<option value="false" <?php if ($argon_hide_footer_author=='false'){echo 'selected';} ?>>Theme Argon By solstice23</option>
-								<option value="true" <?php if ($argon_hide_footer_author=='true'){echo 'selected';} ?>>Theme Argon</option>
+								<option value="false" <?php if ($argon_hide_footer_author=='false'){echo 'selected';} ?>>Theme Argon By solstice23 | Enhanced By Asunano</option>
+								<option value="true" <?php if ($argon_hide_footer_author=='true'){echo 'selected';} ?>>Theme Argon | Enhanced By Asunano</option>
 							</select>
-							<p class="description"></p>
+							<p class="description"><?php _e('页脚署名格式：可显示/隐藏原作者 “By solstice23”，右侧分支署名 “Enhanced By Asunano” 始终带竖线分隔显示。', 'argon');?></p>
 						</td>
 					</tr>
 				<tr><th class="subtitle"><h2>Enhanced</h2></th></tr>

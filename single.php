@@ -16,12 +16,6 @@
 				get_template_part( 'template-parts/share' );
 			}
 
-			if (is_singular('post') && get_option('argon_enable_post_like', 'true') == 'true') {
-				echo '<div class="post-like-wrapper">';
-				argon_render_post_like();
-				echo '</div>';
-			}
-
 			if (comments_open() || get_comments_number()) {
 				comments_template();
 			}

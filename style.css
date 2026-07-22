@@ -2604,6 +2604,7 @@ html.darkmode .comment-upvote {
 	margin: 0.75rem 0 0;
 }
 .post-upvote {
+	position: relative;
 	white-space: nowrap;
 	border-radius: 100px;
 	padding: 4px 14px;
@@ -2628,6 +2629,37 @@ html.darkmode .post-upvote {
 .post-upvote.post-upvoting {
 	opacity: 0.5;
 	pointer-events: none;
+}
+/*点赞点击动画：心跳 + 放大 */
+@keyframes argon-like-beat {
+	0%   { transform: scale(1); }
+	20%  { transform: scale(1.4); }
+	40%  { transform: scale(0.85); }
+	60%  { transform: scale(1.2); }
+	80%  { transform: scale(0.95); }
+	100% { transform: scale(1); }
+}
+.post-upvote.argon-like-animating .btn-inner--icon {
+	display: inline-block;
+	animation: argon-like-beat 0.6s ease-in-out;
+}
+.post-upvote.argon-like-animating .btn-inner--icon i {
+	color: #e74c3c;
+}
+/*点赞飘心特效 */
+.post-upvote .argon-like-float-heart {
+	position: absolute;
+	left: 50%;
+	top: 0;
+	font-size: 14px;
+	color: #e74c3c;
+	pointer-events: none;
+	transform: translateX(-50%);
+	animation: argon-like-float 0.7s ease-out forwards;
+}
+@keyframes argon-like-float {
+	0%   { opacity: 1; transform: translate(-50%, 0) scale(1); }
+	100% { opacity: 0; transform: translate(-50%, -28px) scale(1.6); }
 }
 /*评论内容*/
 .comment-item-text .comment-sticker {
@@ -3045,6 +3077,18 @@ html.darkmode #post_comment.post-comment-force-privatemode-off .comment-post-pri
 	margin-top: 5px;
 	margin-right: 8px;
 }
+.comment-post-checkboxes .comment-post-checkbox {
+	margin-top: 0;
+	height: auto;
+	margin-right: 0;
+}
+.comment-form-actions .comment-btn {
+	margin-top: 0;
+	margin-right: 0;
+}
+.comment-form-actions {
+	position: relative;
+}
 /*发送评论区域-编辑评论*/
 #post_comment:not(.editing) .hide-on-comment-not-editing {
 	display: none !important;
@@ -3090,16 +3134,16 @@ html.darkmode #post_comment.post-comment-force-privatemode-off .comment-post-pri
 	position: absolute;
 	z-index: 2;
 	right: 0;
-	bottom: -10px;
-	transform: translateY(100%) scale(0.9);
-	transform-origin: top;
+	top: -10px;
+	transform: translateY(-100%) scale(0.9);
+	transform-origin: bottom;
 	transition: all 0.3s ease;
 	opacity: 0;
 	pointer-events: none;
 }
 #comment_emotion_btn.comment-emotion-keyboard-open + .emotion-keyboard {
 	opacity: 1;
-	transform: translateY(100%);
+	transform: translateY(-100%);
 	pointer-events: all;
 }
 .emotion-keyboard-content {

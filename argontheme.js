@@ -1446,6 +1446,12 @@ $(document).on("click", ".post-upvote", function(){
 				$(".post-upvote-num", $this).html(result.total_upvote);
 				$this.addClass("upvoted");
 				$this.find("i").removeClass("fa-heart-o").addClass("fa-heart");
+				// 点赞动画：心跳图标 + 飘心
+				$this.addClass("argon-like-animating");
+				setTimeout(function(){ $this.removeClass("argon-like-animating"); }, 650);
+				var $heart = $('<span class="argon-like-float-heart"><i class="fa fa-heart"></i></span>');
+				$this.append($heart);
+				setTimeout(function(){ $heart.remove(); }, 700);
 			}else{
 				$(".post-upvote-num", $this).html(result.total_upvote);
 				iziToast.show({
@@ -1518,11 +1524,72 @@ function inputInsertText(text, input){
 }
 $(document).on("click" , ".emotion-keyboard .emotion-item" , function(){
 	$("#comment_emotion_btn").removeClass("comment-emotion-keyboard-open");
-	if ($(this).hasClass("emotion-item-sticker")){
-		inputInsertText(" :" + $(this).attr("code") + ": ", document.getElementById("post_comment_content"));
+	var $item = $(this);
+	if ($item.hasClass("emotion-item-sticker")){
+		inputInsertText(" :" + $item.attr("code") + ": ", document.getElementById("post_comment_content"));
+		var $img = $item.find("img");
+		argonSaveRecentEmotion({
+			type: "sticker",
+			code: $item.attr("code"),
+			src: ($img.attr("data-original") || $img.attr("src") || ""),
+			title: $item.attr("title") || ""
+		});
 	}else{
-		inputInsertText($(this).attr("text"), document.getElementById("post_comment_content"));
+		inputInsertText($item.attr("text"), document.getElementById("post_comment_content"));
+		argonSaveRecentEmotion({
+			type: "text",
+			text: $item.attr("text"),
+			title: $item.attr("title") || ""
+		});
 	}
+	argonRenderRecentEmotions();
+});
+/*最近使用表情：localStorage 记录，在表情键盘顶部注入"最近"分组 */
+function argonGetRecentEmotions(){
+	try {
+		var raw = localStorage.getItem("argon_recent_emotions");
+		var arr = raw ? JSON.parse(raw) : [];
+		return Array.isArray(arr) ? arr : [];
+	} catch (e){ return []; }
+}
+function argonSaveRecentEmotion(item){
+	try {
+		var list = argonGetRecentEmotions().filter(function(x){
+			if (item.type === "sticker"){ return !(x.type === "sticker" && x.code === item.code); }
+			return !(x.type !== "sticker" && x.text === item.text);
+		});
+		list.unshift(item);
+		if (list.length > 18){ list = list.slice(0, 18); }
+		localStorage.setItem("argon_recent_emotions", JSON.stringify(list));
+	} catch (e){}
+}
+function argonRenderRecentEmotions(){
+	var $kb = $("#emotion_keyboard");
+	if ($kb.length === 0){ return; }
+	var $content = $kb.find(".emotion-keyboard-content");
+	var $bar = $kb.find(".emotion-keyboard-bar");
+	$kb.find(".emotion-group.recent-group, .emotion-group-name.recent-group-name").remove();
+	var list = argonGetRecentEmotions();
+	if (list.length === 0){ return; }
+	var placeholder = "data:image/svg+xml;base64,PHN2ZyBjbGFzcz0iZW1vdGlvbi1sb2FkaW5nIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIGZpbGw9Im5vbmUiIHZpZXdCb3g9Ii04IC04IDQwIDQwIiBzdHJva2U9IiM4ODgiIG9wYWNpdHk9Ii41IiB3aWR0aD0iNjAiIGhlaWdodD0iNjAiPgo8L3N2Zz4=";
+	var $group = $('<div class="emotion-group recent-group" index="recent"></div>');
+	list.forEach(function(item){
+		var $el;
+		if (item.type === "sticker"){
+			$el = $('<div class="emotion-item emotion-item-sticker" code="' + escapeHtml(item.code) + '" title="' + escapeHtml(item.title) + '"><img class="lazyload" src="' + placeholder + '" data-original="' + escapeHtml(item.src) + '"></div>');
+		}else{
+			$el = $('<div class="emotion-item" text="' + escapeHtml(item.text) + '" title="' + escapeHtml(item.title) + '">' + escapeHtml(item.text) + '</div>');
+		}
+		$group.append($el);
+	});
+	$content.prepend($group);
+	$bar.prepend($('<div class="emotion-group-name recent-group-name active" index="recent">' + escapeHtml("最近") + '</div>'));
+	$kb.find(".emotion-group:not(.recent-group)").addClass("d-none");
+	$kb.find(".emotion-group-name:not(.recent-group-name)").removeClass("active");
+	lazyloadStickers();
+}
+$(function(){
+	argonRenderRecentEmotions();
 });
 $(document).on("dragstart" , ".emotion-keyboard .emotion-item > img, .comment-sticker" , function(e){
 	e.preventDefault();

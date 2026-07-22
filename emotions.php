@@ -115,4 +115,27 @@
 			'description' => 'Source: github.com/k4yt3x/flowerhd'
 		)
 	);
-?>
+// GIF 动图支持：自动收纳主题目录 assets/stickers/gif/ 下的 .gif 文件，无需外部数据源
+$gif_dir = get_template_directory() . '/assets/stickers/gif';
+$gif_url = get_template_directory_uri() . '/assets/stickers/gif';
+if (is_dir($gif_dir)){
+	$gif_files = glob($gif_dir . '/*.{gif,GIF}', GLOB_BRACE);
+	if (!empty($gif_files)){
+		$gif_list = array();
+		foreach ($gif_files as $gif_file){
+			$name = basename($gif_file);
+			$code = 'gif-' . preg_replace('/[^a-zA-Z0-9]/', '-', pathinfo($name, PATHINFO_FILENAME));
+			$gif_list[] = array(
+				'type' => 'sticker',
+				'code' => $code,
+				'src' => $gif_url . '/' . $name,
+				'title' => $code,
+			);
+		}
+		$emotionListDefault[] = array(
+			'groupname' => __('GIF', 'argon'),
+			'list' => $gif_list,
+			'description' => __('将 GIF 文件放入主题目录的 assets/stickers/gif/ 即可在此显示', 'argon'),
+		);
+	}
+}

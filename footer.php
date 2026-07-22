@@ -7,7 +7,7 @@
 						?>
 						<div>Theme <a href="https://github.com/solstice23/argon-theme" target="_blank"><strong>Argon</strong></a><?php
 							if ($argon_show_footer_author){ echo ' By solstice23'; }
-							echo ($argon_show_footer_author ? ' | ' : ' ') . 'Enhanced By <a href="https://github.com/Asunano/argon-theme" target="_blank"><strong>Asunano</strong></a>';
+							echo ' | Enhanced By <a href="https://github.com/Asunano/argon-theme" target="_blank"><strong>Asunano</strong></a>';
 						?></div>
 						<?php if (get_option('argon_enable_runtime') == 'true' || get_option('argon_enable_runtime') == '') { ?>
 						<div class="argon-runtime"><strong><span id="showsectime" style="color:#FFFFFF;"></span></strong></div>

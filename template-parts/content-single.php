@@ -84,6 +84,11 @@
 				$post_reference_contents_first_index = array();
 
 				the_content();
+				if (get_option('argon_enable_post_like', 'true') == 'true'){
+					echo '<div class="post-like-wrapper">';
+					argon_render_post_like();
+					echo '</div>';
+				}
 			}
 		?>
 	</div>

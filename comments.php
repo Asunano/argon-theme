@@ -191,42 +191,44 @@
 					</button>
 				</div></div>
 			<div class="row" style="margin-top: 5px; margin-bottom: 10px;">
-				<div class="col-md-12">
-					<?php if (get_option("argon_comment_allow_markdown") != "false") {?>
-						<div class="custom-control custom-checkbox comment-post-checkbox comment-post-use-markdown">
-							<input class="custom-control-input" id="comment_post_use_markdown" type="checkbox" checked="true">
-							<label class="custom-control-label" for="comment_post_use_markdown">Markdown</label>
-						</div>
-					<?php } ?>
-					<?php if (get_option("argon_comment_allow_privatemode") == "true") {?>
-						<div class="custom-control custom-checkbox comment-post-checkbox comment-post-privatemode" tooltip="<?php _e('评论仅发送者和博主可见', 'argon'); ?>">
-							<input class="custom-control-input" id="comment_post_privatemode" type="checkbox">
-							<label class="custom-control-label" for="comment_post_privatemode"><?php _e('悄悄话', 'argon');?></label>
-						</div>
-					<?php } ?>
-					<?php if (get_option("argon_comment_allow_mailnotice") == "true") {?>
-						<div class="custom-control custom-checkbox comment-post-checkbox comment-post-mailnotice" tooltip="<?php _e('有回复时邮件通知我', 'argon'); ?>">
-							<input class="custom-control-input" id="comment_post_mailnotice" type="checkbox"<?php if (get_option("argon_comment_mailnotice_checkbox_checked") == 'true'){echo ' checked';}?>>
-							<label class="custom-control-label" for="comment_post_mailnotice"><?php _e('邮件提醒', 'argon');?></label>
-						</div>
-					<?php } ?>
-					<div class="comment-form-actions text-right" style="margin-top: 8px;">
-					<button id="post_comment_send" class="btn btn-icon btn-primary comment-btn mr-0" type="button">
-						<span class="btn-inner--icon hide-on-comment-editing"><i class="fa fa-send"></i></span>
-						<span class="btn-inner--icon hide-on-comment-not-editing"><i class="fa fa-pencil"></i></span>
-						<span class="btn-inner--text hide-on-comment-editing" style="margin-right: 0;"><?php _e('发送', 'argon');?></span>
-						<span class="btn-inner--text hide-on-comment-not-editing" style="margin-right: 0;"><?php _e('编辑', 'argon');?></span>
-					</button>
-					<button id="post_comment_edit_cancel" class="btn btn-icon btn-danger comment-btn hide-on-comment-not-editing" type="button" style="margin-right: 8px;">
-						<span class="btn-inner--icon"><i class="fa fa-close"></i></span>
-						<span class="btn-inner--text"><?php _e('取消', 'argon');?></span>
-					</button>
-					<?php if (get_option("argon_comment_emotion_keyboard", "true") != "false"){ ?>
-						<button id="comment_emotion_btn" class="btn btn-icon btn-primary" type="button" title="<?php _e('表情', 'argon');?>">
-							<i class="fa fa-smile-o" aria-hidden="true"></i>
+				<div class="col-md-12 d-flex align-items-center justify-content-between flex-wrap" style="gap: 10px;">
+					<div class="comment-post-checkboxes d-flex align-items-center flex-wrap" style="gap: 10px;">
+						<?php if (get_option("argon_comment_allow_markdown") != "false") {?>
+							<div class="custom-control custom-checkbox comment-post-checkbox comment-post-use-markdown">
+								<input class="custom-control-input" id="comment_post_use_markdown" type="checkbox" checked="true">
+								<label class="custom-control-label" for="comment_post_use_markdown">Markdown</label>
+							</div>
+						<?php } ?>
+						<?php if (get_option("argon_comment_allow_privatemode") == "true") {?>
+							<div class="custom-control custom-checkbox comment-post-checkbox comment-post-privatemode" tooltip="<?php _e('评论仅发送者和博主可见', 'argon'); ?>">
+								<input class="custom-control-input" id="comment_post_privatemode" type="checkbox">
+								<label class="custom-control-label" for="comment_post_privatemode"><?php _e('悄悄话', 'argon');?></label>
+							</div>
+						<?php } ?>
+						<?php if (get_option("argon_comment_allow_mailnotice") == "true") {?>
+							<div class="custom-control custom-checkbox comment-post-checkbox comment-post-mailnotice" tooltip="<?php _e('有回复时邮件通知我', 'argon'); ?>">
+								<input class="custom-control-input" id="comment_post_mailnotice" type="checkbox"<?php if (get_option("argon_comment_mailnotice_checkbox_checked") == 'true'){echo ' checked';}?>>
+								<label class="custom-control-label" for="comment_post_mailnotice"><?php _e('邮件提醒', 'argon');?></label>
+							</div>
+						<?php } ?>
+					</div>
+					<div class="comment-form-actions d-flex align-items-center flex-wrap" style="gap: 8px;">
+						<?php if (get_option("argon_comment_emotion_keyboard", "true") != "false"){ ?>
+							<button id="comment_emotion_btn" class="btn btn-icon btn-primary" type="button" title="<?php _e('表情', 'argon');?>">
+								<i class="fa fa-smile-o" aria-hidden="true"></i>
+							</button>
+							<?php get_template_part( 'template-parts/emotion-keyboard' ); ?>
+						<?php } ?>
+						<button id="post_comment_edit_cancel" class="btn btn-icon btn-danger comment-btn hide-on-comment-not-editing" type="button">
+							<span class="btn-inner--icon"><i class="fa fa-close"></i></span>
+							<span class="btn-inner--text"><?php _e('取消', 'argon');?></span>
 						</button>
-						<?php get_template_part( 'template-parts/emotion-keyboard' ); ?>
-					<?php } ?>
+						<button id="post_comment_send" class="btn btn-icon btn-primary comment-btn mr-0" type="button">
+							<span class="btn-inner--icon hide-on-comment-editing"><i class="fa fa-send"></i></span>
+							<span class="btn-inner--icon hide-on-comment-not-editing"><i class="fa fa-pencil"></i></span>
+							<span class="btn-inner--text hide-on-comment-editing" style="margin-right: 0;"><?php _e('发送', 'argon');?></span>
+							<span class="btn-inner--text hide-on-comment-not-editing" style="margin-right: 0;"><?php _e('编辑', 'argon');?></span>
+						</button>
 					</div>
 				</div>
 			</div>

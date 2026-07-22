@@ -3696,6 +3696,23 @@ function argon_mark_post_upvoted($ID){
 function is_post_upvoted($ID){
 	return in_array((int) $ID, argon_get_upvoted_post_ids(), true);
 }
+/* IP 短时锁：与 Cookie/用户 meta 形成双重校验，防止清 Cookie 后反复刷赞 */
+function argon_post_upvote_ip_locked($ID){
+	$ip = argon_get_real_client_ip();
+	if (empty($ip)){
+		return false; // 无法获取 IP 时不靠 IP 拦截，仍由 Cookie/用户 meta 兜底
+	}
+	$key = 'argon_upvote_ip_' . intval($ID) . '_' . md5($ip);
+	return (bool) get_transient($key);
+}
+function argon_post_upvote_set_ip_lock($ID){
+	$ip = argon_get_real_client_ip();
+	if (empty($ip)){
+		return;
+	}
+	$key = 'argon_upvote_ip_' . intval($ID) . '_' . md5($ip);
+	set_transient($key, time(), HOUR_IN_SECONDS);
+}
 function upvote_post(){
 	argon_verify_ajax_nonce();
 	header('Content-Type:application/json; charset=utf-8');
@@ -3707,11 +3724,12 @@ function upvote_post(){
 	if ($post == null || !in_array($post -> post_type, array('post', 'page'))){
 		exit(json_encode(array('status' => 'failed', 'msg' => __('文章不存在', 'argon'), 'total_upvote' => 0)));
 	}
-	if (is_post_upvoted($ID)){
+	if (is_post_upvoted($ID) || argon_post_upvote_ip_locked($ID)){
 		exit(json_encode(array('status' => 'failed', 'msg' => __('该文章已被赞过', 'argon'), 'total_upvote' => get_post_upvotes($ID))));
 	}
 	set_post_upvotes($ID);
 	argon_mark_post_upvoted($ID);
+	argon_post_upvote_set_ip_lock($ID);
 	exit(json_encode(array(
 		'ID' => $ID,
 		'status' => 'success',

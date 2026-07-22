@@ -47,7 +47,7 @@
 		<script>window.argonRuntimeConfig = <?php echo wp_json_encode($argon_runtime_config, JSON_UNESCAPED_UNICODE); ?>;</script>
 		<?php
 			$argon_lightbox_config = array(
-				'enabled' => (get_option('argon_enable_lightbox_thumbnails') == 'true' || get_option('argon_enable_lightbox_thumbnails') == ''),
+				'enabled' => true,
 			);
 		?>
 		<script>window.argonLightboxConfig = <?php echo wp_json_encode($argon_lightbox_config, JSON_UNESCAPED_UNICODE); ?>;</script>

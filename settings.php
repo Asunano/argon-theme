@@ -1822,13 +1822,13 @@ window.pjaxLoaded = function(){
 					</td>
 				</tr>
 					<tr>
-						<th><label><?php _e('A. 结构化数据 JSON-LD', 'argon');?></label></th>
+						<th><label><?php _e('结构化数据 JSON-LD', 'argon');?></label></th>
 						<td>
 							<input type="checkbox" name="argon_enable_structured_data" value="true" <?php $argon_enable_structured_data = get_option('argon_enable_structured_data'); if ($argon_enable_structured_data!='false'){echo 'checked';}?>/> <?php _e('输出 schema.org 结构化数据（Article），利于搜索引擎理解与收录', 'argon');?>
 						</td>
 					</tr>
 					<tr>
-						<th><label><?php _e('D. 实时搜索建议', 'argon');?></label></th>
+						<th><label><?php _e('实时搜索建议', 'argon');?></label></th>
 						<td>
 							<input type="checkbox" name="argon_enable_live_search" value="true" <?php $argon_enable_live_search = get_option('argon_enable_live_search'); if ($argon_enable_live_search!='false'){echo 'checked';}?>/> <?php _e('在搜索框输入时实时下拉展示匹配文章（默认开启）', 'argon');?>
 						</td>
@@ -1840,7 +1840,7 @@ window.pjaxLoaded = function(){
 						</td>
 					</tr>
 					<tr>
-						<th><label><?php _e('I. 评论者 IP 显示', 'argon');?></label></th>
+						<th><label><?php _e('评论者 IP 显示', 'argon');?></label></th>
 						<td>
 							<input type="checkbox" name="argon_comment_show_ip" value="true" <?php $argon_comment_show_ip = get_option('argon_comment_show_ip', 'false'); if ($argon_comment_show_ip=='true'){echo 'checked';}?>/> <?php _e('在评论区显示评论者 IP 地址（默认关闭，需下方选择 CDN 来源）', 'argon');?>
 						</td>
@@ -1866,7 +1866,7 @@ window.pjaxLoaded = function(){
 						</td>
 					</tr>
 					<tr>
-						<th><label><?php _e('J. SEO / OG / Twitter 社交元标签', 'argon');?></label></th>
+						<th><label><?php _e('SEO / OG / Twitter 社交元标签', 'argon');?></label></th>
 						<td>
 							<input type="checkbox" name="argon_enable_social_meta" value="true" <?php $argon_enable_social_meta = get_option('argon_enable_social_meta', 'true'); if ($argon_enable_social_meta!='false'){echo 'checked';}?>/> <?php _e('输出 Open Graph / Twitter Card 等社交分享元标签（自动复用站点描述、文章特色图与作者头像）', 'argon');?>
 							<br>
@@ -1876,13 +1876,13 @@ window.pjaxLoaded = function(){
 						</td>
 					</tr>
 					<tr>
-						<th><label><?php _e('K. 文章图片悬浮放大', 'argon');?></label></th>
+						<th><label><?php _e('文章图片悬浮放大', 'argon');?></label></th>
 						<td>
 							<input type="checkbox" name="argon_enable_image_hover" value="true" <?php $argon_enable_image_hover = get_option('argon_enable_image_hover', 'true'); if ($argon_enable_image_hover!='false'){echo 'checked';}?>/> <?php _e('文章内 .wp-block-image 图片悬浮时轻微放大并浮现柔和阴影（带圆角）', 'argon');?>
 						</td>
 					</tr>
 					<tr>
-						<th><label><?php _e('L. 滚动模糊', 'argon');?></label></th>
+						<th><label><?php _e('滚动模糊', 'argon');?></label></th>
 						<td>
 							<input type="checkbox" name="argon_enable_scroll_blur" value="true" <?php $argon_enable_scroll_blur = get_option('argon_enable_scroll_blur', 'true'); if ($argon_enable_scroll_blur!='false'){echo 'checked';}?>/> <?php _e('页面滚动后模糊 #content 装饰层（首页滚动约 80% 视口高才触发，其余页面约 20% 即触发）', 'argon');?>
 						<br>
@@ -1892,19 +1892,13 @@ window.pjaxLoaded = function(){
 						</td>
 					</tr>
 					<tr>
-						<th><label><?php _e('M. 网站运行时长', 'argon');?></label></th>
+						<th><label><?php _e('网站运行时长', 'argon');?></label></th>
 						<td>
 							<input type="checkbox" name="argon_enable_runtime" value="true" <?php $argon_enable_runtime = get_option('argon_enable_runtime', 'true'); if ($argon_enable_runtime!='false'){echo 'checked';}?>/> <?php _e('在页脚显示「本站已安全运行 X天X小时X分X秒」（每秒刷新）', 'argon');?>
 							<br>
 							<label style="margin-top:8px;display:inline-block;"><?php _e('建站日期（年-月-日）：', 'argon');?></label>
 							<input type="text" name="argon_runtime_start_date" class="regular-text" style="margin-top:6px;" value="<?php echo esc_attr(get_option('argon_runtime_start_date', '2020-10-31'));?>" placeholder="2020-10-31">
 							<p class="description"><?php _e('用于计算运行时长，格式为 年-月-日。', 'argon');?></p>
-						</td>
-					</tr>
-					<tr>
-						<th><label><?php _e('N. 灯箱缩略图条', 'argon');?></label></th>
-						<td>
-							<input type="checkbox" name="argon_enable_lightbox_thumbnails" value="true" <?php $argon_enable_lightbox_thumbnails = get_option('argon_enable_lightbox_thumbnails', 'true'); if ($argon_enable_lightbox_thumbnails!='false'){echo 'checked';}?>/> <?php _e('灯箱底部显示图片缩略图列表（同组图片可点击切换）', 'argon');?>
 						</td>
 					</tr>
 				</tbody>
@@ -2291,7 +2285,6 @@ function argon_update_themeoptions(){
 		argon_update_option('argon_scroll_blur_radius');
 		argon_update_option_checkbox('argon_enable_runtime');
 		argon_update_option('argon_runtime_start_date');
-		argon_update_option_checkbox('argon_enable_lightbox_thumbnails');
 		argon_update_option_checkbox('argon_enable_preloader');
 		argon_update_option('argon_darkmode_autoswitch');
 		argon_update_option('argon_enable_amoled_dark');

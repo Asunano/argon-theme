@@ -1755,7 +1755,7 @@ function zoomifyInit(){
 }
 zoomifyInit();
 
-/* Fancybox v5 灯箱：原生底部缩略图条（Thumbs 组件），由设置项 argon_enable_lightbox_thumbnails 控制 */
+/* Fancybox v5 灯箱：原生底部缩略图条（Thumbs 组件），默认常开（设置项已移除） */
 /* Fancybox.bind 采用事件委托，Pjax 加载的新内容无需重新绑定 */
 var argonLightboxBound = false;
 function argonLightboxInit(){
@@ -1765,7 +1765,7 @@ function argonLightboxInit(){
 	if (argonLightboxBound){
 		return;
 	}
-	var showThumbs = !!(window.argonLightboxConfig && window.argonLightboxConfig.enabled);
+	var showThumbs = true;
 	try {
 		Fancybox.bind('[data-fancybox]', {
 			Thumbs: {

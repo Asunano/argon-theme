@@ -262,18 +262,21 @@ function argon_add_admin_color(){
 add_action('admin_init', 'argon_add_admin_color');
 function argon_admin_themecolor_css(){
 	$themecolor = get_option("argon_theme_color", "#5e72e4");
+	if (!preg_match('/^#[0-9a-fA-F]{6}$/', $themecolor)) {
+		$themecolor = "#5e72e4";
+	}
 	$RGB = hexstr2rgb($themecolor);
 	$HSL = rgb2hsl($RGB['R'], $RGB['G'], $RGB['B']);
 	echo "
 		<style id='themecolor_css'>
 			:root{
-				--themecolor: {$themecolor} ;
-				--themecolor-R: {$RGB['R']} ;
-				--themecolor-G: {$RGB['G']} ;
-				--themecolor-B: {$RGB['B']} ;
-				--themecolor-H: {$HSL['H']} ;
-				--themecolor-S: {$HSL['S']} ;
-				--themecolor-L: {$HSL['L']} ;
+				--themecolor: " . esc_attr($themecolor) . " ;
+				--themecolor-R: " . esc_attr($RGB['R']) . " ;
+				--themecolor-G: " . esc_attr($RGB['G']) . " ;
+				--themecolor-B: " . esc_attr($RGB['B']) . " ;
+				--themecolor-H: " . esc_attr($HSL['H']) . " ;
+				--themecolor-S: " . esc_attr($HSL['S']) . " ;
+				--themecolor-L: " . esc_attr($HSL['L']) . " ;
 			}
 		</style>
 	";
@@ -2509,13 +2512,10 @@ function hex2gray($hex){
 	return rgb2gray($rgb_array['R'], $rgb_array['G'], $rgb_array['B']);
 }
 function checkHEX($hex){
-	if (strlen($hex) != 7){
-		return False;
+	if (!preg_match('/^#[0-9a-fA-F]{6}$/', $hex)) {
+		return false;
 	}
-	if (substr($hex,0,1) != "#"){
-		return False;
-	}
-	return True;
+	return true;
 }
 //编辑文章界面新增 Meta 编辑模块
 function argon_meta_box_1(){
@@ -3145,7 +3145,7 @@ function shortcode_friend_link_simple($attr,$content=""){
 				$row_tag_open = False;
 				$out .= "</div>";
 			}
-			$out .= "<div class='friend-category-title text-black'>" . $now[1] . "</div>";
+			$out .= "<div class='friend-category-title text-black'>" . esc_html($now[1]) . "</div>";
 		}
 		if ($now[0] == 'link'){
 			if ($row_tag_open == False){
@@ -3157,26 +3157,26 @@ function shortcode_friend_link_simple($attr,$content=""){
 				<div class='card shadow-sm'>
 					<div class='d-flex'>
 						<div class='friend-link-avatar'>
-							<a target='_blank' href='" . $now[1] . "'>";
+							<a target='_blank' href='" . esc_url(str_replace("'", '', $now[1])) . "'>";
 			if (!ctype_space($now[4]) && $now[4] != '' && isset($now[4])){
-				$out .= "<img src='" . $now[4] . "' class='icon bg-gradient-secondary rounded-circle text-white' style='pointer-events: none;'>
+				$out .= "<img src='" . esc_url(str_replace("'", '', $now[4])) . "' class='icon bg-gradient-secondary rounded-circle text-white' style='pointer-events: none;'>
 						</img>";
 			}else{
-				$out .= "<div class='icon icon-shape bg-gradient-primary rounded-circle text-white'>" . mb_substr($now[2], 0, 1) . "
+				$out .= "<div class='icon icon-shape bg-gradient-primary rounded-circle text-white'>" . esc_html(mb_substr($now[2], 0, 1)) . "
 						</div>";
 			}
 
 			$out .= "		</a>
 						</div>
 						<div class='pl-3'>
-							<div class='friend-link-title title text-primary'><a target='_blank' href='" . $now[1] . "'>" . $now[2] . "</a>
+							<div class='friend-link-title title text-primary'><a target='_blank' href='" . esc_url(str_replace("'", '', $now[1])) . "'>" . esc_html($now[2]) . "</a>
 						</div>";
 			if (!ctype_space($now[3]) && $now[3] != ''  && isset($now[3])){
-				$out .= "<p class='friend-link-description'>" . $now[3] . "</p>";
+				$out .= "<p class='friend-link-description'>" . esc_html($now[3]) . "</p>";
 			}else{
 				/*$out .= "<p class='friend-link-description'>&nbsp;</p>";*/
 			}
-			$out .= "		<a target='_blank' href='" . $now[1] . "' class='text-primary opacity-8'>前往</a>
+			$out .= "		<a target='_blank' href='" . esc_url(str_replace("'", '', $now[1])) . "' class='text-primary opacity-8'>前往</a>
 						</div>
 					</div>
 				</div>

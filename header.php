@@ -195,9 +195,9 @@
 	<meta name="twitter:title" content="<?php echo wp_get_document_title();?>">
 	<?php } ?>
 
-	<meta name="theme-color" content="<?php echo $themecolor; ?>">
-	<meta name="theme-color-rgb" content="<?php echo hex2str($themecolor); ?>">
-	<meta name="theme-color-origin" content="<?php echo $themecolor_origin; ?>">
+	<meta name="theme-color" content="<?php echo esc_attr($themecolor); ?>">
+	<meta name="theme-color-rgb" content="<?php echo esc_attr(hex2str($themecolor)); ?>">
+	<meta name="theme-color-origin" content="<?php echo esc_attr($themecolor_origin); ?>">
 	<meta name="argon-enable-custom-theme-color" content="<?php echo (get_option('argon_show_customize_theme_color_picker') != 'false' ? 'true' : 'false'); ?>">
 
 

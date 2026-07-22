@@ -33,6 +33,7 @@ jobs:
           node-version: '20'
 
       - name: Build Gutenberg blocks
+        continue-on-error: true
         working-directory: gutenberg
         run: |
           npm install

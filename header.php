@@ -239,6 +239,7 @@
 		document.documentElement.classList.remove("no-js");
 		var argonConfig = {
 			wp_path: "<?php echo $GLOBALS['wp_path']; ?>",
+			ajax_nonce: "<?php echo wp_create_nonce('argon_ajax_action'); ?>",
 			language: "<?php echo argon_get_locate(); ?>",
 			dateFormat: "<?php echo get_option('argon_dateformat', 'YMD'); ?>",
 			<?php if (get_option('argon_enable_zoomify') == 'true'){ ?>

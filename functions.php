@@ -1151,7 +1151,18 @@ function can_visit_comment_edit_history($id){
 	}
 }
 //获取评论编辑记录
+// AJAX CSRF (Nonce) 校验：评论/点赞等写操作必须通过此验证，防止跨站请求伪造
+function argon_verify_ajax_nonce(){
+	if (!isset($_POST['argon_ajax_nonce']) || !wp_verify_nonce($_POST['argon_ajax_nonce'], 'argon_ajax_action')){
+		exit(json_encode(array(
+			'status' => 'failed',
+			'msg' => __('安全验证失败，请刷新页面后重试', 'argon')
+		)));
+	}
+}
+
 function get_comment_edit_history(){
+	argon_verify_ajax_nonce();
 	$id = $_POST['id'];
 	if (!can_visit_comment_edit_history($id)){
 		exit(json_encode(array(
@@ -1337,6 +1348,7 @@ function is_comment_upvoted($id){
 	return in_array((int) $id, argon_get_upvoted_comment_ids(), true);
 }
 function upvote_comment(){
+	argon_verify_ajax_nonce();
 	if (get_option("argon_enable_comment_upvote", "false") != "true"){
 		return;
 	}
@@ -1609,6 +1621,7 @@ add_action('wp_ajax_get_captcha', 'ajax_get_captcha');
 add_action('wp_ajax_nopriv_get_captcha', 'ajax_get_captcha');
 //Ajax 发送评论
 function ajax_post_comment(){
+	argon_verify_ajax_nonce();
 	$parentID = $_POST['comment_parent'];
 	if (is_comment_private_mode($parentID)){
 		if (!user_can_view_comment($parentID)){
@@ -1870,6 +1883,7 @@ add_action('comment_unapproved_to_approved', 'comment_mail_notify');
 add_rewrite_rule('^unsubscribe-comment-mailnotice/?(.*)$', '/wp-content/themes/argon/unsubscribe-comment-mailnotice.php$1', 'top');
 //编辑评论
 function user_edit_comment(){
+	argon_verify_ajax_nonce();
 	header('Content-Type:application/json; charset=utf-8');
 	if (get_option("argon_comment_allow_editing") == "false"){
 		exit(json_encode(array(
@@ -1931,6 +1945,7 @@ add_action('wp_ajax_user_edit_comment', 'user_edit_comment');
 add_action('wp_ajax_nopriv_user_edit_comment', 'user_edit_comment');
 //置顶评论
 function pin_comment(){
+	argon_verify_ajax_nonce();
 	header('Content-Type:application/json; charset=utf-8');
 	if (get_option("argon_enable_comment_pinning") == "false"){
 		exit(json_encode(array(
@@ -2305,6 +2320,7 @@ function set_shuoshuo_upvotes($ID){
 	}
 }
 function upvote_shuoshuo(){
+	argon_verify_ajax_nonce();
 	header('Content-Type:application/json; charset=utf-8');
 	$ID = $_POST["shuoshuo_id"];
 	$upvotedList = isset( $_COOKIE['argon_shuoshuo_upvoted'] ) ? $_COOKIE['argon_shuoshuo_upvoted'] : '';
@@ -3575,6 +3591,7 @@ function is_post_upvoted($ID){
 	return in_array((int) $ID, argon_get_upvoted_post_ids(), true);
 }
 function upvote_post(){
+	argon_verify_ajax_nonce();
 	header('Content-Type:application/json; charset=utf-8');
 	if (get_option('argon_enable_post_like', 'true') != 'true'){
 		exit(json_encode(array('status' => 'failed', 'msg' => __('文章点赞未启用', 'argon'), 'total_upvote' => 0)));

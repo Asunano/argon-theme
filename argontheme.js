@@ -861,9 +861,10 @@ if (argonConfig.waterflow_columns != "1") {
 				url: argonConfig.wp_path + "wp-admin/admin-ajax.php",
 				dataType : "json",
 				data: {
-					action: "pin_comment",
-					id: commentID,
-					pinned: pinned ? "false" : "true"
+				action: "pin_comment",
+				argon_ajax_nonce: argonConfig.ajax_nonce,
+				id: commentID,
+				pinned: pinned ? "false" : "true"
 				},
 				success: function(result){
 					$("#comment_pin_comfirm_dialog").modal('hide');
@@ -1080,6 +1081,7 @@ if (argonConfig.waterflow_columns != "1") {
 			dataType : "json",
 			data: {
 				action: "ajax_post_comment",
+				argon_ajax_nonce: argonConfig.ajax_nonce,
 				comment: commentContent,
 				author: commentName,
 				email: commentEmail,
@@ -1263,6 +1265,7 @@ if (argonConfig.waterflow_columns != "1") {
 			dataType : "json",
 			data: {
 				action: "user_edit_comment",
+				argon_ajax_nonce: argonConfig.ajax_nonce,
 				comment: commentContent,
 				id: editID
 			},
@@ -1371,6 +1374,7 @@ $(document).on("click" , ".comment-upvote" , function(){
 		dataType : "json",
 		data : {
 			action: "upvote_comment",
+			argon_ajax_nonce: argonConfig.ajax_nonce,
 			comment_id : ID,
 		},
 		success : function(result){
@@ -1425,6 +1429,7 @@ $(document).on("click", ".post-upvote", function(){
 		dataType: "json",
 		data: {
 			action: "upvote_post",
+			argon_ajax_nonce: argonConfig.ajax_nonce,
 			post_id: ID
 		},
 		success: function(result){
@@ -1535,6 +1540,7 @@ function showCommentEditHistory(id){
 		dataType : "json",
 		data: {
 			action: "get_comment_edit_history",
+			argon_ajax_nonce: argonConfig.ajax_nonce,
 			id: id
 		},
 		success: function(result){
@@ -2128,6 +2134,7 @@ $(document).on("click" , ".shuoshuo-upvote" , function(){
 		dataType : "json",
 		data : {
 			action: "upvote_shuoshuo",
+			argon_ajax_nonce: argonConfig.ajax_nonce,
 			shuoshuo_id : ID,
 		},
 		success : function(result){

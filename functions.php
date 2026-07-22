@@ -1622,6 +1622,14 @@ add_action('wp_ajax_nopriv_get_captcha', 'ajax_get_captcha');
 //Ajax 发送评论
 function ajax_post_comment(){
 	argon_verify_ajax_nonce();
+	$max_length = 65535;
+	if (isset($_POST['comment']) && mb_strlen($_POST['comment']) > $max_length) {
+		exit(json_encode(array(
+			'status' => 'failed',
+			'msg' => __('评论内容过长', 'argon'),
+			'isAdmin' => current_user_can('manage_options')
+		)));
+	}
 	$parentID = $_POST['comment_parent'];
 	if (is_comment_private_mode($parentID)){
 		if (!user_can_view_comment($parentID)){
@@ -1894,6 +1902,13 @@ function user_edit_comment(){
 	$id = $_POST["id"];
 	$content = $_POST["comment"];
 	$contentSource = $content;
+	$max_length = 65535;
+	if (mb_strlen($content) > $max_length) {
+		exit(json_encode(array(
+			'status' => 'failed',
+			'msg' => __('评论内容过长', 'argon')
+		)));
+	}
 	if (!check_comment_token($id) && !check_login_user_same(get_comment_user_id_by_id($id))){
 		exit(json_encode(array(
 			'status' => 'failed',

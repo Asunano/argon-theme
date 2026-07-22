@@ -1,3 +1,14 @@
+> **⚠️ Enhanced Maintenance Fork**
+>
+> This repository is a derivative fork of [solstice23/argon-theme](https://github.com/solstice23/argon-theme), actively maintained and enhanced by **Asunano** — bug fixes, performance improvements, and ongoing community feedback incorporation.
+>
+> All modifications are licensed under [GPL-3.0](LICENSE), with original copyright notices preserved. The Argon theme name and its link must remain in the footer before use.
+>
+> - Original repo: https://github.com/solstice23/argon-theme
+> - This fork: https://github.com/Asunano/argon-theme
+
+---
+
 ![Argon](https://cdn.jsdelivr.net/gh/solstice23/cdn@master/argon_new_animate.svg)
 
 [简体中文](README.md) | [繁體中文](README_tw.md) | **English** | [Russian](README_ru.md)

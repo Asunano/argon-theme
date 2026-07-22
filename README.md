@@ -1,3 +1,14 @@
+> **⚠️ 增强维护分支**
+>
+> 本仓库是 [solstice23/argon-theme](https://github.com/solstice23/argon-theme) 的衍生分支，由 **Asunano** 持续维护与增强，旨在修复问题、改进性能并持续跟进社区反馈。
+>
+> 所有修改遵循 [GPL-3.0](LICENSE) 协议，保留原作者版权声明。使用前请确保页脚保留 Argon 主题名称及其链接。
+>
+> - 原版仓库：https://github.com/solstice23/argon-theme
+> - 本分支：https://github.com/Asunano/argon-theme
+
+---
+
 ![Argon](https://cdn.jsdelivr.net/gh/solstice23/cdn@master/argon_new_animate.svg)
 
 **简体中文** | [繁體中文](README_tw.md) | [English](README_en.md) | [Russian](README_ru.md)

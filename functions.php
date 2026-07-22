@@ -55,22 +55,22 @@ $GLOBALS['theme_version'] = $argon_version;
 $argon_assets_path = get_option("argon_assets_path");
 switch ($argon_assets_path) {
     case "jsdelivr":
-	    $GLOBALS['assets_path'] = "https://cdn.jsdelivr.net/gh/solstice23/argon-theme@" . $argon_version;
+	    $GLOBALS['assets_path'] = "https://cdn.jsdelivr.net/gh/Asunano/argon-theme@" . $argon_version;
         break;
     case "fastgit":
-	    $GLOBALS['assets_path'] = "https://raw.fastgit.org/solstice23/argon-theme/v" . $argon_version;
+	    $GLOBALS['assets_path'] = "https://raw.fastgit.org/Asunano/argon-theme/v" . $argon_version;
         break;
     case "sourcegcdn":
-	    $GLOBALS['assets_path'] = "https://gh.sourcegcdn.com/solstice23/argon-theme/v" . $argon_version;
+	    $GLOBALS['assets_path'] = "https://gh.sourcegcdn.com/Asunano/argon-theme/v" . $argon_version;
         break;
 	case "jsdelivr_gcore":
-	    $GLOBALS['assets_path'] = "https://gcore.jsdelivr.net/gh/solstice23/argon-theme@" . $argon_version;
+	    $GLOBALS['assets_path'] = "https://gcore.jsdelivr.net/gh/Asunano/argon-theme@" . $argon_version;
         break;
 	case "jsdelivr_fastly":
-	    $GLOBALS['assets_path'] = "https://fastly.jsdelivr.net/gh/solstice23/argon-theme@" . $argon_version;
+	    $GLOBALS['assets_path'] = "https://fastly.jsdelivr.net/gh/Asunano/argon-theme@" . $argon_version;
         break;
 	case "jsdelivr_cf":
-	    $GLOBALS['assets_path'] = "https://testingcf.jsdelivr.net/gh/solstice23/argon-theme@" . $argon_version;
+	    $GLOBALS['assets_path'] = "https://testingcf.jsdelivr.net/gh/Asunano/argon-theme@" . $argon_version;
         break;
 	case "custom":
 		$GLOBALS['assets_path'] = preg_replace('/\/$/', '', get_option("argon_custom_assets_path"));
@@ -2444,7 +2444,7 @@ function check_footer_copyright(){
 		return;
 	}
 	$footer = file_get_contents(get_theme_root() . "/" . wp_get_theme() -> template . "/footer.php");
-	if ((strpos($footer, "github.com/solstice23/argon-theme") === false) && (strpos($footer, "solstice23.top") === false)){
+	if ((strpos($footer, "github.com/Asunano/argon-theme") === false) && (strpos($footer, "solstice23.top") === false)){
 		set_transient('argon_footer_copyright_check', 'changed', DAY_IN_SECONDS);
 		add_action('admin_notices', 'alert_footer_copyright_changed');
 	}else{

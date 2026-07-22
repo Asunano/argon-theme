@@ -1189,7 +1189,7 @@ function get_comment_edit_history(){
 						" . ($edition -> isfirst ? "<span class='badge badge-primary badge-admin'>" . __("最初版本", 'argon') . "</span>" : "") . "
 					</div>
 					<div class='comment-edit-history-time'>" . date('Y-m-d H:i:s', $edition -> time) . "</div>
-					<div class='comment-edit-history-content'>" . str_replace("\n", "</br>", $edition -> content) . "</div>
+					<div class='comment-edit-history-content'>" . wp_kses_post(str_replace("\n", "</br>", $edition -> content)) . "</div>
 				</div>";
 	}
 	exit(json_encode(array(
@@ -1641,7 +1641,7 @@ function ajax_post_comment(){
 			'isAdmin' => current_user_can('manage_options')
 		)));
 	}
-	$parentID = $_POST['comment_parent'];
+	$parentID = isset($_POST['comment_parent']) ? intval($_POST['comment_parent']) : 0;
 	if (is_comment_private_mode($parentID)){
 		if (!user_can_view_comment($parentID)){
 			//如果父级评论是悄悄话模式且当前 Token 与父级不相同则返回
@@ -1842,7 +1842,7 @@ function comment_mail_notify($comment){
 }
 //评论发送完成添加 Meta
 function post_comment_updatemetas($id){
-	$parentID = $_POST['comment_parent'];
+	$parentID = isset($_POST['comment_parent']) ? intval($_POST['comment_parent']) : 0;
 	$comment = get_comment($id);
 	$commentPostID = $comment -> comment_post_ID;
 	$commentAuthor = $comment -> comment_author;
@@ -2753,7 +2753,7 @@ function argon_get_post_outdated_info(){
 	$content = str_replace("%date_delta%", $date_delta, $content);
 	$content = str_replace("%modify_date_delta%", $modify_date_delta, $content);
 	$content = str_replace("%post_date_delta%", $post_date_delta, $content);
-	return $before . $content . $after;
+	return $before . esc_html($content) . $after;
 }
 //Gutenberg 编辑器区块
 function argon_init_gutenberg_blocks() {
@@ -3198,12 +3198,12 @@ function shortcode_timeline($attr,$content=""){
 	$out = "<div class='argon-timeline'>";
 	foreach($entries as $index => $value){
 		$now = explode("|" , $value);
-		$now[0] = str_replace("/" , "</br>" , $now[0]);
+		$now[0] = str_replace("/" , "</br>" , esc_html($now[0]));
 		$out .= "<div class='argon-timeline-node'>
 					<div class='argon-timeline-time'>" . $now[0] . "</div>
 					<div class='argon-timeline-card card bg-gradient-secondary shadow-sm'>";
 		if ($now[1] != ''){
-			$out .= "	<div class='argon-timeline-title'>" . $now[1] . "</div>";
+			$out .= "	<div class='argon-timeline-title'>" . esc_html($now[1]) . "</div>";
 		}
 		$out .= "		<div class='argon-timeline-content'>";
 		foreach($now as $index => $value){
@@ -3213,7 +3213,7 @@ function shortcode_timeline($attr,$content=""){
 			if ($index > 2){
 				$out .= "</br>";
 			}
-			$out .= $value;
+			$out .= esc_html($value);
 		}
 		$out .= "		</div>
 					</div>
@@ -3320,16 +3320,16 @@ function shortcode_video($attr,$content=""){
 	$autoplay = isset( $attr['autoplay'] ) ? $attr['autoplay'] : 'false';
 	$out = "<video";
 	if ($width != ''){
-		$out .= " width='" . $width . "'";
+		$out .= " width='" . intval($width) . "'";
 	}
 	if ($height != ''){
-		$out .= " height='" . $height . "'";
+		$out .= " height='" . intval($height) . "'";
 	}
 	if ($autoplay == 'true'){
 		$out .= " autoplay";
 	}
 	$out .= " controls>";
-	$out .= "<source src='" . $url . "'>";
+	$out .= "<source src='" . esc_url(str_replace("'", '', $url)) . "'>";
 	$out .= "</video>";
 	return $out;
 }

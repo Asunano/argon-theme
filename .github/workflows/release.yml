@@ -46,7 +46,7 @@ jobs:
           mkdir -p "dist-tmp/$THEME"
           for item in $(ls -A); do
             case "$item" in
-              .git|.github|node_modules|.gitignore|CODE_REVIEW.md|CODEBUDDY.md|README.md|README_en.md)
+              .git|.github|node_modules|.gitignore|CODE_REVIEW.md|CODEBUDDY.md|README.md|README_en.md|dist-tmp|$THEME.zip)
                 continue ;;
             esac
             cp -a "$item" "dist-tmp/$THEME/"

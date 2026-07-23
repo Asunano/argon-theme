@@ -1938,7 +1938,8 @@ html.filter-grayscale {
 }
 /* 布局 1：标题等元素显示在缩略图下方（而非覆盖在上方） */
 .post-header.post-header-with-thumbnail > .post-title {
-	margin-top: 20px;
+	display: block;
+	margin-top: 25px;
 	padding: 0 30px;
 }
 .post-header.post-header-with-thumbnail > .post-meta {

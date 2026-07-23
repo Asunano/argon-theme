@@ -313,13 +313,9 @@ function searchPosts(word){
 		});
 	}
 }
-/*顶栏搜索*/
+/*顶栏搜索（点击由悬浮窗接管）*/
 $(document).on("click" , "#navbar_search_input_container" , function(){
-	$(this).addClass("open");
-	$("#navbar_search_input").focus();
-});
-$(document).on("blur" , "#navbar_search_input_container" , function(){
-	$(this).removeClass("open");
+	return false;
 });
 $(document).on("keydown" , "#navbar_search_input_container #navbar_search_input" , function(e){
 	if (e.keyCode != 13){
@@ -346,17 +342,9 @@ $(document).on("keydown" , "#navbar_search_input_mobile" , function(e){
 	let scrolltop = $(document).scrollTop();
 	searchPosts(word);
 });
-/*侧栏搜索*/
+/*侧栏搜索（点击由悬浮窗接管）*/
 $(document).on("click" , "#leftbar_search_container" , function(){
-	$(".leftbar-search-button").addClass("open");
-	$("#leftbar_search_input").removeAttr("readonly").focus();
-	$("#leftbar_search_input").focus();
-	$("#leftbar_search_input").select();
 	return false;
-});
-$(document).on("blur" , "#leftbar_search_container" , function(){
-	$(".leftbar-search-button").removeClass("open");
-	$("#leftbar_search_input").attr("readonly", "readonly");
 });
 $(document).on("keydown" , "#leftbar_search_input" , function(e){
 	if (e.keyCode != 13){
@@ -2869,7 +2857,7 @@ setInterval(function(){
 	console.log('%chttps://github.com/Asunano/argon-theme (enhanced)', 'font-size: 12px;border-radius:5px;padding:3px 10px 3px 10px;border:1px solid #e74c3c;');
 }();
 
-/*Live Search 实时搜索建议*/
+/*Live Search 悬浮搜索窗口*/
 function liveSearchInit(){
 	if (typeof window.argonLiveSearchConfig == 'undefined' || !window.argonLiveSearchConfig.enabled){
 		return;
@@ -2878,13 +2866,10 @@ function liveSearchInit(){
 		return;
 	}
 	window.argonLiveSearchInited = true;
+
 	var cfg = window.argonLiveSearchConfig;
 	var i18n = cfg.i18n || { loading: '搜索中…', empty: '没有找到相关结果', all: '查看全部搜索结果' };
 	var TYPE_LABELS = { post: '文章', page: '页面', shuoshuo: '说说' };
-	/* All search inputs that should trigger live suggestions */
-	var SELECTORS = ['#argon_serach_form input[name="s"]', '#navbar_search_input', '#leftbar_search_input'];
-	var $box = null;        /* 外层：圆角 + 阴影 + 定位 */
-	var $boxScroll = null;  /* 内层：滚动容器，保证外层圆角始终裁切内容（修复“搜索中”下边框丢圆角） */
 	var timer = null;
 	var activeIndex = -1;
 	var currentQ = '';
@@ -2900,135 +2885,169 @@ function liveSearchInit(){
 		if (idx === -1){ return escapeHtml(text); }
 		return escapeHtml(text.slice(0, idx)) + '<mark>' + escapeHtml(text.slice(idx, idx + q.length)) + '</mark>' + escapeHtml(text.slice(idx + q.length));
 	}
-	function getBox(){
-		if (!$box || $box.closest('body').length === 0){
-			$box = $('<div class="argon-live-search-results"></div>').appendTo('body').hide();
-			$boxScroll = $('<div class="argon-live-search-scroll"></div>').appendTo($box);
-		}
-		return $box;
-	}
-	function positionBox($input){
-		var $b = getBox();
-		/* 定位参考容器：
-		   - 在 .input-group 内（如导航栏带 input-group-prepend 的搜索框）：取整个 input-group
-		   - 侧边栏搜索框内嵌于按钮 #leftbar_search_container，且 input 为 position:absolute，
-		     直接量 input 矩形会因绝对定位的包含块异常（可能撑到视口宽），故取该按钮作为参考
-		   - 其余情况取 input 的父容器
-		   统一改用参考容器的 getBoundingClientRect() + position:fixed，避免被 transform/fixed 祖先影响定位与宽度 */
-		var $wrap = $input.closest('.input-group');
-		if (!$wrap.length){
-			$wrap = $input.closest('#leftbar_search_container').length ? $input.closest('#leftbar_search_container') : $input.parent();
-		}
-		var rect = $wrap[0].getBoundingClientRect();
-		$b.css({
-			position: 'fixed',
-			top: rect.bottom,
-			left: rect.left,
-			width: rect.width
-		});
-	}
-	function updateActive(items){
-		items.removeClass('active');
-		if (activeIndex >= 0 && activeIndex < items.length){
-			items.eq(activeIndex).addClass('active');
-		}
-	}
-	function showLoading($input){
-		var $b = getBox();
-		$boxScroll.html('<div class="argon-live-search-loading">' + escapeHtml(i18n.loading) + '</div>');
-		positionBox($input);
-		$b.show();
-	}
-	function allResultsUrl(q){
-		var base = cfg.searchUrl || (typeof window.location !== 'undefined' ? window.location.origin + '/' : '/');
-		var sep = base.indexOf('?') === -1 ? '?' : '&';
-		return base + sep + 's=' + encodeURIComponent(q);
-	}
-	function render(results, $input, q){
-		var $b = getBox();
-		$boxScroll.empty();
+
+	/* 创建悬浮窗 DOM */
+	var $overlay = $(
+		'<div id="argon-search-modal" class="argon-search-overlay">' +
+			'<div class="argon-search-modal">' +
+				'<div class="argon-search-header">' +
+					'<div class="argon-search-input-wrap">' +
+						'<i class="fa fa-search argon-search-input-icon"></i>' +
+						'<input id="argon-search-input" class="argon-search-input" type="text" placeholder="' + escapeHtml('搜索什么...') + '" autocomplete="off">' +
+						'<button id="argon-search-close-btn" class="argon-search-close-btn" type="button"><i class="fa fa-times"></i></button>' +
+					'</div>' +
+				'</div>' +
+				'<div class="argon-search-body" id="argon-search-body">' +
+					'<div class="argon-search-hint">' + escapeHtml('输入关键词开始搜索') + '</div>' +
+				'</div>' +
+			'</div>' +
+		'</div>'
+	).appendTo('body');
+
+	var $input = $('#argon-search-input');
+	var $body = $('#argon-search-body');
+
+	function openSearch(){
+		$overlay.css('display', 'flex');
+		$body.removeClass('has-results').html('<div class="argon-search-hint">' + escapeHtml('输入关键词开始搜索') + '</div>');
+		currentQ = '';
 		activeIndex = -1;
-		if (!results || results.length === 0){
-			$boxScroll.html('<div class="argon-live-search-empty">' + escapeHtml(i18n.empty) + '</div>');
-			positionBox($input);
-			$b.show();
-			return;
+		/* 触发 reflow 后加类 → 渐入 */
+		$overlay[0].offsetHeight;
+		$overlay.addClass('argon-overlay-open');
+		setTimeout(function(){ $input.val('').focus(); }, 80);
+	}
+	function closeSearch(){
+		$overlay.removeClass('argon-overlay-open');
+		if (timer){ clearTimeout(timer); }
+		$input.blur();
+		setTimeout(function(){ $overlay.css('display', 'none'); }, 250);
+	}
+
+	/* 搜索触发器：顶栏、侧栏、搜索页按钮 */
+	$(document).on('click', '#navbar_search_input_container, #leftbar_search_container', function(e){
+		e.preventDefault();
+		openSearch();
+	});
+	$(document).on('click', '#argon_serach_form button', function(e){
+		e.preventDefault();
+		openSearch();
+	});
+	$(document).on('keydown', '#argon_serach_form input[name="s"]', function(e){
+		if (e.key === 'Enter'){
+			e.preventDefault();
+			openSearch();
 		}
-		$.each(results, function(i, item){
-			var $a = $('<a class="argon-live-search-item"></a>').attr('href', item.url);
-			if (item.thumbnail){
-				$a.append($('<img class="argon-live-search-thumb" alt="" loading="lazy">').attr('src', item.thumbnail));
-			}
-			var $body = $('<div class="argon-live-search-body"></div>');
-			$body.append('<div class="argon-live-search-title">' + highlight(item.title, q) + '</div>');
-			if (item.excerpt){
-				$body.append('<div class="argon-live-search-excerpt">' + highlight(item.excerpt, q) + '</div>');
-			}
-			$a.append($body);
-			$a.append('<span class="argon-live-search-type">' + escapeHtml(TYPE_LABELS[item.type] || item.type) + '</span>');
-			$boxScroll.append($a);
-		});
-		var $all = $('<a class="argon-live-search-all" href="' + allResultsUrl(q) + '">' + escapeHtml(i18n.all) + ' &raquo;</a>');
-		$boxScroll.append($all);
-		positionBox($input);
-		$b.show();
-	}
-	function search(q, $input){
-		$.getJSON(cfg.ajaxUrl, { action: 'argon_live_search', q: q }, function(results){
-			if (q !== currentQ){ return; }
-			render(results, $input, q);
-		}).fail(function(){
-			if (q === currentQ){ getBox().hide(); }
-		});
-	}
-	function onInput($input){
+	});
+
+	/* 关闭：点击遮罩 */
+	$overlay.on('click', function(e){
+		if (e.target === this){ closeSearch(); }
+	});
+	/* 关闭：关闭按钮 */
+	$(document).on('click', '#argon-search-close-btn', function(e){
+		e.preventDefault();
+		closeSearch();
+	});
+	/* 关闭：Escape */
+	$(document).on('keydown', function(e){
+		if (e.key === 'Escape' && $overlay.is(':visible')){
+			closeSearch();
+		}
+	});
+
+	/* 输入 → 防抖搜索 */
+	$input.on('input', function(){
 		var q = $.trim($input.val());
 		currentQ = q;
 		if (timer){ clearTimeout(timer); }
-		if (q.length < cfg.minChars){
-			getBox().hide();
+		if (q.length < (cfg.minChars || 1)){
+			/* 清空输入时：先收缩高度，再替换内容（保留旧结果在过渡期间） */
+			$body.removeClass('has-results');
+			setTimeout(function(){
+				if (currentQ === '' || currentQ.length < (cfg.minChars || 1)){
+					$body.html('<div class="argon-search-hint">' + escapeHtml('输入关键词开始搜索') + '</div>');
+				}
+			}, 300);
 			return;
 		}
-		showLoading($input);
-		timer = setTimeout(function(){ search(q, $input); }, 250);
-	}
-	function onKeydown(e){
-		var items = getBox().find('.argon-live-search-item');
+		/* 新搜索：替换为加载状态，收缩高度 */
+		$body.removeClass('has-results');
+		setTimeout(function(){
+			if (currentQ === $.trim($input.val())){
+				$body.html('<div class="argon-search-loading"><span class="argon-search-spinner"></span> ' + escapeHtml(i18n.loading) + '</div>');
+			}
+		}, 100);
+		timer = setTimeout(function(){ search(q); }, 300);
+	});
+
+	/* 键盘导航 */
+	$input.on('keydown', function(e){
+		var items = $body.find('.argon-live-search-item');
 		if (e.key === 'ArrowDown'){
 			e.preventDefault();
 			if (items.length === 0){ return; }
 			activeIndex = (activeIndex + 1) % items.length;
-			updateActive(items);
+			items.removeClass('active').eq(activeIndex).addClass('active');
 		} else if (e.key === 'ArrowUp'){
 			e.preventDefault();
 			if (items.length === 0){ return; }
 			activeIndex = (activeIndex - 1 + items.length) % items.length;
-			updateActive(items);
+			items.removeClass('active').eq(activeIndex).addClass('active');
 		} else if (e.key === 'Enter'){
+			e.preventDefault();
 			if (activeIndex >= 0 && activeIndex < items.length){
-				e.preventDefault();
 				window.location.href = items.eq(activeIndex).attr('href');
+			} else if (currentQ !== ''){
+				var base = cfg.searchUrl || '/';
+				var sep = base.indexOf('?') === -1 ? '?' : '&';
+				window.location.href = base + sep + 's=' + encodeURIComponent(currentQ);
 			}
-		} else if (e.key === 'Escape'){
-			getBox().hide();
 		}
+	});
+
+	/* AJAX 搜索 */
+	function search(q){
+		$.getJSON(cfg.ajaxUrl, { action: 'argon_live_search', q: q }, function(results){
+			if (q !== currentQ){ return; }
+			render(results, q);
+		}).fail(function(){
+			if (q === currentQ){
+				$body.html('<div class="argon-search-hint">' + escapeHtml('搜索请求失败，请重试') + '</div>');
+			}
+		});
 	}
-	SELECTORS.forEach(function(sel){
-		$(document).on('input', sel, function(){ onInput($(this)); });
-		$(document).on('keydown', sel, function(e){ onKeydown(e); });
-	});
-	$(document).on('click', function(e){
-		if (!$(e.target).closest(SELECTORS.join(',') + ', .argon-live-search-results').length){
-			getBox().hide();
+
+	/* 渲染结果 */
+	function render(results, q){
+		$body.empty();
+		activeIndex = -1;
+		if (!results || results.length === 0){
+			$body.removeClass('has-results').html('<div class="argon-search-hint">' + escapeHtml(i18n.empty) + '</div>');
+			return;
 		}
-	});
-	/* 点击搜索结果 / 查看全部后先收起（随后链接跳转或 Pjax 切换） */
-	$(document).on('click', '.argon-live-search-item, .argon-live-search-all', function(){
-		getBox().hide();
-	});
-	/* Pjax 切换页面后收起（避免跳转后浮层残留） */
-	$(document).on('pjax:end', function(){
-		if ($box){ $box.hide(); }
+		var $list = $('<div class="argon-search-results-list"></div>');
+		$.each(results, function(i, item){
+			var $a = $('<a class="argon-live-search-item"></a>').attr('href', item.url).css('animation-delay', (i * 0.04) + 's');
+			if (item.thumbnail){
+				$a.append($('<img class="argon-live-search-thumb" alt="" loading="lazy">').attr('src', item.thumbnail));
+			}
+			var $bodyDiv = $('<div class="argon-live-search-body"></div>');
+			$bodyDiv.append('<div class="argon-live-search-title">' + highlight(item.title, q) + '</div>');
+			if (item.excerpt){
+				$bodyDiv.append('<div class="argon-live-search-excerpt">' + highlight(item.excerpt, q) + '</div>');
+			}
+			$a.append($bodyDiv);
+			$a.append('<span class="argon-live-search-type">' + escapeHtml(TYPE_LABELS[item.type] || item.type) + '</span>');
+			$list.append($a);
+		});
+		$body.append($list);
+		$body.addClass('has-results');
+	}
+
+	/* Pjax 切换时关闭 */
+	$(document).on('pjax:start', function(){
+		if ($overlay.is(':visible')){ closeSearch(); }
 	});
 }
 liveSearchInit();

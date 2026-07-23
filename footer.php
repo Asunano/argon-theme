@@ -18,7 +18,7 @@
 		</div>
 		<?php
 			$argon_live_search_config = array(
-				'enabled'   => (get_option('argon_enable_live_search') != 'false'),
+				'enabled'   => true,
 				'ajaxUrl'   => admin_url('admin-ajax.php'),
 				'searchUrl' => home_url('/'),
 				'minChars'  => 1,

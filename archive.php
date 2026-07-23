@@ -25,7 +25,9 @@
 		<?php
 			while ( have_posts() ) :
 				the_post();
-				get_template_part( 'template-parts/content-preview', get_option('argon_article_list_layout', '1'));
+				$layout = get_option('argon_article_list_layout', '1');
+				if (!in_array($layout, ['1', '2', '3'])){ $layout = '1'; }
+				get_template_part( 'template-parts/content-preview', $layout);
 			endwhile;
 		?>
 		<?php

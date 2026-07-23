@@ -8,7 +8,6 @@
 				}else{
 					echo "<img class='post-thumbnail' src='" . $thumbnail_url . "'></img>";
 				}				
-				echo "<div class='post-header-text-container'>";
 			}
 		?>
 		<a class="post-title" href="<?php the_permalink(); ?>"><?php the_title(); ?></a>
@@ -37,16 +36,6 @@
 				echo get_article_reading_time_meta($post_content_full);
 			} ?>
 		</div>
-		<?php if (get_post_type() == 'post' && get_option('argon_enable_post_like', 'true') == 'true') { ?>
-			<div class="post-like-wrapper post-like-wrapper-preview">
-				<?php argon_render_post_like(); ?>
-			</div>
-		<?php } ?>
-		<?php
-			if (has_post_thumbnail()){
-				echo "</div>";
-			}
-		?>
 	</header>
 
 	<?php
@@ -76,6 +65,11 @@
 		}
 	?>
 
+	<?php if (get_post_type() == 'post' && get_option('argon_enable_post_like', 'true') == 'true') { ?>
+		<div class="post-like-wrapper post-like-wrapper-preview">
+			<?php argon_render_post_like(); ?>
+		</div>
+	<?php } ?>
 	<?php if (has_tag()) { ?>
 		<div class="post-tags">
 			<i class="fa fa-tags" aria-hidden="true"></i>

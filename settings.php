@@ -37,6 +37,14 @@ function themeoptions_page(){
 				<span style="font-size: 20px;transform: translate(5px,-9px);display: inline-block;">solstice23/argon-theme</span>
 			</a>
 		</p>
+		<p>
+			<a href="https://github.com/Asunano/argon-theme" target="_blank" style="box-shadow: none;text-decoration: none;">
+				<svg width="30" height="30" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+					<path fill-rule="evenodd" clip-rule="evenodd" d="M8 0C3.58 0 0 3.58 0 8C0 11.54 2.29 14.53 5.47 15.59C5.87 15.66 6.02 15.42 6.02 15.21C6.02 15.02 6.01 14.39 6.01 13.72C4 14.09 3.48 13.23 3.32 12.78C3.23 12.55 2.84 11.84 2.5 11.65C2.22 11.5 1.82 11.13 2.49 11.12C3.12 11.11 3.57 11.7 3.72 11.94C4.44 13.15 5.59 12.81 6.05 12.6C6.12 12.08 6.33 11.73 6.56 11.53C4.78 11.33 2.92 10.64 2.92 7.58C2.92 6.71 3.23 5.99 3.74 5.43C3.66 5.23 3.38 4.41 3.82 3.31C3.82 3.31 4.49 3.1 6.02 4.13C6.66 3.95 7.34 3.86 8.02 3.86C8.7 3.86 9.38 3.95 10.02 4.13C11.55 3.09 12.22 3.31 12.22 3.31C12.66 4.41 12.38 5.23 12.3 5.43C12.81 5.99 13.12 6.7 13.12 7.58C13.12 10.65 11.25 11.33 9.47 11.53C9.76 11.78 10.01 12.26 10.01 13.01C10.01 14.08 10 14.94 10 15.21C10 15.42 10.15 15.67 10.55 15.59C13.71 14.53 16 11.53 16 8C16 3.58 12.42 0 8 0Z" transform="scale(64)" fill="#5E72E4"/>
+					</svg>
+				<span style="font-size: 20px;transform: translate(5px,-9px);display: inline-block;color:#5E72E4;">Asunano/argon-theme (Enhanced)</span>
+			</a>
+		</p>
 		<h1 style="color: #5e72e4;"><?php _e("Argon 主题设置", 'argon'); ?></h1>
 		<p><?php _e("按下", 'argon'); ?> <kbd style="font-family: sans-serif;">Ctrl + F</kbd> <?php _e("或在右侧目录中来查找设置", 'argon'); ?></p>
 		<form method="POST" action="" id="main_form">
@@ -1827,12 +1835,7 @@ window.pjaxLoaded = function(){
 							<input type="checkbox" name="argon_enable_structured_data" value="true" <?php $argon_enable_structured_data = get_option('argon_enable_structured_data'); if ($argon_enable_structured_data!='false'){echo 'checked';}?>/> <?php _e('输出 schema.org 结构化数据（Article），利于搜索引擎理解与收录', 'argon');?>
 						</td>
 					</tr>
-					<tr>
-						<th><label><?php _e('实时搜索建议', 'argon');?></label></th>
-						<td>
-							<input type="checkbox" name="argon_enable_live_search" value="true" <?php $argon_enable_live_search = get_option('argon_enable_live_search'); if ($argon_enable_live_search!='false'){echo 'checked';}?>/> <?php _e('在搜索框输入时实时下拉展示匹配文章（默认开启）', 'argon');?>
-						</td>
-					</tr>
+<?php // 实时搜索已改为悬浮窗模式，旧设置已废弃 ?>
 					<tr>
 						<th><label><?php _e('文章级点赞', 'argon');?></label></th>
 						<td>
@@ -2273,7 +2276,8 @@ function argon_update_themeoptions(){
 		argon_update_option('argon_home_show_shuoshuo');
 		argon_update_option('argon_enable_search_filters');
 		argon_update_option('argon_search_filters_type');
-		argon_update_option_checkbox('argon_enable_live_search');
+		// 实时搜索已改为悬浮窗模式，旧设置不再使用
+		// argon_update_option_checkbox('argon_enable_live_search');
 		argon_update_option_checkbox('argon_enable_post_like');
 		argon_update_option_checkbox('argon_comment_show_ip');
 		argon_update_option('argon_comment_ip_source');
@@ -2296,7 +2300,9 @@ function argon_update_themeoptions(){
 		argon_update_option('argon_enable_banner_title_typing_effect');
 		argon_update_option('argon_banner_typing_effect_interval');
 		argon_update_option('argon_page_layout');
-		argon_update_option('argon_article_list_layout');
+		$layout_val = $_POST['argon_article_list_layout'] ?? '1';
+		if (!in_array($layout_val, ['1', '2', '3'])){ $layout_val = '1'; }
+		update_option('argon_article_list_layout', $layout_val);
 		argon_update_option('argon_enable_pangu');
 		argon_update_option('argon_assets_path');
 		argon_update_option('argon_custom_assets_path');

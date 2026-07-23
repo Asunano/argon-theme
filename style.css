@@ -3,7 +3,7 @@ Theme Name: argon (Enhanced By Asunano)
 Author: solstice23, Enhanced By Asunano
 Author URI: https://solstice23.top/
 Description: 轻盈、简洁、美观的 Wordpress 主题 (Enhanced By Asunano)
-Version: 1.3.18
+Version: 1.3.19
 License: GNU General Public License v3.0
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 Tags: 简约, 两栏, 侧栏在左边, 浮动侧栏, 文章目录, 自适应, 夜间模式, 可自定义
@@ -1902,9 +1902,8 @@ html.filter-grayscale {
 	margin-right: 2px;
 }
 .post-header.post-header-with-thumbnail {
-	margin: -30px -30px 35px -30px;
+	margin: -30px -30px 0 -30px;
 	border-radius: var(--card-radius) var(--card-radius) 0 0;
-	overflow: hidden;
 	position: relative;
 }
 .post-thumbnail {
@@ -1936,6 +1935,18 @@ html.filter-grayscale {
 	padding-top: 35px;
 	background: rgba(0, 0, 0, 0.05);
 	background: linear-gradient(to top, rgba(0, 0, 0, 0.3) 20%, rgba(0, 0, 0, 0));
+}
+/* 布局 1：标题等元素显示在缩略图下方（而非覆盖在上方） */
+.post-header.post-header-with-thumbnail > .post-title {
+	margin-top: 20px;
+	padding: 0 30px;
+}
+.post-header.post-header-with-thumbnail > .post-meta {
+	padding: 0 30px;
+}
+.post-header.post-header-with-thumbnail > .post-like-wrapper {
+	padding: 0 30px;
+	margin-bottom: 8px;
 }
 .post-header.post-header-with-thumbnail .post-header-text-container .post-title {
 	color: rgba(255, 255, 255, 0.95) !important;
@@ -2600,51 +2611,177 @@ html.darkmode .comment-upvote {
 	margin: 1.5rem 0;
 }
 .post-like-wrapper.post-like-wrapper-preview {
-	text-align: left;
-	margin: 0.75rem 0 0;
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	margin: 0.25rem 0 0.25rem 0.5rem;
+	padding: 0;
+	vertical-align: middle;
+}
+.post-like-wrapper.post-like-wrapper-preview::before {
+	content: '·';
+	color: #adb5bd;
+	margin-right: 4px;
+}
+/*文章点赞 + 赞赏统一容器*/
+.post-actions {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 24px;
+	flex-wrap: wrap;
+	margin: 2rem 0;
+}
+.post-actions .post-like-wrapper {
+	margin: 0;
+}
+.post-actions .post-donate {
+	margin: 0;
+}
+.post-actions .post-donate .donate-btn {
+	margin: 0;
+	border-radius: 100px;
+	padding: 10px 24px;
+	font-size: 16px;
+	font-weight: 500;
+	display: inline-flex;
+	align-items: center;
+	gap: 10px;
+	border: 1.5px solid #e8e8e8 !important;
+	color: #555;
+	background-color: #fff;
+	transition: all 0.25s ease;
+	cursor: pointer;
+	position: relative;
+	overflow: visible;
+	outline: none;
+	-webkit-tap-highlight-color: transparent;
+}
+.post-actions .post-donate .donate-btn .btn-inner--icon {
+	font-size: 18px;
+	line-height: 1;
+	display: inline-flex;
+	align-items: center;
+	color: #fa7268;
+	transition: all 0.3s ease;
+}
+.post-actions .post-donate .donate-btn .btn-inner--text {
+	font-size: 15px;
+	font-weight: 600;
+}
+.post-actions .post-donate .donate-btn:hover {
+	border-color: #ff6b81 !important;
+	color: #fff !important;
+	background: linear-gradient(135deg, #ff6b81 0%, #ee5a6f 100%) !important;
+	transform: translateY(-2px);
+	box-shadow: 0 3px 12px rgba(255, 107, 129, 0.3);
+}
+.post-actions .post-donate .donate-btn:hover .btn-inner--icon {
+	color: #fff !important;
+	transform: scale(1.18);
+}
+.post-actions .post-donate .donate-btn:hover .btn-inner--text {
+	color: #fff !important;
+}
+.post-actions .post-donate .donate-btn:active {
+	transform: translateY(0);
+	box-shadow: 0 1px 4px rgba(255, 107, 129, 0.12);
+}
+html.darkmode .post-actions .post-donate .donate-btn {
+	border-color: rgba(255,255,255,.15) !important;
+	color: #ccc;
+	background-color: rgba(255,255,255,.05);
+}
+html.darkmode .post-actions .post-donate .donate-btn .btn-inner--icon {
+	color: #f0a09a;
+}
+html.darkmode .post-actions .post-donate .donate-btn:hover {
+	border-color: #ff6b81 !important;
+	color: #fff !important;
+	background: linear-gradient(135deg, #ff6b81 0%, #ee5a6f 100%) !important;
 }
 .post-upvote {
 	position: relative;
 	white-space: nowrap;
+	display: inline-flex;
+	align-items: center;
+	gap: 10px;
 	border-radius: 100px;
-	padding: 4px 14px;
-	border-color: var(--themecolor) !important;
-	color: var(--themecolor);
-	background-color: rgba(var(--themecolor-rgbstr), 0.12);
-	transition: all 0.2s ease;
+	padding: 10px 24px;
+	font-size: 16px;
+	font-weight: 500;
+	border: 1.5px solid #e8e8e8 !important;
+	color: #555;
+	background-color: #fff;
+	transition: all 0.25s ease;
+	cursor: pointer;
+	outline: none;
+	-webkit-tap-highlight-color: transparent;
 }
 html.darkmode .post-upvote {
-	background-color: rgba(var(--themecolor-rgbstr), 0.22);
-	color: var(--themecolor-light);
+	border-color: rgba(255,255,255,.15) !important;
+	color: #ccc;
+	background-color: rgba(255,255,255,.05);
+}
+.post-upvote .btn-inner--icon {
+	font-size: 18px;
+	line-height: 1;
+	display: inline-flex;
+	align-items: center;
+	color: #ff6b81;
+	transition: all 0.3s ease;
+}
+.post-upvote .btn-inner--text {
+	font-size: 15px;
+	font-weight: 600;
 }
 .post-upvote:hover {
-	background-color: var(--themecolor) !important;
+	border-color: #ff6b81 !important;
+	color: #fff !important;
+	background: linear-gradient(135deg, #ff6b81 0%, #ee5a6f 100%) !important;
+	transform: translateY(-2px);
+	box-shadow: 0 3px 12px rgba(255, 107, 129, 0.3);
+}
+.post-upvote:hover .btn-inner--icon {
+	color: #fff !important;
+	transform: scale(1.18);
+}
+.post-upvote:hover .btn-inner--text {
 	color: #fff !important;
 }
 .post-upvote.upvoted {
 	color: #fff !important;
-	background-color: var(--themecolor) !important;
-	pointer-events: none;
+	background: linear-gradient(135deg, #ff6b81 0%, #ee5a6f 100%) !important;
+	border-color: #ff6b81 !important;
+	box-shadow: 0 3px 12px rgba(255, 107, 129, 0.3);
+}
+.post-upvote.upvoted .btn-inner--icon {
+	color: #fff;
+	animation: argon-like-pulse 0.5s ease;
+}
+.post-upvote.upvoted .btn-inner--text {
+	color: #fff;
+}
+html.darkmode .post-upvote.upvoted {
+	color: #fff !important;
+	background: linear-gradient(135deg, #ff6b81 0%, #ee5a6f 100%) !important;
 }
 .post-upvote.post-upvoting {
-	opacity: 0.5;
+	opacity: 0.6;
 	pointer-events: none;
 }
-/*点赞点击动画：心跳 + 放大 */
-@keyframes argon-like-beat {
+.post-upvote:focus,
+.post-upvote:focus-visible,
+.donate-btn:focus,
+.donate-btn:focus-visible {
+	outline: none;
+	box-shadow: none;
+}
+@keyframes argon-like-pulse {
 	0%   { transform: scale(1); }
-	20%  { transform: scale(1.4); }
-	40%  { transform: scale(0.85); }
-	60%  { transform: scale(1.2); }
-	80%  { transform: scale(0.95); }
+	40%  { transform: scale(1.4); }
+	70%  { transform: scale(.9); }
 	100% { transform: scale(1); }
-}
-.post-upvote.argon-like-animating .btn-inner--icon {
-	display: inline-block;
-	animation: argon-like-beat 0.6s ease-in-out;
-}
-.post-upvote.argon-like-animating .btn-inner--icon i {
-	color: #e74c3c;
 }
 /*点赞飘心特效 */
 .post-upvote .argon-like-float-heart {
@@ -5447,6 +5584,159 @@ html.darkmode .argon-live-search-thumb {
 }
 html.darkmode .argon-live-search-all {
 	border-top-color: rgba(255, 255, 255, .1);
+}
+
+/* 悬浮搜索窗口 */
+.argon-search-overlay {
+	position: fixed;
+	top: 0; left: 0; right: 0; bottom: 0;
+	z-index: 9999;
+	background: rgba(0,0,0,.45);
+	backdrop-filter: blur(0px);
+	-webkit-backdrop-filter: blur(0px);
+	display: none;
+	align-items: center;
+	justify-content: center;
+	padding: 20px;
+	opacity: 0;
+	transition: opacity .25s ease-out, backdrop-filter .25s ease-out;
+}
+.argon-search-overlay.argon-overlay-open {
+	opacity: 1;
+	backdrop-filter: blur(6px);
+	-webkit-backdrop-filter: blur(6px);
+}
+.argon-search-modal {
+	background: #fff;
+	border-radius: var(--card-radius);
+	box-shadow: 0 20px 60px rgba(0,0,0,.3);
+	width: 100%;
+	max-width: 560px;
+	width: min(560px, calc(100vw - 40px));
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+	opacity: 0;
+	transform: scale(.95) translateY(10px);
+	transition: transform .25s ease-out, opacity .25s ease-out;
+}
+.argon-overlay-open .argon-search-modal {
+	opacity: 1;
+	transform: scale(1) translateY(0);
+}
+.argon-search-header {
+	padding: 16px 16px 0;
+	flex: none;
+}
+.argon-search-input-wrap {
+	display: flex;
+	align-items: center;
+	border-bottom: 2px solid var(--themecolor, #5e72e4);
+	padding-bottom: 8px;
+}
+.argon-search-input-icon {
+	font-size: 18px;
+	color: var(--themecolor, #5e72e4);
+	margin-right: 10px;
+	line-height: 1;
+}
+.argon-search-input {
+	flex: 1;
+	border: none;
+	outline: none;
+	font-size: 18px;
+	line-height: 1.4;
+	padding: 4px 0;
+	background: transparent;
+	color: #32325d;
+}
+.argon-search-input::placeholder {
+	color: #adb5bd;
+}
+.argon-search-close-btn {
+	background: none;
+	border: none;
+	font-size: 20px;
+	color: #8898aa;
+	cursor: pointer;
+	padding: 0 4px;
+	margin-left: 8px;
+	line-height: 1;
+}
+.argon-search-close-btn:hover {
+	color: #32325d;
+}
+.argon-search-body {
+	flex: none;
+	overflow-y: auto;
+	max-height: 90px;
+	transition: max-height .3s ease;
+	padding: 8px 0;
+}
+.argon-search-body.has-results {
+	max-height: 475px;
+}
+.argon-search-hint,
+.argon-search-loading {
+	padding: 24px 16px;
+	text-align: center;
+	color: #8898aa;
+	font-size: 14px;
+}
+.argon-search-loading {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+}
+.argon-search-spinner {
+	display: inline-block;
+	width: 18px;
+	height: 18px;
+	border: 2px solid var(--themecolor, #5e72e4);
+	border-top-color: transparent;
+	border-radius: 50%;
+	animation: argon-spin .6s linear infinite;
+}
+@keyframes argon-spin {
+	to { transform: rotate(360deg); }
+}
+.argon-search-results-list {
+	padding: 0 4px;
+}
+/* 搜索结果条目渐入 */
+.argon-search-body .argon-live-search-item {
+	animation: argon-search-item-in .2s ease-out both;
+}
+@keyframes argon-search-item-in {
+	0%   { opacity: 0; transform: translateY(6px); }
+	100% { opacity: 1; transform: translateY(0); }
+}
+/* 暗色模式 */
+html.darkmode .argon-search-overlay {
+	background: rgba(0,0,0,.6);
+	backdrop-filter: blur(0px);
+	-webkit-backdrop-filter: blur(0px);
+}
+html.darkmode .argon-search-overlay.argon-overlay-open {
+	backdrop-filter: blur(6px);
+	-webkit-backdrop-filter: blur(6px);
+}
+html.darkmode .argon-search-modal {
+	background: var(--color-foreground, #1e1e2a);
+	border: 1px solid rgba(255,255,255,.08);
+}
+html.darkmode .argon-search-input {
+	color: var(--color-text-deeper, #e0e0e0);
+}
+html.darkmode .argon-search-input::placeholder {
+	color: #6c757d;
+}
+html.darkmode .argon-search-close-btn {
+	color: #6c757d;
+}
+html.darkmode .argon-search-close-btn:hover {
+	color: #e0e0e0;
 }
 
 /* K. 文章图片悬浮放大 + 柔和阴影渐变（Enhanced，由 body.argon-image-hover 控制开关）*/

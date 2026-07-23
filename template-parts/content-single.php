@@ -4,7 +4,6 @@
 			if (argon_has_post_thumbnail() && get_option('argon_show_thumbnail_in_banner_in_content_page') != 'true'){
 				$thumbnail_url = argon_get_post_thumbnail();
 				echo "<img class='post-thumbnail' src='" . $thumbnail_url . "'></img>";
-				echo "<div class='post-header-text-container'>";
 			}
 			if (argon_has_post_thumbnail() && get_option('argon_show_thumbnail_in_banner_in_content_page') == 'true'){
 				$thumbnail_url = argon_get_post_thumbnail();
@@ -43,11 +42,6 @@
 				echo get_article_reading_time_meta(get_the_content());
 			} ?>
 		</div>
-		<?php
-			if (has_post_thumbnail() && get_option('argon_show_thumbnail_in_banner_in_content_page') != 'true'){
-				echo "</div>";
-			}
-		?>
 	</header>
 
 	<div class="post-content" id="post_content">
@@ -84,11 +78,6 @@
 				$post_reference_contents_first_index = array();
 
 				the_content();
-				if (get_option('argon_enable_post_like', 'true') == 'true'){
-					echo '<div class="post-like-wrapper">';
-					argon_render_post_like();
-					echo '</div>';
-				}
 			}
 		?>
 	</div>
@@ -100,12 +89,21 @@
 		}
 	?>
 
-	<?php if (get_option("argon_donate_qrcode_url") != '') { ?>
-		<div class="post-donate">
-			<button class="btn donate-btn btn-danger"><?php _e('赞赏', 'argon');?></button>
-			<div class="donate-qrcode card shadow-sm bg-white">
-				<img src="<?php echo get_option("argon_donate_qrcode_url"); ?>">
-			</div>
+	<?php if (get_option('argon_enable_post_like', 'true') == 'true' || get_option("argon_donate_qrcode_url") != '') { ?>
+		<div class="post-actions">
+			<?php if (get_option('argon_enable_post_like', 'true') == 'true') { ?>
+				<div class="post-like-wrapper">
+					<?php argon_render_post_like(); ?>
+				</div>
+			<?php } ?>
+			<?php if (get_option("argon_donate_qrcode_url") != '') { ?>
+				<div class="post-donate">
+					<button class="donate-btn"><span class="btn-inner--icon"><i class="fa fa-thumbs-o-up"></i></span> <span class="btn-inner--text"><?php _e('赞赏', 'argon');?></span></button>
+					<div class="donate-qrcode card shadow-sm bg-white">
+						<img src="<?php echo get_option("argon_donate_qrcode_url"); ?>">
+					</div>
+				</div>
+			<?php } ?>
 		</div>
 	<?php } ?>
 

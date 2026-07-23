@@ -3748,8 +3748,8 @@ function argon_render_post_like($ID = 0){
 		$ID = get_the_ID();
 	}
 	$upvoted = is_post_upvoted($ID) ? ' upvoted' : '';
-	echo '<button class="post-upvote btn btn-icon btn-outline-primary btn-sm' . $upvoted . '" type="button" data-id="' . esc_attr($ID) . '">'
-		. '<span class="btn-inner--icon"><i class="fa fa-heart' . ($upvoted ? '' : '-o') . '"></i></span>'
+	echo '<button class="post-upvote' . $upvoted . '" type="button" data-id="' . esc_attr($ID) . '">'
+		. '<span class="btn-inner--icon"><i class="fa fa-heart"></i></span>'
 		. '<span class="btn-inner--text"><span class="post-upvote-num">' . format_number_in_kilos(get_post_upvotes($ID)) . '</span></span>'
 		. '</button>';
 }

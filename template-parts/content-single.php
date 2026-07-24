@@ -19,6 +19,9 @@
 		<div class="post-meta">
 			<?php
 				$metaList = explode('|', get_option('argon_article_meta', 'time|views|comments|categories'));
+				if (get_option('argon_enable_post_like', 'true') == 'true' && get_post_type() == 'post' && !in_array('like', $metaList)){
+					$metaList[] = 'like';
+				}
 				if (is_sticky() && is_home() && ! is_paged()){
 					array_unshift($metaList, "sticky");
 				}
@@ -89,14 +92,18 @@
 		}
 	?>
 
-	<?php if (get_option('argon_enable_post_like', 'true') == 'true' || get_option("argon_donate_qrcode_url") != '') { ?>
+	<?php
+		$post_actions_donate = get_option("argon_donate_qrcode_url") != '';
+		$post_actions_like = get_option('argon_enable_post_like', 'true') == 'true' && get_post_type() == 'post';
+		if ($post_actions_donate || $post_actions_like) {
+	?>
 		<div class="post-actions">
-			<?php if (get_option('argon_enable_post_like', 'true') == 'true') { ?>
+			<?php if ($post_actions_like) { ?>
 				<div class="post-like-wrapper">
-					<?php argon_render_post_like(); ?>
+					<?php argon_render_post_like(get_the_ID()); ?>
 				</div>
 			<?php } ?>
-			<?php if (get_option("argon_donate_qrcode_url") != '') { ?>
+			<?php if ($post_actions_donate) { ?>
 				<div class="post-donate">
 					<button class="donate-btn"><span class="btn-inner--icon"><i class="fa fa-thumbs-o-up"></i></span> <span class="btn-inner--text"><?php _e('赞赏', 'argon');?></span></button>
 					<div class="donate-qrcode card shadow-sm bg-white">

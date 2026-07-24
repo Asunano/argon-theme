@@ -16,6 +16,9 @@
 			<div class="post-meta">
 				<?php
 					$metaList = explode('|', get_option('argon_article_meta', 'time|views|comments|categories'));
+					if (get_option('argon_enable_post_like', 'true') == 'true' && get_post_type() == 'post' && !in_array('like', $metaList)){
+						$metaList[] = 'like';
+					}
 					if (is_sticky() && is_home() && ! is_paged()){
 						array_unshift($metaList, "sticky");
 					}
@@ -38,11 +41,6 @@
 					echo get_article_reading_time_meta($post_content_full);
 				} ?>
 			</div>
-			<?php if (get_post_type() == 'post' && get_option('argon_enable_post_like', 'true') == 'true') { ?>
-				<div class="post-like-wrapper post-like-wrapper-preview">
-					<?php argon_render_post_like(); ?>
-				</div>
-			<?php } ?>
 		</header>
 
 	<?php

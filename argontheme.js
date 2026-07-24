@@ -27,6 +27,15 @@ function getCookie(cname) {
 	return "";
 }
 
+/* HTML 转义：供搜索、表情面板等全局调用。
+   原先仅定义于实时搜索闭包内，导致外层 argonRenderRecentEmotions 调用时
+   报 ReferenceError: escapeHtml is not defined。提升为顶层函数声明后全局可用。 */
+function escapeHtml(s){
+	return String(s).replace(/[&<>"']/g, function(c){
+		return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+	});
+}
+
 /*多语言支持*/
 var translation = {};
 translation['en_US'] = {
@@ -1414,6 +1423,25 @@ $(document).on("click" , ".comment-upvote" , function(){
 /*文章点赞*/
 $(document).on("click", ".post-upvote", function(){
 	if ($(this).hasClass("upvoted")){
+		// 已赞后再点击：给出明确反馈，不再重复点赞
+		if (typeof iziToast !== "undefined"){
+			iziToast.show({
+				title: __("您已经赞过这篇文章啦"),
+				class: "shadow",
+				position: "topRight",
+				backgroundColor: "var(--themecolor)",
+				titleColor: "#ffffff",
+				messageColor: "#ffffff",
+				iconColor: "#ffffff",
+				progressBarColor: "#ffffff",
+				icon: "fa fa-heart",
+				timeout: 3000
+			});
+		}
+		// 轻微心跳反馈，提示已赞状态
+		var $t = $(this);
+		$t.addClass("argon-like-animating");
+		setTimeout(function(){ $t.removeClass("argon-like-animating"); }, 650);
 		return;
 	}
 	$this = $(this);
@@ -1430,18 +1458,52 @@ $(document).on("click", ".post-upvote", function(){
 		},
 		success: function(result){
 			$this.removeClass("post-upvoting");
+			// 同一篇文章可能存在多个点赞按钮（meta 紧凑态 + 文末大按钮），按 data-id 统一更新
+			var $allLikes = $('.post-upvote[data-id="' + ID + '"]');
 			if (result.status == "success"){
-				$(".post-upvote-num", $this).html(result.total_upvote);
-				$this.addClass("upvoted");
-				$this.find("i").removeClass("fa-heart-o").addClass("fa-heart");
-				// 点赞动画：心跳图标 + 飘心
+				$allLikes.find(".post-upvote-num").html(result.total_upvote);
+				$allLikes.addClass("upvoted");
+				// 点赞动画：心跳图标（仅作用于被点击的按钮）
 				$this.addClass("argon-like-animating");
 				setTimeout(function(){ $this.removeClass("argon-like-animating"); }, 650);
-				var $heart = $('<span class="argon-like-float-heart"><i class="fa fa-heart"></i></span>');
-				$this.append($heart);
-				setTimeout(function(){ $heart.remove(); }, 700);
+				// 点赞动画：从底部发射 → 屏幕中央爆开的烟花 + 感谢窗
+				var heartSVG = '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.27 2 8.5 2 5.41 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.08C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.41 22 8.5c0 3.77-3.4 6.86-8.55 11.53L12 21.35z"/></svg>';
+				// 1) 火箭从底部升空
+				var rocket = document.createElement('span');
+				rocket.className = 'argon-like-rocket';
+				document.body.appendChild(rocket);
+				setTimeout(function(){ rocket.remove(); }, 450);
+				// 2) 中央爆开光晕 + 感谢窗（CSS 延迟至火箭到位才显示）
+				var burst = document.createElement('span');
+				burst.className = 'argon-like-burst';
+				document.body.appendChild(burst);
+				setTimeout(function(){ burst.remove(); }, 1100);
+				var $toast = $('<div class="argon-like-toast"><span class="toast-heart">' + heartSVG + '</span><span class="toast-text">' + __('感谢点赞') + '</span></div>');
+				$('body').append($toast);
+				setTimeout(function(){ $toast.remove(); }, 2100);
+				// 3) 烟花粒子：从屏幕中央向四周迸发（放大版）
+				var sparkColors = ['#ff3b5c', '#fa7268', '#ffb74d', '#ffd54f', '#ff8fa3', '#7e57c2', '#4dd0e1'];
+				var sparkCount = 24;
+				for (var i = 0; i < sparkCount; i++){
+					var angle = (Math.PI * 2 * i) / sparkCount + (Math.random() - 0.5) * 0.5;
+					var dist = 120 + Math.random() * 180;
+					var tx = Math.cos(angle) * dist;
+					var ty = Math.sin(angle) * dist - 30;
+					var color = sparkColors[Math.floor(Math.random() * sparkColors.length)];
+					var size = 9 + Math.random() * 9;
+					var delay = Math.random() * 0.12;
+					var spark = document.createElement('span');
+					spark.className = 'argon-like-spark';
+					spark.style.setProperty('--tx', tx.toFixed(1) + 'px');
+					spark.style.setProperty('--ty', ty.toFixed(1) + 'px');
+					spark.style.setProperty('--c', color);
+					spark.style.setProperty('--s', size.toFixed(1) + 'px');
+					spark.style.setProperty('--d', delay.toFixed(2) + 's');
+					document.body.appendChild(spark);
+					(function(s){ setTimeout(function(){ s.remove(); }, 1600); })(spark);
+				}
 			}else{
-				$(".post-upvote-num", $this).html(result.total_upvote);
+				$allLikes.find(".post-upvote-num").html(result.total_upvote);
 				iziToast.show({
 					title: result.msg,
 					class: 'shadow-sm',
@@ -1860,19 +1922,30 @@ function lazyloadInit(){
 	if (argonConfig.lazyload == false){
 		return;
 	}
-	if (argonConfig.lazyload.effect == "none"){
-		delete argonConfig.lazyload.effect;
+	/* 用副本而非原地修改 argonConfig.lazyload，避免 Pjax 反复调用时配置被污染
+	   （原代码 Object.assign(argonConfig.lazyload, ...) 会把 load 回调写回共享对象） */
+	var lazyBaseOptions = Object.assign({}, argonConfig.lazyload, {
+		skip_invisible: false,
+		failure_limit: 9999
+	});
+	if (lazyBaseOptions.effect == "none"){
+		delete lazyBaseOptions.effect;
 	}
 	$("article img.lazyload:not(.lazyload-loaded) , .related-post-thumbnail.lazyload:not(.lazyload-loaded) , .shuoshuo-preview-container img.lazyload:not(.lazyload-loaded)").lazyload(
-		Object.assign(argonConfig.lazyload, {
+		Object.assign({}, lazyBaseOptions, {
 			load: function () {
 				$(this).addClass("lazyload-loaded");
 				$(this).parent().removeClass("lazyload-container-unload");
+				/*表格内懒加载图片加载后会使 border-collapse 重排变细，强制修复*/
+				if ($(this).closest("table, .wp-block-table").length){
+					tableReflow();
+				}
 			}
 		})
 	);
 	$(".post-thumbnail.lazyload:not(.lazyload-loaded)").lazyload(
-		Object.assign({threshold: argonConfig.lazyload.threshold}, {
+		Object.assign({}, lazyBaseOptions, {
+			threshold: argonConfig.lazyload.threshold,
 			load: function () {
 				$(this).addClass("lazyload-loaded");
 				$(this).parent().removeClass("lazyload-container-unload");
@@ -1880,7 +1953,7 @@ function lazyloadInit(){
 			}
 		})
 	);
-	$(".comment-item-text .comment-sticker.lazyload").lazyload(Object.assign(argonConfig.lazyload, {load: function(){$(this).removeClass("lazyload")}}));
+	$(".comment-item-text .comment-sticker.lazyload").lazyload(Object.assign({}, lazyBaseOptions, {load: function(){$(this).removeClass("lazyload")}}));
 }
 lazyloadInit();
 
@@ -1971,6 +2044,31 @@ if ($("html").hasClass("banner-as-cover")){
 
 /*Pjax*/
 var pjaxScrollTop = 0, pjaxLoading = false;
+/*Pjax 换页后表格 border-collapse 重排：懒加载图片加载或 Web 字体(FOUT)就绪都会使
+  折叠边框按子像素重绘，偶发变细/缺失；强制一次同步重排可修复（纯 CSS 无法自愈）*/
+function tableReflow(){
+	try {
+		var $primary = $("#primary");
+		if (!$primary.length){ return; }
+		$primary.find("table, .wp-block-table").each(function(){
+			var t = this;
+			/*切换 border-collapse 强制浏览器按正确像素宽度重算折叠边框
+			  （用 setProperty('important') 以覆盖 CSS 中的 !important 规则）*/
+			t.style.setProperty('border-collapse', 'separate', 'important');
+			t.offsetHeight;
+			t.style.setProperty('border-collapse', 'collapse', 'important');
+			t.offsetHeight;
+		});
+		$primary[0].offsetHeight;
+	} catch (err) {}
+}
+/*Google 字体异步加载完成后再重排一次表格，消除字体 FOUT 引起的细边框*/
+try {
+	var $argonGf = $("link#googlefont-css");
+	if ($argonGf.length){
+		$argonGf.on("load", function(){ tableReflow(); });
+	}
+} catch (e) {}
 $.pjax.defaults.timeout = 10000;
 $.pjax.defaults.container = ['#primary', '#leftbar_part1_menu', '#leftbar_part2_inner', '.page-information-card-container', '#rightbar'];
 $.pjax.defaults.fragment = ['#primary', '#leftbar_part1_menu', '#leftbar_part2_inner', '.page-information-card-container', '#rightbar'];
@@ -2052,6 +2150,18 @@ $(document).pjax("a[href]:not([no-pjax]):not(.no-pjax):not([target='_blank']):no
 
 	waterflowInit();
 	lazyloadInit();
+	/* Pjax 换入的新内容里，画廊等图片可能因 jquery.lazyload 的视口/可见性检查在换内容
+	   瞬间未触发而停在占位图（表现为画廊散开/空白）。这里对视口内尚未加载的图显式触发
+	   appear 立即加载；视口外的图仍由滚动事件正常懒加载。 */
+	(function(){
+		var vh = window.innerHeight || document.documentElement.clientHeight || 0;
+		$("article img.lazyload:not(.lazyload-loaded), .related-post-thumbnail.lazyload:not(.lazyload-loaded), .shuoshuo-preview-container img.lazyload:not(.lazyload-loaded)").each(function(){
+			var r = this.getBoundingClientRect();
+			if (r.top < vh && r.bottom > 0){
+				$(this).trigger("appear");
+			}
+		});
+	})();
 	zoomifyInit();
 	highlightJsRender();
 	argonLightboxReload();
@@ -2138,6 +2248,16 @@ $(document).pjax("a[href]:not([no-pjax]):not(.no-pjax):not([target='_blank']):no
 	});
 	$("html").trigger("resize");
 
+	// 修复 pjax 异步注入内容时，border-collapse 表格因 Web 字体(FOUT)或懒加载图片尚未就绪而偶发“线框变细”的问题：
+	// 多次强制同步重排（立即 + 字体就绪 + 延时兜底），使折叠边框按正确像素宽度重绘
+	tableReflow();
+	if (document.fonts && document.fonts.ready && typeof document.fonts.ready.then === "function"){
+		document.fonts.ready.then(function(){ tableReflow(); });
+	}
+	setTimeout(tableReflow, 300);
+	setTimeout(tableReflow, 1200);
+	setTimeout(tableReflow, 2500);
+
 	if (typeof(window.pjaxLoaded) == "function"){
 		try{
 			window.pjaxLoaded();
@@ -2151,6 +2271,7 @@ $(document).pjax("a[href]:not([no-pjax]):not(.no-pjax):not([target='_blank']):no
 	waterflowInit();
 	lazyloadInit();
 	liveSearchInit();
+	tableReflow();
 });
 
 /*Reference 跳转*/
@@ -2874,11 +2995,6 @@ function liveSearchInit(){
 	var activeIndex = -1;
 	var currentQ = '';
 
-	function escapeHtml(s){
-		return String(s).replace(/[&<>"']/g, function(c){
-			return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
-		});
-	}
 	function highlight(text, q){
 		if (!q){ return escapeHtml(text); }
 		var idx = String(text).toLowerCase().indexOf(String(q).toLowerCase());
@@ -3102,3 +3218,37 @@ function enhancedInit(){
 	runtimeInit();
 }
 enhancedInit();
+
+/* ===== 临时诊断钩子：仅当 URL 含 ?argon_debug=1 时启用，验证后删除 ===== */
+if (/[?&]argon_debug=1/.test(location.search)) {
+	(function () {
+		var TOKEN = 'argon_dbg_a1b2c3d4e5';
+		var EP = (typeof(argonConfig) != 'undefined' && argonConfig.wp_path ? argonConfig.wp_path : '/') + 'wp-content/themes/argon-theme/argon-debug-recv.php';
+		function send(obj) {
+			try {
+				var fd = new FormData();
+				fd.append('token', TOKEN);
+				fd.append('log', JSON.stringify(obj));
+				fetch(EP, { method: 'POST', body: fd, keepalive: true }).catch(function () {});
+			} catch (e) {}
+		}
+		window.addEventListener('error', function (e) {
+			send({ t: 'error', msg: e.message, at: (e.filename || '') + ':' + (e.lineno || 0), stack: (e.error && e.error.stack) || '' });
+		});
+		window.addEventListener('unhandledrejection', function (e) {
+			var r = e.reason;
+			send({ t: 'promise', msg: (r && (r.message || r)) || 'unknown' });
+		});
+		['pjax:send', 'pjax:beforeReplace', 'pjax:complete', 'pjax:end', 'pjax:fail'].forEach(function (ev) {
+			$(document).on(ev, function () { send({ t: 'pjax', ev: ev, ts: Date.now(), url: location.href }); });
+		});
+		$(document).on('click', '[data-fancybox]', function () {
+			send({ t: 'fancybox-click', html: (this.outerHTML || '').slice(0, 240), ts: Date.now() });
+		});
+		$(document).on('click', '.post-upvote', function () {
+			send({ t: 'like-click', id: $(this).attr('data-id'), ts: Date.now() });
+		});
+		send({ t: 'debug-init', ua: navigator.userAgent, url: location.href });
+		console.log('[argon-debug] 已启用，日志将上报到服务器');
+	})();
+}

@@ -51,7 +51,7 @@
 			);
 		?>
 		<script>window.argonLightboxConfig = <?php echo wp_json_encode($argon_lightbox_config, JSON_UNESCAPED_UNICODE); ?>;</script>
-		<script defer src="<?php echo $GLOBALS['assets_path']; ?>/argontheme.js?v<?php echo $GLOBALS['theme_version']; ?>"></script>
+		<script defer src="<?php echo $GLOBALS['assets_path']; ?>/argontheme.js?v<?php echo (($argon_js_mtime = @filemtime(get_template_directory() . '/argontheme.js')) ? $argon_js_mtime : $GLOBALS['theme_version']); ?>"></script>
 		<?php if (get_option('argon_math_render') == 'mathjax3') { /*Mathjax V3*/?>
 			<script>
 				window.MathJax = {

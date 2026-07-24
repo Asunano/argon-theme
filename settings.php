@@ -290,7 +290,6 @@ function themeoptions_page(){
 								<?php $argon_assets_path = get_option('argon_assets_path'); ?>
 								<option value="default" <?php if ($argon_assets_path=='default'){echo 'selected';} ?>><?php _e('不使用', 'argon');?></option>
 								<option value="jsdelivr" <?php if ($argon_assets_path=='jsdelivr'){echo 'selected';} ?>>Jsdelivr</option>
-								<option value="fastgit" <?php if ($argon_assets_path=='fastgit'){echo 'selected';} ?>>Fastgit</option>
 								<option value="sourcegcdn" <?php if ($argon_assets_path=='sourcegcdn'){echo 'selected';} ?>>Source Global CDN</option>
 								<option value="jsdelivr_gcore" <?php if ($argon_assets_path=='jsdelivr_gcore'){echo 'selected';} ?>>Jsdelivr (gcore)</option>
 								<option value="jsdelivr_fastly" <?php if ($argon_assets_path=='jsdelivr_fastly'){echo 'selected';} ?>>Jsdelivr (fastly)</option>
@@ -1842,6 +1841,19 @@ window.pjaxLoaded = function(){
 							<input type="checkbox" name="argon_enable_post_like" value="true" <?php $argon_enable_post_like = get_option('argon_enable_post_like'); if ($argon_enable_post_like!='false'){echo 'checked';}?>/> <?php _e('文章末尾添加点赞按钮（评论/说说已有，文章级为新增）', 'argon');?>
 						</td>
 					</tr>
+						<tr>
+							<th><label><?php _e('高赞标记阈值', 'argon');?></label></th>
+							<td>
+								<input type="number" name="argon_hot_like_threshold" min="0" step="1" value="<?php echo esc_attr(get_option('argon_hot_like_threshold', 50));?>" style="width:80px;"/> <?php _e('文章点赞数达到该值（默认 50）时，在 meta 行的点赞旁显示「热门」标记；设为 0 关闭', 'argon');?>
+							</td>
+						</tr>
+						<tr>
+							<th><label><?php _e('高赞标记颜色', 'argon');?></label></th>
+							<td>
+								<input type="color" class="regular-text" name="argon_hot_like_color" value="<?php echo get_option('argon_hot_like_color') == '' ? '#ff5e7e' : get_option('argon_hot_like_color'); ?>" style="height:40px;width: 80px;cursor: pointer;"/>
+								<?php _e('「热门」标记的强调色（建议暖色/红色），用于描边、底色、辉光与火焰图标', 'argon');?>
+							</td>
+						</tr>
 					<tr>
 						<th><label><?php _e('评论者 IP 显示', 'argon');?></label></th>
 						<td>
@@ -2279,6 +2291,8 @@ function argon_update_themeoptions(){
 		// 实时搜索已改为悬浮窗模式，旧设置不再使用
 		// argon_update_option_checkbox('argon_enable_live_search');
 		argon_update_option_checkbox('argon_enable_post_like');
+		argon_update_option('argon_hot_like_threshold');
+		argon_update_option('argon_hot_like_color');
 		argon_update_option_checkbox('argon_comment_show_ip');
 		argon_update_option('argon_comment_ip_source');
 		argon_update_option('argon_comment_ip_custom_header');

@@ -3,7 +3,7 @@ Theme Name: argon (Enhanced By Asunano)
 Author: solstice23, Enhanced By Asunano
 Author URI: https://solstice23.top/
 Description: 轻盈、简洁、美观的 Wordpress 主题 (Enhanced By Asunano)
-Version: 1.3.19
+Version: 1.3.20
 License: GNU General Public License v3.0
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 Tags: 简约, 两栏, 侧栏在左边, 浮动侧栏, 文章目录, 自适应, 夜间模式, 可自定义
@@ -428,6 +428,112 @@ article figure.is-style-stripes table > thead > tr > th {
 }
 .wp-block-table.is-style-stripes {
 	border-bottom: none !important;
+}
+/* WP 区块布局（画廊/表格）：经典 PHP 主题下，WP 的区块布局样式为按需按页入队，
+   Pjax 仅替换 #primary 不刷新 <head>，换页后画廊(flex)与表格(border-collapse)会丢失。
+   故在此常驻样式中补齐布局规则，确保 Pjax 下始终正常。*/
+/* 旧标记画廊（<ul class="wp-block-gallery is-cropped blocks-gallery-grid"><li class="wp-block-gallery-item">）
+   经典主题下，核心区块 CSS（common / classic-themes）在主题 style.css 之后加载，
+   会以其 .wp-block-gallery 规则覆盖主题的 display:flex，使旧标记画廊退回 display:block 堆叠。
+   故用 article 作用域把优先级提到 0,1,1（> 核心 0,1,0），让主题布局稳定生效，无需 !important。
+   新版 has-nested-images 画廊的布局交由官方 is-layout-grid 处理。*/
+article .wp-block-gallery {
+	display: flex;
+	flex-wrap: wrap;
+	list-style: none;
+	padding: 0;
+	margin: 0 0 1em;
+}
+article .wp-block-gallery .wp-block-gallery-item {
+	position: relative;
+	flex: 1 0 calc(33.333% - 1em);
+	max-width: calc(33.333% - 1em);
+	margin: 0 1em 1em 0;
+}
+article .wp-block-gallery.columns-2 .wp-block-gallery-item { flex-basis: calc(50% - 1em); max-width: calc(50% - 1em); }
+article .wp-block-gallery.columns-1 .wp-block-gallery-item { flex-basis: 100%; max-width: 100%; }
+article .wp-block-gallery.columns-4 .wp-block-gallery-item { flex-basis: calc(25% - 1em); max-width: calc(25% - 1em); }
+article .wp-block-gallery.columns-5 .wp-block-gallery-item { flex-basis: calc(20% - 1em); max-width: calc(20% - 1em); }
+article .wp-block-gallery.columns-6 .wp-block-gallery-item { flex-basis: calc(16.666% - 1em); max-width: calc(16.666% - 1em); }
+article .wp-block-gallery .wp-block-gallery-item > figure {
+	margin: 0;
+	width: 100%;
+}
+article .wp-block-gallery.is-cropped .wp-block-gallery-item {
+	aspect-ratio: 1 / 1;
+	overflow: hidden;
+}
+article .wp-block-gallery.is-cropped .wp-block-gallery-item > figure {
+	height: 100%;
+	display: flex;
+}
+article .wp-block-gallery .wp-block-gallery-item .argon-lightbox-img,
+article .wp-block-gallery .wp-block-gallery-item img,
+article .wp-block-gallery.has-nested-images figure.wp-block-image .argon-lightbox-img,
+article .wp-block-gallery.has-nested-images figure.wp-block-image img {
+	display: block;
+	width: 100%;
+	border-radius: 4px;
+}
+article .wp-block-gallery.is-cropped .wp-block-gallery-item .argon-lightbox-img,
+article .wp-block-gallery.is-cropped .wp-block-gallery-item img {
+	height: 100%;
+	object-fit: cover;
+}
+article .wp-block-gallery .blocks-gallery-caption,
+article .wp-block-gallery .wp-block-gallery-item figcaption {
+	flex-basis: 100%;
+	max-width: 100%;
+	text-align: center;
+	font-size: 13px;
+	color: #888;
+	margin-top: 4px;
+}
+.wp-block-table {
+	border-collapse: collapse;
+}
+@media (max-width: 600px) {
+	article .wp-block-gallery .wp-block-gallery-item {
+		flex-basis: calc(50% - 1em);
+		max-width: calc(50% - 1em);
+	}
+}
+/* 新版嵌套画廊（WP >= 5.9，has-nested-images 标记）：
+   当画廊为 is-layout-flex + columns-default（默认列数，无 columns-N 类）时，
+   核心 wp-block-library 的列宽规则只认 columns-2/3/4…，不认 columns-default，
+   导致 figure.wp-block-image 子项无宽度而按原图尺寸堆叠。故由主题补齐列宽。
+   用 article 作用域(0,3,2) 提高优先级，无需 !important 即可压过核心同功能规则。
+   对 is-layout-grid 画廊，grid 会忽略子项 width（由 grid-template-columns 控制），此处规则无害。*/
+article .wp-block-gallery.has-nested-images figure.wp-block-image:not(#individual-image) {
+	width: calc(50% - 8px);
+	margin: 0;
+}
+article .wp-block-gallery.has-nested-images.columns-3 figure.wp-block-image:not(#individual-image) {
+	width: calc(33.333% - 8px);
+}
+article .wp-block-gallery.has-nested-images.columns-4 figure.wp-block-image:not(#individual-image) {
+	width: calc(25% - 8px);
+}
+article .wp-block-gallery.has-nested-images.is-cropped figure.wp-block-image:not(#individual-image) {
+	aspect-ratio: 1;
+	overflow: hidden;
+}
+article .wp-block-gallery.has-nested-images.is-cropped figure.wp-block-image .argon-lightbox-img,
+article .wp-block-gallery.has-nested-images.is-cropped figure.wp-block-image img {
+	height: 100%;
+	object-fit: cover;
+}
+/* columns-default 映射为 3 列（核心 is-layout-flex 不处理该值） */
+article .wp-block-gallery.columns-default figure.wp-block-image:not(#individual-image),
+article .columns-default figure.wp-block-image:not(#individual-image) {
+	width: calc(33.33% - 8px);
+}
+article .columns-default figure.wp-block-image:not(#individual-image):first-child:nth-last-child(2),
+article .columns-default figure.wp-block-image:not(#individual-image):first-child:nth-last-child(2) ~ figure.wp-block-image:not(#individual-image) {
+	width: calc(50% - 8px);
+}
+article .columns-default figure.wp-block-image:not(#individual-image):first-child:last-child {
+	width: 100%;
 }
 article hr,
 article .wp-block-separator {
@@ -1880,22 +1986,62 @@ html.filter-grayscale {
 	margin-top: 10px;
 }
 .post-meta-detail {
-	font-size: 14.5px;
-	line-height: 24px;
-	opacity: 0.8;
-	display: inline-block;
+	display: inline-flex;
+	align-items: center;
+	font-size: 13px;
+	line-height: 1;
+	padding: 5px 12px;
+	margin: 3px 5px 3px 0;
+	border-radius: 100px;
+	border: 1px solid rgba(var(--themecolor-R), var(--themecolor-G), var(--themecolor-B), 0.16);
+	background-color: rgba(var(--themecolor-R), var(--themecolor-G), var(--themecolor-B), 0.07);
+	color: #525f7f;
+	opacity: 1;
+	cursor: default;
+	transition: background-color .22s ease, color .22s ease, border-color .22s ease, transform .22s ease, box-shadow .22s ease;
+}
+.post-meta-detail:hover {
+	transform: translateY(-2px);
+	background-color: rgba(var(--themecolor-R), var(--themecolor-G), var(--themecolor-B), 0.14);
+	border-color: rgba(var(--themecolor-R), var(--themecolor-G), var(--themecolor-B), 0.32);
+	color: rgb(var(--themecolor-R), var(--themecolor-G), var(--themecolor-B));
+	box-shadow: 0 5px 14px rgba(var(--themecolor-R), var(--themecolor-G), var(--themecolor-B), 0.18);
 }
 .post-meta-detail i {
-	margin-right: 3px;
+	margin-right: 5px;
+	font-size: 12px;
+	transition: transform .22s ease, color .22s ease;
 }
-.post-meta-devide {
-	display: inline-block;
-	font-size: 14.5px;
-	line-height: 24px;
-	margin-left: 3px;
-	margin-right: 3px;
-	opacity: 0.5;
-	user-select: none;
+.post-meta-detail:hover i {
+	transform: scale(1.18);
+}
+.post-meta .post-meta-devide {
+	display: none;
+}
+/* meta 行入场动效：逐项淡入上浮 + 错峰延迟（错峰基于 nth-of-type，隐藏分隔符不影响可见项） */
+.post-meta > div {
+	animation: argon-meta-item-in .42s ease backwards;
+}
+.post-meta > div:nth-of-type(1) { animation-delay: 0ms; }
+.post-meta > div:nth-of-type(2) { animation-delay: 50ms; }
+.post-meta > div:nth-of-type(3) { animation-delay: 100ms; }
+.post-meta > div:nth-of-type(4) { animation-delay: 150ms; }
+.post-meta > div:nth-of-type(5) { animation-delay: 200ms; }
+.post-meta > div:nth-of-type(6) { animation-delay: 250ms; }
+.post-meta > div:nth-of-type(7) { animation-delay: 300ms; }
+.post-meta > div:nth-of-type(8) { animation-delay: 350ms; }
+.post-meta > button {
+	animation: argon-meta-item-in .42s ease backwards;
+	animation-delay: 380ms;
+}
+@keyframes argon-meta-item-in {
+	from { opacity: 0; transform: translateY(8px) scale(0.96); }
+	to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+	.post-meta > div, .post-meta > button { animation: none !important; }
+	.post-upvote .btn-inner--icon,
+	.post-upvote.upvoted .btn-inner--icon::after { animation: none !important; }
 }
 .post-meta-detail-categories-space {
 	margin-left: 2px;
@@ -1937,10 +2083,19 @@ html.filter-grayscale {
 	background: linear-gradient(to top, rgba(0, 0, 0, 0.3) 20%, rgba(0, 0, 0, 0));
 }
 /* 布局 1：标题等元素显示在缩略图下方（而非覆盖在上方） */
-.post-header.post-header-with-thumbnail > .post-title {
+article.post-preview-layout-1 .post-header.post-header-with-thumbnail > .post-title {
 	display: block;
-	margin-top: 25px;
+	margin-top: 15px;   /* 原 25px：布局 1 特色图与标题间距减少 40% */
 	padding: 0 30px;
+}
+/* 布局 1：meta 行与文章简介间距减少 40%（基础 margin-bottom 20px → 12px；带图卡片原被覆盖为 0，一并修正） */
+article.post-preview-layout-1 .post-header {
+	margin-bottom: 12px;
+}
+/* 单篇页（默认模式：特色图在上、标题在下）：特色图与标题间距 */
+article.post-full .post-header.post-header-with-thumbnail > .post-title {
+	display: block;
+	margin-top: 10px;
 }
 .post-header.post-header-with-thumbnail > .post-meta {
 	padding: 0 30px;
@@ -1990,10 +2145,36 @@ html.filter-grayscale {
 .tag.post-meta-detail-tag {
 	margin-bottom: 4px;
 	margin-right: 7px;
-	font-size: 12px;
+	font-size: 13px;
+	font-weight: 400;
 }
 .additional-content-after-post + .post-tags {
 	margin-top: 25px;
+}
+/* 文章标签：主题色描边 + 悬浮渐变填充，简化动效、参照 meta 行（非胶囊、跟随主题色）*/
+.post-tags > i {
+	color: var(--themecolor);
+}
+.post-tags .tag {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	padding: 5px 14px;
+	border-radius: 6px;
+	background: #fff;
+	border: 1px solid rgba(var(--themecolor-rgbstr), 0.35);
+	color: var(--themecolor);
+	font-size: 13px;
+	line-height: 1.4;
+	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+	transition: color .25s ease, background-color .25s ease, border-color .25s ease, transform .25s ease, box-shadow .25s ease;
+}
+.post-tags .tag:hover {
+	color: #fff;
+	background: var(--themecolor-gradient);
+	border-color: var(--themecolor);
+	transform: translateY(-2px);
+	box-shadow: 0 5px 14px rgba(var(--themecolor-rgbstr), 0.3);
 }
 /* 文章预览样式 2 */
 article.post-preview-layout-2 {
@@ -2688,6 +2869,36 @@ html.darkmode .comment-upvote {
 	transform: translateY(0);
 	box-shadow: 0 1px 4px rgba(255, 107, 129, 0.12);
 }
+/*文末操作区：点赞与赞赏组成协调的胶囊对（外观一致：白底灰边珊瑚图标）*/
+.post-actions .post-upvote {
+	min-height: 44px;
+	color: #555 !important;
+	border-color: #e8e8e8 !important;
+	background-color: #fff !important;
+}
+.post-actions .post-upvote .btn-inner--icon {
+	color: #fa7268 !important;
+}
+.post-actions .post-upvote:hover {
+	color: #fff !important;
+	background: linear-gradient(135deg, #ff6b81 0%, #ee5a6f 100%) !important;
+	border-color: #ff6b81 !important;
+	transform: translateY(-2px);
+	box-shadow: 0 3px 12px rgba(255, 107, 129, 0.3);
+}
+.post-actions .post-upvote:hover .btn-inner--icon,
+.post-actions .post-upvote:hover .btn-inner--text {
+	color: #fff !important;
+}
+.post-actions .post-upvote.upvoted {
+	color: #e0204a !important;
+	background-color: #fff !important;
+	border-color: #e8e8e8 !important;
+	box-shadow: none;
+}
+.post-actions .post-donate .donate-btn {
+	min-height: 44px;
+}
 html.darkmode .post-actions .post-donate .donate-btn {
 	border-color: rgba(255,255,255,.15) !important;
 	color: #ccc;
@@ -2729,12 +2940,41 @@ html.darkmode .post-upvote {
 	line-height: 1;
 	display: inline-flex;
 	align-items: center;
-	color: #ff6b81;
+	position: relative;
+	color: #fa7268;
 	transition: all 0.3s ease;
+}
+/*点赞图标（内联 SVG，避免依赖主题 FA 子集缺字）按状态切换：未赞描边灰、已赞实心粉*/
+.post-upvote .btn-inner--icon svg {
+	width: 1em;
+	height: 1em;
+}
+.post-upvote .icon-heart-outline {
+	display: inline-block;
+	color: #adb5bd;
+}
+.post-upvote .icon-heart-filled {
+	display: none;
+}
+.post-upvote.upvoted .icon-heart-outline {
+	display: none;
+}
+.post-upvote.upvoted .icon-heart-filled {
+	display: inline-block;
 }
 .post-upvote .btn-inner--text {
 	font-size: 15px;
 	font-weight: 600;
+}
+/*点赞文字标签：正常显示“点赞”，已赞态切换为“已赞”；字重继承同区域文字，不加粗*/
+.post-upvote .label-liked {
+	display: none;
+}
+.post-upvote.upvoted .label-like {
+	display: none;
+}
+.post-upvote.upvoted .label-liked {
+	display: inline;
 }
 .post-upvote:hover {
 	border-color: #ff6b81 !important;
@@ -2751,21 +2991,63 @@ html.darkmode .post-upvote {
 	color: #fff !important;
 }
 .post-upvote.upvoted {
-	color: #fff !important;
-	background: linear-gradient(135deg, #ff6b81 0%, #ee5a6f 100%) !important;
-	border-color: #ff6b81 !important;
-	box-shadow: 0 3px 12px rgba(255, 107, 129, 0.3);
+	color: #ee5a78 !important;
+	background-color: #fff6f8 !important;
+	background-image: none !important;
+	border-color: #ffe1e7 !important;
+	box-shadow: none;
+}
+.post-upvote.upvoted:hover {
+	color: #ee5a78 !important;
+	background-color: #ffeaef !important;
+	background-image: none !important;
+	border-color: #ffc9d4 !important;
+	box-shadow: 0 4px 12px rgba(255, 59, 92, 0.14) !important;
+	transform: translateY(-1px);
+}
+.post-upvote.upvoted:hover .btn-inner--icon,
+.post-upvote.upvoted:hover .btn-inner--text {
+	color: #ee5a78 !important;
 }
 .post-upvote.upvoted .btn-inner--icon {
-	color: #fff;
-	animation: argon-like-pulse 0.5s ease;
+	color: #ff5e7e !important;
+	animation: argon-heart-pop 0.5s cubic-bezier(.22, 1.4, .36, 1);
+}
+/* 已赞后再次点击：重播主题原有心跳动画作为轻量反馈（复用 argon-heart-pop 关键帧） */
+.post-upvote.argon-like-animating .btn-inner--icon {
+	animation: argon-heart-pop 0.5s cubic-bezier(.22, 1.4, .36, 1);
+}
+.post-upvote.upvoted .btn-inner--icon::after {
+	content: "";
+	position: absolute;
+	left: 50%;
+	top: 50%;
+	width: 1em;
+	height: 1em;
+	margin: -0.5em 0 0 -0.5em;
+	border-radius: 50%;
+	border: 2px solid rgba(255, 59, 92, 0.5);
+	opacity: 0;
+	animation: argon-heart-ring 0.6s ease-out;
+	pointer-events: none;
 }
 .post-upvote.upvoted .btn-inner--text {
-	color: #fff;
+	color: #ee5a78 !important;
 }
 html.darkmode .post-upvote.upvoted {
-	color: #fff !important;
-	background: linear-gradient(135deg, #ff6b81 0%, #ee5a6f 100%) !important;
+	color: #ffa6b6 !important;
+	background-color: rgba(255, 59, 92, 0.12) !important;
+	background-image: none !important;
+	border-color: rgba(255, 59, 92, 0.35) !important;
+}
+html.darkmode .post-upvote.upvoted:hover {
+	background-color: rgba(255, 59, 92, 0.18) !important;
+	border-color: rgba(255, 59, 92, 0.45) !important;
+	box-shadow: 0 4px 12px rgba(255, 59, 92, 0.2) !important;
+}
+html.darkmode .post-upvote.upvoted .btn-inner--icon,
+html.darkmode .post-upvote.upvoted .btn-inner--text {
+	color: #ff8fa3 !important;
 }
 .post-upvote.post-upvoting {
 	opacity: 0.6;
@@ -2778,26 +3060,373 @@ html.darkmode .post-upvote.upvoted {
 	outline: none;
 	box-shadow: none;
 }
+/* 激活态（按下时）：微缩 + 加深，提供触觉反馈 */
+.post-upvote:active,
+.post-upvote.post-upvote-meta:active {
+	transform: scale(0.95) !important;
+	box-shadow: 0 1px 4px rgba(255, 107, 129, 0.25) !important;
+	filter: brightness(0.92);
+}
+/*点赞并入文章列表 meta 行时的紧凑内联样式（外观对齐赞赏按钮：白底灰边珊瑚图标）*/
+.post-upvote.post-upvote-meta {
+	padding: 5px 12px !important;
+	margin: 3px 5px 3px 0 !important;
+	border: 1px solid #e8e8e8 !important;
+	border-radius: 100px !important;
+	background-color: #fff !important;
+	background-image: none !important;
+	color: #555 !important;
+	font-size: 13px !important;
+	font-weight: 400 !important;
+	line-height: 1 !important;
+	gap: 5px !important;
+	box-shadow: none !important;
+	transform: none !important;
+	vertical-align: middle;
+	transition: background-color .22s ease, color .22s ease, border-color .22s ease, transform .22s ease, box-shadow .22s ease !important;
+}
+.post-upvote.post-upvote-meta .btn-inner--icon {
+	font-size: 13px !important;
+	color: #fa7268 !important;
+	transition: transform .22s ease;
+}
+.post-upvote.post-upvote-meta .btn-inner--text {
+	font-size: 13px !important;
+	font-weight: 400 !important;
+	color: #555 !important;
+}
+.post-upvote.post-upvote-meta:hover {
+	color: #fff !important;
+	background: linear-gradient(135deg, #ff6b81 0%, #ee5a6f 100%) !important;
+	border-color: #ff6b81 !important;
+	transform: translateY(-2px) !important;
+	box-shadow: 0 5px 14px rgba(255, 107, 129, 0.28) !important;
+}
+.post-upvote.post-upvote-meta:hover .btn-inner--text,
+.post-upvote.post-upvote-meta:hover .btn-inner--icon,
+.post-upvote.post-upvote-meta:focus-visible .btn-inner--text,
+.post-upvote.post-upvote-meta:focus-visible .btn-inner--icon {
+	color: #fff !important;
+}
+.post-upvote.post-upvote-meta.upvoted {
+	background-color: #fff6f8 !important;
+	background-image: none !important;
+	border-color: #ffe1e7 !important;
+	color: #ee5a78 !important;
+	box-shadow: none !important;
+}
+.post-upvote.post-upvote-meta.upvoted:hover {
+	background-color: #ffeaef !important;
+	background-image: none !important;
+	border-color: #ffc9d4 !important;
+	color: #ee5a78 !important;
+	box-shadow: 0 4px 12px rgba(255, 59, 92, 0.14) !important;
+	transform: translateY(-1px) !important;
+}
+.post-upvote.post-upvote-meta.upvoted:hover .btn-inner--icon,
+.post-upvote.post-upvote-meta.upvoted:hover .btn-inner--text {
+	color: #ee5a78 !important;
+}
+.post-upvote.post-upvote-meta.upvoted .btn-inner--icon,
+.post-upvote.post-upvote-meta.upvoted .btn-inner--text {
+	color: #ee5a78 !important;
+}
+.post-upvote.post-upvote-meta.upvoted .btn-inner--icon {
+	animation: argon-heart-pop 0.45s cubic-bezier(.22, 1.4, .36, 1);
+}
+html.darkmode .post-upvote.post-upvote-meta {
+	background-color: rgba(255,255,255,.05) !important;
+	border-color: rgba(255,255,255,.15) !important;
+	color: #ccc !important;
+}
+html.darkmode .post-upvote.post-upvote-meta .btn-inner--icon {
+	color: #f0a09a !important;
+}
+html.darkmode .post-upvote.post-upvote-meta.upvoted {
+	background-color: rgba(255, 59, 92, 0.12) !important;
+	background-image: none !important;
+	border-color: rgba(255, 59, 92, 0.35) !important;
+	color: #ffa6b6 !important;
+	box-shadow: none !important;
+}
+html.darkmode .post-upvote.post-upvote-meta.upvoted:hover {
+	background-color: rgba(255, 59, 92, 0.18) !important;
+	border-color: rgba(255, 59, 92, 0.45) !important;
+	color: #ffa6b6 !important;
+	box-shadow: 0 4px 12px rgba(255, 59, 92, 0.2) !important;
+}
+html.darkmode .post-upvote.post-upvote-meta.upvoted .btn-inner--icon,
+html.darkmode .post-upvote.post-upvote-meta.upvoted .btn-inner--text {
+	color: #ff8fa3 !important;
+}
+/* meta 胶囊：深色模式 / 缩略图覆盖态的对比处理 */
+html.darkmode .post-meta-detail {
+	background-color: rgba(255, 255, 255, 0.07);
+	border-color: rgba(255, 255, 255, 0.12);
+	color: #c7cde0;
+}
+html.darkmode .post-meta-detail:hover {
+	background-color: rgba(255, 255, 255, 0.14);
+	border-color: rgba(255, 255, 255, 0.28);
+	color: #fff;
+	box-shadow: 0 5px 14px rgba(0, 0, 0, 0.3);
+}
+html.darkmode .post-upvote.post-upvote-meta {
+	background-color: rgba(255,255,255,.05) !important;
+	border-color: rgba(255,255,255,.15) !important;
+	color: #ccc !important;
+}
+.post-header-text-container .post-meta-detail,
+.post-header-text-container .post-upvote.post-upvote-meta {
+	background-color: rgba(255, 255, 255, 0.18);
+	border-color: rgba(255, 255, 255, 0.25);
+	color: #fff;
+}
+.post-header-text-container .post-meta-detail i,
+.post-header-text-container .post-upvote.post-upvote-meta .btn-inner--icon {
+	color: #fff;
+}
+/* banner 之上的 meta 选中态：半透明珊瑚底 + 白字，区别于未选中态且清晰可读 */
+.post-header-text-container .post-upvote.post-upvote-meta.upvoted {
+	background-color: rgba(255, 59, 92, 0.55) !important;
+	background-image: none !important;
+	border-color: rgba(255, 255, 255, 0.6) !important;
+	color: #fff !important;
+}
+.post-header-text-container .post-upvote.post-upvote-meta.upvoted .btn-inner--icon,
+.post-header-text-container .post-upvote.post-upvote-meta.upvoted .btn-inner--text {
+	color: #fff !important;
+}
+.post-header-text-container .post-upvote.post-upvote-meta.upvoted:hover {
+	background-color: rgba(255, 59, 92, 0.7) !important;
+	border-color: #fff !important;
+	color: #fff !important;
+}
+/* 点赞数字点击回弹（D） */
+.post-upvote-num {
+	display: inline-block;
+}
+.post-upvote.upvoted .post-upvote-num {
+	animation: argon-num-bump 0.45s ease;
+}
+@keyframes argon-num-bump {
+	0%   { transform: scale(1) translateY(0); }
+	35%  { transform: scale(1.4) translateY(-2px); }
+	100% { transform: scale(1) translateY(0); }
+}
+@keyframes argon-heart-pop {
+	0%   { transform: scale(1); }
+	40%  { transform: scale(1.4); }
+	70%  { transform: scale(0.92); }
+	100% { transform: scale(1); }
+}
+@keyframes argon-heart-ring {
+	0%   { transform: scale(0.5); opacity: 0.85; }
+	100% { transform: scale(2.2); opacity: 0; }
+}
+/* 高赞「热门」标记（C）：与 meta 行胶囊统一视觉，颜色由 --hot 变量（后台可配）驱动 */
+.post-upvote-hot {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	font-size: 13px;
+	font-weight: 700;
+	line-height: 1;
+	padding: 5px 13px;
+	margin: 3px 6px 3px 0;
+	border-radius: 100px;
+	border: 1px solid var(--hot-strong, rgba(255, 107, 129, 0.5));
+	background-color: var(--hot, #ff5e7e);
+	background-image: linear-gradient(135deg, rgba(255, 255, 255, 0.28), rgba(0, 0, 0, 0.10));
+	color: #fff;
+	vertical-align: middle;
+	position: relative;
+	overflow: hidden;
+	box-shadow: 0 2px 8px var(--hot-glow, rgba(255, 107, 129, 0.35));
+	transition: transform .22s ease, box-shadow .22s ease;
+	animation: argon-hot-glow 2.8s ease-in-out infinite;
+}
+.post-upvote-hot .hot-flame {
+	width: 1.15em;
+	height: 1.15em;
+	display: inline-block;
+	transform-origin: 50% 80%;
+	animation: argon-flame-flicker 1.8s ease-in-out infinite;
+}
+.post-upvote-hot:hover {
+	transform: translateY(-2px) scale(1.04);
+	box-shadow: 0 6px 16px var(--hot-glow, rgba(255, 107, 129, 0.45));
+}
+.post-upvote-hot::after {
+	content: "";
+	position: absolute;
+	top: 0;
+	left: -160%;
+	width: 70%;
+	height: 100%;
+	background: linear-gradient(120deg, transparent 0%, rgba(255, 255, 255, 0.6) 50%, transparent 100%);
+	transform: skewX(-20deg);
+	animation: argon-hot-shine 3s ease-in-out infinite;
+	pointer-events: none;
+}
+@keyframes argon-hot-glow {
+	0%, 100% { box-shadow: 0 0 0 var(--hot-glow, rgba(255, 107, 129, 0)); }
+	50%      { box-shadow: 0 0 10px var(--hot-glow, rgba(255, 107, 129, 0.45)); }
+}
+@keyframes argon-hot-shine {
+	0%        { left: -160%; }
+	55%, 100% { left: 160%; }
+}
+@keyframes argon-flame-flicker {
+	0%, 100% { transform: scale(1) rotate(0deg); }
+	25%      { transform: scale(1.1) rotate(-3deg); }
+	50%      { transform: scale(0.95) rotate(2deg); }
+	75%      { transform: scale(1.06) rotate(-1deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+	.post-upvote-hot,
+	.post-upvote-hot::after,
+	.post-upvote-hot .hot-flame {
+		animation: none !important;
+	}
+}
+/* 移动端折叠次要 meta（B） */
+@media (max-width: 575px) {
+	.post-meta-detail-author,
+	.post-meta-detail-categories,
+	.post-meta-detail-words {
+		display: none !important;
+	}
+}
 @keyframes argon-like-pulse {
 	0%   { transform: scale(1); }
 	40%  { transform: scale(1.4); }
 	70%  { transform: scale(.9); }
 	100% { transform: scale(1); }
 }
-/*点赞飘心特效 */
-.post-upvote .argon-like-float-heart {
-	position: absolute;
+/*点赞成功：屏幕中央悬浮感谢窗（CSS 动画）*/
+/*点赞成功：从屏幕底部发射、在中央爆开的烟花 + 感谢窗（放大版）*/
+.argon-like-toast {
+	position: fixed;
 	left: 50%;
-	top: 0;
-	font-size: 14px;
-	color: #e74c3c;
+	top: 50%;
+	z-index: 9999;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 16px;
+	padding: 32px 52px;
+	background: rgba(255, 255, 255, 0.97);
+	border-radius: 24px;
+	box-shadow: 0 18px 60px rgba(255, 59, 92, 0.32);
+	color: #e0204a;
 	pointer-events: none;
-	transform: translateX(-50%);
-	animation: argon-like-float 0.7s ease-out forwards;
+	opacity: 0;
+	animation: argon-like-toast 1.7s cubic-bezier(.22, 1, .36, 1) forwards;
+	animation-delay: 0.34s; /* 等烟花飞到中央再出现 */
 }
-@keyframes argon-like-float {
-	0%   { opacity: 1; transform: translate(-50%, 0) scale(1); }
-	100% { opacity: 0; transform: translate(-50%, -28px) scale(1.6); }
+.argon-like-toast .toast-heart {
+	display: inline-flex;
+	animation: argon-heart-beat 1.5s cubic-bezier(.22, 1, .36, 1) both;
+}
+.argon-like-toast .toast-heart svg {
+	display: block;
+	width: 66px;
+	height: 66px;
+	filter: drop-shadow(0 6px 14px rgba(255, 59, 92, 0.4));
+}
+.argon-like-toast .toast-text {
+	font-size: 22px;
+	font-weight: 700;
+	letter-spacing: 1px;
+}
+html.darkmode .argon-like-toast {
+	background: rgba(42, 42, 48, 0.97);
+	color: #ff8fa3;
+	box-shadow: 0 18px 60px rgba(0, 0, 0, 0.5);
+}
+@keyframes argon-like-toast {
+	0%   { opacity: 0; transform: translate(-50%, -50%) scale(.5); }
+	12%  { opacity: 1; transform: translate(-50%, -50%) scale(1.05); }
+	22%  { transform: translate(-50%, -50%) scale(1); }
+	75%  { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+	100% { opacity: 0; transform: translate(-50%, -66%) scale(1.08); }
+}
+/*爱心“心跳弹出”动画*/
+@keyframes argon-heart-beat {
+	0%   { transform: scale(0); }
+	20%  { transform: scale(1.25); }
+	35%  { transform: scale(.9); }
+	50%  { transform: scale(1.08); }
+	65%  { transform: scale(.97); }
+	80%  { transform: scale(1); }
+	100% { transform: scale(1); }
+}
+/*烟花发射：从底部升空到屏幕中央*/
+.argon-like-rocket {
+	position: fixed;
+	left: 50%;
+	bottom: -8px;
+	z-index: 9997;
+	width: 10px;
+	height: 10px;
+	margin-left: -5px;
+	border-radius: 50% 50% 50% 0;
+	transform: rotate(45deg);
+	background: linear-gradient(135deg, #ffd54f, #ff6b81);
+	box-shadow: 0 0 14px 5px rgba(255, 107, 129, 0.75);
+	pointer-events: none;
+	animation: argon-rocket-rise 0.36s cubic-bezier(.4, 0, .7, 1) forwards;
+}
+@keyframes argon-rocket-rise {
+	0%   { transform: translateY(0) rotate(45deg) scale(1); opacity: 0; }
+	20%  { opacity: 1; }
+	100% { transform: translateY(-50vh) rotate(45deg) scale(.4); opacity: 0; }
+}
+/*爆开瞬间的光晕*/
+.argon-like-burst {
+	position: fixed;
+	left: 50%;
+	top: 50%;
+	z-index: 9997;
+	width: 24px;
+	height: 24px;
+	margin: -12px 0 0 -12px;
+	border-radius: 50%;
+	background: radial-gradient(circle, rgba(255,221,128,.95) 0%, rgba(255,107,129,.55) 42%, rgba(255,59,92,0) 72%);
+	pointer-events: none;
+	opacity: 0;
+	animation: argon-burst-flash 0.65s ease-out 0.34s forwards;
+}
+@keyframes argon-burst-flash {
+	0%   { transform: scale(.3); opacity: .95; }
+	100% { transform: scale(11); opacity: 0; }
+}
+/*烟花粒子：从中央向四周迸发后淡出（放大版）*/
+.argon-like-spark {
+	position: fixed;
+	left: 50%;
+	top: 50%;
+	z-index: 9998;
+	width: var(--s, 10px);
+	height: var(--s, 10px);
+	margin-left: calc(var(--s, 10px) / -2);
+	margin-top: calc(var(--s, 10px) / -2);
+	border-radius: 50%;
+	background: var(--c, #ff3b5c);
+	box-shadow: 0 0 10px var(--c, #ff3b5c);
+	pointer-events: none;
+	opacity: 0;
+	animation: argon-spark 1.2s ease-out forwards;
+	animation-delay: var(--d, 0s);
+}
+@keyframes argon-spark {
+	0%   { opacity: 1; transform: translate(0, 0) scale(1); }
+	70%  { opacity: 1; }
+	100% { opacity: 0; transform: translate(var(--tx, 0), var(--ty, 0)) scale(.25); }
+}
+html.darkmode .argon-like-spark {
+	box-shadow: 0 0 12px var(--c, #ff8fa3);
 }
 /*评论内容*/
 .comment-item-text .comment-sticker {
@@ -4959,6 +5588,21 @@ html.darkmode .fabtn:hover {
 }
 html.darkmode .tag.badge {
 	color: #eee;
+}
+html.darkmode .post-tags > i {
+	color: var(--themecolor-light);
+}
+html.darkmode .post-tags .tag {
+	background: rgba(var(--themecolor-rgbstr), 0.12);
+	border-color: rgba(var(--themecolor-rgbstr), 0.4);
+	color: var(--themecolor-light);
+	box-shadow: none;
+}
+html.darkmode .post-tags .tag:hover {
+	color: #fff;
+	background: var(--themecolor-gradient);
+	border-color: var(--themecolor);
+	box-shadow: 0 5px 14px rgba(var(--themecolor-rgbstr), 0.35);
 }
 
 html.darkmode .dropdown-item:active {

@@ -1,4 +1,4 @@
-<article class="post card bg-white shadow-sm border-0 <?php if (get_option('argon_enable_into_article_animation') == 'true'){echo 'post-preview';} ?>" id="post-<?php the_ID(); ?>" <?php post_class(); ?>>
+<article class="post card bg-white shadow-sm border-0 post-preview-layout-1 <?php if (get_option('argon_enable_into_article_animation') == 'true'){echo 'post-preview';} ?>" id="post-<?php the_ID(); ?>" <?php post_class(); ?>>
 	<header class="post-header text-center<?php if (argon_has_post_thumbnail()){echo " post-header-with-thumbnail";}?>">
 		<?php
 			if (argon_has_post_thumbnail()){
@@ -14,6 +14,9 @@
 		<div class="post-meta">
 			<?php
 				$metaList = explode('|', get_option('argon_article_meta', 'time|views|comments|categories'));
+				if (get_option('argon_enable_post_like', 'true') == 'true' && get_post_type() == 'post' && !in_array('like', $metaList)){
+					$metaList[] = 'like';
+				}
 				if (is_sticky() && is_home() && ! is_paged()){
 					array_unshift($metaList, "sticky");
 				}
@@ -65,11 +68,6 @@
 		}
 	?>
 
-	<?php if (get_post_type() == 'post' && get_option('argon_enable_post_like', 'true') == 'true') { ?>
-		<div class="post-like-wrapper post-like-wrapper-preview">
-			<?php argon_render_post_like(); ?>
-		</div>
-	<?php } ?>
 	<?php if (has_tag()) { ?>
 		<div class="post-tags">
 			<i class="fa fa-tags" aria-hidden="true"></i>

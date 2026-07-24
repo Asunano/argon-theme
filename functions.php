@@ -21,6 +21,9 @@ function argon_get_option($option, $default = false) {
 function theme_slug_setup() {
 	add_theme_support('title-tag');
 	add_theme_support('post-thumbnails');
+	// 启用 WP 官方区块样式：经典主题需显式声明，否则 wp-block-library-theme 不会在前台入队，
+	// 画廊/封面等区块的 is-layout-grid 等布局缺少列模板而失效。配合 argon_enqueue_block_library_always() 在 Pjax 下常驻。
+	add_theme_support('wp-block-styles');
 	load_theme_textdomain('argon', get_template_directory() . '/languages');
 }
 add_action('after_setup_theme','theme_slug_setup');
@@ -56,9 +59,6 @@ $argon_assets_path = get_option("argon_assets_path");
 switch ($argon_assets_path) {
     case "jsdelivr":
 	    $GLOBALS['assets_path'] = "https://cdn.jsdelivr.net/gh/Asunano/argon-theme@" . $argon_version;
-        break;
-    case "fastgit":
-	    $GLOBALS['assets_path'] = "https://raw.fastgit.org/Asunano/argon-theme/v" . $argon_version;
         break;
     case "sourcegcdn":
 	    $GLOBALS['assets_path'] = "https://gh.sourcegcdn.com/Asunano/argon-theme/v" . $argon_version;
@@ -461,15 +461,11 @@ function set_user_token_cookie(){
 		$_COOKIE["argon_user_token"] = $newToken;
 	}
 }
-function session_init(){
+// 访问者 Token 初始化（验证码已改为无状态，不再需要 PHP Session / 会话文件锁）
+function argon_visitor_init(){
 	set_user_token_cookie();
-	// 仅在需要 Session 的页面（文章/页面/留言板）启动，避免每次请求都锁定 Session 文件、增加 I/O
-	// 必须在主查询解析后（wp 钩子）判断 is_singular()，否则条件恒为 false
-	if (!session_id() && (is_singular() || is_page_template('msgboard.php'))){
-		session_start();
-	}
 }
-add_action('wp', 'session_init');
+add_action('wp', 'argon_visitor_init');
 //页面 Description Meta
 function get_seo_description(){
 	global $post;
@@ -898,6 +894,37 @@ function get_article_meta($type){
 		$res .= '<a href="' . get_author_posts_url($authordata -> ID, $authordata -> user_nicename) . '" target="_blank">' . get_the_author() . '</a>
 				</div>';
 		return $res;
+	}
+	if ($type == 'like'){
+		if (get_option('argon_enable_post_like', 'true') != 'true' || get_post_type() != 'post'){
+			return '';
+		}
+		$threshold = intval(get_option('argon_hot_like_threshold', 50));
+		ob_start();
+		argon_render_post_like(get_the_ID(), true);
+		$html = ob_get_clean();
+		$count = get_post_upvotes(get_the_ID());
+		if ($threshold > 0 && $count >= $threshold){
+			$hot_color = get_option('argon_hot_like_color', '#ff5e7e');
+			if (!preg_match('/^#[0-9a-fA-F]{6}$/', $hot_color)){
+				$hot_color = '#ff5e7e';
+			}
+			$rgb = sscanf($hot_color, '#%02x%02x%02x');
+			if (is_array($rgb) && count($rgb) == 3){
+				list($hr, $hg, $hb) = $rgb;
+			}else{
+				$hr = 255; $hg = 94; $hb = 126;
+			}
+			$style = '--hot:' . $hot_color
+				. ';--hot-soft:rgba(' . $hr . ',' . $hg . ',' . $hb . ',0.08)'
+				. ';--hot-mid:rgba(' . $hr . ',' . $hg . ',' . $hb . ',0.16)'
+				. ';--hot-line:rgba(' . $hr . ',' . $hg . ',' . $hb . ',0.30)'
+				. ';--hot-strong:rgba(' . $hr . ',' . $hg . ',' . $hb . ',0.45)'
+				. ';--hot-glow:rgba(' . $hr . ',' . $hg . ',' . $hb . ',0.45)';
+			$hot_flame = '<svg class="hot-flame" viewBox="0 0 24 24" width="1em" height="1em" aria-hidden="true" focusable="false"><path fill="currentColor" d="M13.5.67s.74 2.65.74 4.8c0 2.06-1.35 3.73-3.41 3.73-2.07 0-3.63-1.67-3.63-3.73l.03-.36C5.21 7.51 4 10.62 4 14c0 4.42 3.58 8 8 8s8-3.58 8-8C20 8.61 17.41 3.8 13.5.67z"/></svg>';
+			$html .= ' <span class="post-upvote-hot" style="' . esc_attr($style) . '" title="' . esc_attr(sprintf(__('高赞文章（点赞数 ≥ %d）', 'argon'), $threshold)) . '">' . $hot_flame . __('热门', 'argon') . '</span>';
+		}
+		return $html;
 	}
 }
 //获取文章字数统计和预计阅读时间
@@ -1521,12 +1548,12 @@ function comment_author_link_filter($html){
 add_filter('get_comment_author_link', 'comment_author_link_filter');
 //评论验证码生成 & 验证
 function get_comment_captcha_seed($refresh = false){
-	if (isset($_SESSION['captchaSeed']) && !$refresh){
-		$res = $_SESSION['captchaSeed'];
-		if (empty($_POST)){
-			session_write_close();
-		}
-		return $res;
+	// 无状态实现：验证码 seed 已随表单提交（comment_captcha_seed），无需 PHP Session。
+	// 仅用请求内 static 缓存，保证同一次渲染中多次调用得到同一 seed（题目与隐藏字段一致），
+	// 同时彻底避免 PHP 文件型 Session 的会话文件锁 / I/O 开销。
+	static $cachedSeed = null;
+	if ($cachedSeed !== null && !$refresh){
+		return $cachedSeed;
 	}
 	if (function_exists('random_int')){
 		$captchaSeed = random_int(0, 500000000);
@@ -1535,11 +1562,9 @@ function get_comment_captcha_seed($refresh = false){
 	}else{
 		$captchaSeed = mt_rand(0, 500000000); // 极旧环境最后兜底
 	}
-	$_SESSION['captchaSeed'] = $captchaSeed;
-	session_write_close();
+	$cachedSeed = $captchaSeed;
 	return $captchaSeed;
 }
-get_comment_captcha_seed();
 class captcha_calculation{ //数字验证码
 	var $captchaSeed;
 	function __construct($seed) {
@@ -1637,7 +1662,15 @@ function check_comment_captcha($comment){
 	if(current_user_can('manage_options')){
 		return $comment;
 	}
-	$captcha = new captcha_calculation(get_comment_captcha_seed());
+	// 优先使用前端随评论提交的验证码 seed：它与表单渲染题目时使用的 seed 一致，
+	// 可避免会话(seed)在“渲染表单”和“提交评论”两次请求间未保持时，正确答案被误判为错误。
+	// 该验证码本身为客户端可计算的数学题（seed 已随页面下发），使用提交 seed 不会削弱其安全性。
+	if (isset($_POST['comment_captcha_seed']) && $_POST['comment_captcha_seed'] !== ''){
+		$seed = $_POST['comment_captcha_seed'];
+	}else{
+		$seed = get_comment_captcha_seed();
+	}
+	$captcha = new captcha_calculation($seed);
 	if (!($captcha -> check($answer))){
 		wrong_captcha();
 	}
@@ -3646,6 +3679,21 @@ if (get_option('argon_enable_login_css') == 'true'){
 	add_action('login_head', 'argon_login_page_style');
 }
 
+/*强制加载 WP 区块样式：主题为经典 PHP 主题，WP 仅在有区块的页面才自动入队
+  wp-block-library，而 Pjax 只替换 #primary 不刷新 <head>，导致换页后
+  画廊(display:flex)、表格(border-collapse)等区块布局缺失。统一每页入队，
+  使其在 <head> 常驻，Pjax 下始终可用。*/
+function argon_enqueue_block_library_always(){
+	if (!wp_style_is('wp-block-library', 'registered')){
+		return;
+	}
+	wp_enqueue_style('wp-block-library');
+	if (wp_style_is('wp-block-library-theme', 'registered')){
+		wp_enqueue_style('wp-block-library-theme');
+	}
+}
+add_action('wp_enqueue_scripts', 'argon_enqueue_block_library_always', 20);
+
 /* ============================================================
    Enhanced 功能（本分支新增，区别于原版 Argon）
    仅保留「文章级点赞」（评论/说说点赞原版已有，文章级为新增）
@@ -3696,23 +3744,6 @@ function argon_mark_post_upvoted($ID){
 function is_post_upvoted($ID){
 	return in_array((int) $ID, argon_get_upvoted_post_ids(), true);
 }
-/* IP 短时锁：与 Cookie/用户 meta 形成双重校验，防止清 Cookie 后反复刷赞 */
-function argon_post_upvote_ip_locked($ID){
-	$ip = argon_get_real_client_ip();
-	if (empty($ip)){
-		return false; // 无法获取 IP 时不靠 IP 拦截，仍由 Cookie/用户 meta 兜底
-	}
-	$key = 'argon_upvote_ip_' . intval($ID) . '_' . md5($ip);
-	return (bool) get_transient($key);
-}
-function argon_post_upvote_set_ip_lock($ID){
-	$ip = argon_get_real_client_ip();
-	if (empty($ip)){
-		return;
-	}
-	$key = 'argon_upvote_ip_' . intval($ID) . '_' . md5($ip);
-	set_transient($key, time(), HOUR_IN_SECONDS);
-}
 function upvote_post(){
 	argon_verify_ajax_nonce();
 	header('Content-Type:application/json; charset=utf-8');
@@ -3724,12 +3755,11 @@ function upvote_post(){
 	if ($post == null || !in_array($post -> post_type, array('post', 'page'))){
 		exit(json_encode(array('status' => 'failed', 'msg' => __('文章不存在', 'argon'), 'total_upvote' => 0)));
 	}
-	if (is_post_upvoted($ID) || argon_post_upvote_ip_locked($ID)){
+	if (is_post_upvoted($ID)){
 		exit(json_encode(array('status' => 'failed', 'msg' => __('该文章已被赞过', 'argon'), 'total_upvote' => get_post_upvotes($ID))));
 	}
 	set_post_upvotes($ID);
 	argon_mark_post_upvoted($ID);
-	argon_post_upvote_set_ip_lock($ID);
 	exit(json_encode(array(
 		'ID' => $ID,
 		'status' => 'success',
@@ -3740,7 +3770,7 @@ function upvote_post(){
 add_action('wp_ajax_upvote_post', 'upvote_post');
 add_action('wp_ajax_nopriv_upvote_post', 'upvote_post');
 
-function argon_render_post_like($ID = 0){
+function argon_render_post_like($ID = 0, $compact = false){
 	if (get_option('argon_enable_post_like', 'true') != 'true'){
 		return;
 	}
@@ -3748,8 +3778,14 @@ function argon_render_post_like($ID = 0){
 		$ID = get_the_ID();
 	}
 	$upvoted = is_post_upvoted($ID) ? ' upvoted' : '';
-	echo '<button class="post-upvote' . $upvoted . '" type="button" data-id="' . esc_attr($ID) . '">'
-		. '<span class="btn-inner--icon"><i class="fa fa-heart"></i></span>'
-		. '<span class="btn-inner--text"><span class="post-upvote-num">' . format_number_in_kilos(get_post_upvotes($ID)) . '</span></span>'
+	$compact_class = $compact ? ' post-upvote-meta' : '';
+	$heart_outline = '<svg class="icon-heart-outline" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.27 2 8.5 2 5.41 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.08C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.41 22 8.5c0 3.77-3.4 6.86-8.55 11.53L12 21.35z"/></svg>';
+	$heart_filled = '<svg class="icon-heart-filled" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.27 2 8.5 2 5.41 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.08C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.41 22 8.5c0 3.77-3.4 6.86-8.55 11.53L12 21.35z"/></svg>';
+	echo '<button class="post-upvote' . $compact_class . $upvoted . '" type="button" data-id="' . esc_attr($ID) . '">'
+		. '<span class="btn-inner--icon">' . $heart_outline . $heart_filled . '</span>'
+		. '<span class="btn-inner--text">'
+		. '<span class="post-upvote-label"><span class="label-like">' . __('点赞', 'argon') . '</span><span class="label-liked">' . __('已赞', 'argon') . '</span></span>'
+		. ' <span class="post-upvote-num">' . format_number_in_kilos(get_post_upvotes($ID)) . '</span>'
+		. '</span>'
 		. '</button>';
 }

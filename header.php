@@ -168,10 +168,15 @@
 
 	<?php
 		$og_image = argon_get_social_image();
-		if ($og_image != ''){ ?>
-			<meta property="og:image" content="<?php echo $og_image?>" />
-			<meta name="twitter:image" content="<?php echo $og_image?>" />
-	<?php } ?>
+		if ($og_image != ''){
+			$og_size = argon_get_image_size($og_image); ?>
+			<meta property="og:image" content="<?php echo esc_url($og_image); ?>" />
+			<meta name="twitter:image" content="<?php echo esc_url($og_image); ?>" />
+			<?php if ($og_size){ ?>
+			<meta property="og:image:width" content="<?php echo (int) $og_size[0]; ?>">
+			<meta property="og:image:height" content="<?php echo (int) $og_size[1]; ?>">
+			<?php } ?>
+		<?php } ?>
 
 	<?php if (is_singular() && !is_front_page()){ ?>
 		<?php

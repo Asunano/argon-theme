@@ -1876,6 +1876,131 @@ function showPostOutdateToast(){
 	}
 }
 showPostOutdateToast();
+argonInitCommentGeo();
+
+/* 评论区 IP 归属地：浏览器优先直连 ping0.cc/geo/<IP>（返回中文地区，4 行文本：IP/位置/AS/商家），
+   带校验——若返回首行 IP 与所查 IP 不符（说明该接口只回调用者本机 IP），自动回退 ipwho.is；
+   再不行走服务端 AJAX。结果写入 localStorage（按 IP 缓存）。 */
+function argonInitCommentGeo(){
+	if (typeof argonConfig === 'undefined'){
+		return;
+	}
+	var nodes = document.querySelectorAll('.comment-geo[data-ip]');
+	nodes.forEach(function(node){
+		var ip = node.getAttribute('data-ip');
+		if (!ip){
+			return;
+		}
+		var cacheKey = 'argon_geo_' + ip;
+		try{
+			var cached = localStorage.getItem(cacheKey);
+			if (cached){
+				node.appendChild(document.createTextNode(' ' + cached));
+				node.removeAttribute('data-ip');
+				return;
+			}
+		}catch(e){}
+
+		// 第一优先：浏览器直连 ping0.cc/geo/<IP>（中文地区）
+		fetch('https://ping0.cc/geo/' + encodeURIComponent(ip))
+			.then(function(r){ return r.text(); })
+			.then(function(text){
+				var lines = text.split(/\r?\n/).map(function(s){ return s.trim(); });
+				// ping0.cc 仅支持返回调用者自身 IP；若首行 IP 与所查 IP 不符，说明它忽略了参数，弃用并回退
+				if (lines[0] && lines[0] === ip && lines[1]){
+					var display = lines[1];
+					node.appendChild(document.createTextNode(' ' + display));
+					node.removeAttribute('data-ip');
+					try{ localStorage.setItem(cacheKey, display); }catch(e){}
+				}else{
+					argonCommentGeoIpwhoFallback(node, ip, cacheKey);
+				}
+			})
+			.catch(function(){
+				argonCommentGeoIpwhoFallback(node, ip, cacheKey);
+			});
+	});
+}
+
+/* 第二优先：浏览器直连 ipwho.is（CORS *，支持任意 IP）；失败再回退服务端 AJAX */
+function argonCommentGeoIpwhoFallback(node, ip, cacheKey){
+	fetch('https://ipwho.is/' + encodeURIComponent(ip))
+		.then(function(r){ return r.json(); })
+		.then(function(data){
+			if (data && data.success === true && (data.country || data.country_code)){
+				var text = argonFormatGeoClient(data);
+				node.appendChild(document.createTextNode(' ' + text));
+				node.removeAttribute('data-ip');
+				try{ localStorage.setItem(cacheKey, text); }catch(e){}
+			}else{
+				argonCommentGeoServerFallback(node, ip, cacheKey);
+			}
+		})
+		.catch(function(){
+			argonCommentGeoServerFallback(node, ip, cacheKey);
+		});
+}
+
+/* 直连失败时的服务端兜底：调用 argon_comment_geo AJAX（服务端已按 IP 缓存，并尽量避开被限流的接口） */
+function argonCommentGeoServerFallback(node, ip, cacheKey){
+	var fd = new FormData();
+	fd.append('action', 'argon_comment_geo');
+	fd.append('argon_ajax_nonce', argonConfig.ajax_nonce);
+	fd.append('ip', ip);
+	fetch(argonConfig.wp_path + 'wp-admin/admin-ajax.php', {method: 'POST', body: fd})
+		.then(function(r){ return r.json(); })
+		.then(function(data){
+			if (data && data.display){
+				node.appendChild(document.createTextNode(' ' + data.display));
+				node.removeAttribute('data-ip');
+				try{ localStorage.setItem(cacheKey, data.display); }catch(e){}
+			}
+		})
+		.catch(function(){});
+}
+
+/* 与 PHP argon_format_geo() 对齐：中国显示「中国 · 中文省」，其他国家保留英文（country · region） */
+function argonFormatGeoClient(geo){
+	var country, region;
+	if (geo.country_code === 'CN'){
+		country = '中国';
+		region = argonCnProvinceZh(geo.region_code, geo.region);
+	}else{
+		country = geo.country || geo.country_code || '';
+		region = geo.region || '';
+	}
+	var text = country;
+	if (region){
+		text += ' · ' + region;
+	}
+	return text;
+}
+
+/* 先按 ISO 代码匹配，未命中再按英文全称匹配；都没有则退回原始英文 */
+function argonCnProvinceZh(code, fallbackName){
+	if (code && argonCnProvinceMap[code]){
+		return argonCnProvinceMap[code];
+	}
+	if (fallbackName && argonCnProvinceMap[fallbackName]){
+		return argonCnProvinceMap[fallbackName];
+	}
+	return fallbackName || '';
+}
+
+var argonCnProvinceMap = {
+	'BJ': '北京', 'TJ': '天津', 'SH': '上海', 'CQ': '重庆',
+	'HE': '河北', 'SX': '山西', 'LN': '辽宁', 'JL': '吉林', 'HL': '黑龙江',
+	'JS': '江苏', 'ZJ': '浙江', 'AH': '安徽', 'FJ': '福建', 'JX': '江西',
+	'SD': '山东', 'HA': '河南', 'HB': '湖北', 'HN': '湖南', 'GD': '广东',
+	'GX': '广西', 'HI': '海南', 'SC': '四川', 'GZ': '贵州', 'YN': '云南',
+	'XZ': '西藏', 'SN': '陕西', 'GS': '甘肃', 'QH': '青海', 'NX': '宁夏',
+	'XJ': '新疆', 'NM': '内蒙古', 'HK': '香港', 'MO': '澳门', 'TW': '台湾',
+	'Guangxi': '广西', 'Guangxi Zhuang Autonomous Region': '广西壮族自治区',
+	'Tibet': '西藏', 'Tibet Autonomous Region': '西藏自治区',
+	'Ningxia Hui Autonomous Region': '宁夏回族自治区',
+	'Xinjiang Uygur Autonomous Region': '新疆维吾尔自治区',
+	'Inner Mongolia': '内蒙古', 'Inner Mongolia Autonomous Region': '内蒙古自治区'
+};
 
 /*Zoomify*/
 function zoomifyInit(){
@@ -2170,6 +2295,7 @@ $(document).pjax("a[href]:not([no-pjax]):not(.no-pjax):not([target='_blank']):no
 	tippyInit();
 	getGithubInfoCardContent();
 	showPostOutdateToast();
+	argonInitCommentGeo();
 	calcHumanTimesOnPage();
 	foldLongComments();
 	foldLongShuoshuo();

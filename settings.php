@@ -1844,7 +1844,7 @@ window.pjaxLoaded = function(){
 						<tr>
 							<th><label><?php _e('高赞标记阈值', 'argon');?></label></th>
 							<td>
-								<input type="number" name="argon_hot_like_threshold" min="0" step="1" value="<?php echo esc_attr(get_option('argon_hot_like_threshold', 50));?>" style="width:80px;"/> <?php _e('文章点赞数达到该值（默认 50）时，在 meta 行的点赞旁显示「热门」标记；设为 0 关闭', 'argon');?>
+								<input type="number" name="argon_hot_like_threshold" min="0" step="1" value="<?php echo esc_attr(get_option('argon_hot_like_threshold', 1000));?>" style="width:80px;"/> <?php _e('文章浏览量达到该值（默认 1000）时，在 meta 行的点赞旁显示「热门」标记；设为 0 关闭', 'argon');?>
 							</td>
 						</tr>
 						<tr>
@@ -1858,6 +1858,12 @@ window.pjaxLoaded = function(){
 						<th><label><?php _e('评论者 IP 显示', 'argon');?></label></th>
 						<td>
 							<input type="checkbox" name="argon_comment_show_ip" value="true" <?php $argon_comment_show_ip = get_option('argon_comment_show_ip', 'false'); if ($argon_comment_show_ip=='true'){echo 'checked';}?>/> <?php _e('在评论区显示评论者 IP 地址（默认关闭，需下方选择 CDN 来源）', 'argon');?>
+						</td>
+					</tr>
+					<tr>
+						<th><label><?php _e('评论者归属地显示', 'argon');?></label></th>
+						<td>
+							<input type="checkbox" name="argon_comment_show_geolocation" value="true" <?php $argon_comment_show_geolocation = get_option('argon_comment_show_geolocation', 'false'); if ($argon_comment_show_geolocation=='true'){echo 'checked';}?>/> <?php _e('在评论区显示评论者 IP 归属地（国家/地区，中国省份显示中文，其他国家英文；需先开启上方 IP 显示所依赖的真实 IP 来源）', 'argon');?>
 						</td>
 					</tr>
 					<tr>
@@ -2294,6 +2300,7 @@ function argon_update_themeoptions(){
 		argon_update_option('argon_hot_like_threshold');
 		argon_update_option('argon_hot_like_color');
 		argon_update_option_checkbox('argon_comment_show_ip');
+		argon_update_option_checkbox('argon_comment_show_geolocation');
 		argon_update_option('argon_comment_ip_source');
 		argon_update_option('argon_comment_ip_custom_header');
 		argon_update_option_checkbox('argon_enable_social_meta');

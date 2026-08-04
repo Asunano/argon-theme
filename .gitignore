@@ -14,3 +14,6 @@ Thumbs.db
 desktop.ini
 package-lock.json
 composer.lock
+
+# 本地测试工具配置（Playwright CLI 等），不应提交
+playwright-cli.json

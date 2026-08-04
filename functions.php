@@ -479,7 +479,11 @@ function get_seo_description(){
 			return __("这是一个加密页面，需要密码来查看", 'argon');
 		}
 	}else{
-		return get_option('argon_seo_description');
+		$desc = get_option('argon_seo_description');
+		if ($desc == ''){
+			$desc = get_bloginfo('description');
+		}
+		return $desc;
 	}
 }
 //结构化数据 (JSON-LD)
@@ -578,9 +582,16 @@ function get_og_image(){
 	}
 	return '';
 }
-//社交分享图（SEO/OG/Twitter 共用）：优先站点 OG 封面图，其次文章特色图，再次作者/管理员头像
+// 判断头像 URL 是否来自已知失效的默认头像服务（如旧版 qiniu 头像，已 404）
+function argon_is_invalid_avatar($url){
+	return $url == '' || strpos($url, 'dn-qiniu-avatar.qbox.me') !== false || strpos($url, 'qbox.me/avatar') !== false;
+}
+//社交分享图（SEO/OG/Twitter 共用）：优先文章特色图/首图，其次站点 OG 封面图，
+//再次作者/管理员头像（过滤失效头像源），再次站点图标，最终回退到主题默认封面图，
+//确保 og:image 始终指向有效图片，避免社交平台抓取无图
 function argon_get_social_image(){
 	$cover = get_option('argon_og_cover_image', '');
+	$site_icon = get_site_icon_url(300);
 	if (is_singular() && !is_front_page()){
 		$img = get_og_image();
 		if ($img != ''){
@@ -591,8 +602,11 @@ function argon_get_social_image(){
 		}
 		global $post;
 		$avatar = get_avatar_url($post -> post_author, array('size' => 300));
-		if ($avatar){
+		if (!argon_is_invalid_avatar($avatar)){
 			return $avatar;
+		}
+		if ($site_icon != ''){
+			return $site_icon;
 		}
 	}
 	if ($cover != ''){
@@ -601,11 +615,34 @@ function argon_get_social_image(){
 	$admins = get_users(array('role' => 'administrator', 'number' => 1, 'orderby' => 'ID'));
 	if (!empty($admins)){
 		$avatar = get_avatar_url($admins[0] -> ID, array('size' => 300));
-		if ($avatar){
+		if (!argon_is_invalid_avatar($avatar)){
 			return $avatar;
 		}
 	}
-	return '';
+	if ($site_icon != ''){
+		return $site_icon;
+	}
+	return get_template_directory_uri() . '/screenshot.png';
+}
+// 取站内图片尺寸（仅本地路径，避免远程 getimagesize 的耗时与失败），
+// 用于补充 og:image:width / og:image:height，提升社交平台大图卡片渲染可靠性
+function argon_get_image_size($url){
+	if (!function_exists('getimagesize')){
+		return false;
+	}
+	$size = false;
+	if (strpos($url, home_url()) === 0){
+		$path = str_replace(home_url('/'), trailingslashit(ABSPATH), $url);
+		if (@file_exists($path)){
+			$size = @getimagesize($path);
+		}
+	}elseif (strpos($url, get_template_directory_uri()) === 0){
+		$path = str_replace(get_template_directory_uri(), get_template_directory(), $url);
+		if (@file_exists($path)){
+			$size = @getimagesize($path);
+		}
+	}
+	return $size ? $size : false;
 }
 
 //动态输出 Web App Manifest（复用站点名称、Description Meta 与主题色、站点图标）
@@ -682,7 +719,34 @@ function get_post_views($post_id){
 	}
 	return number_format_i18n($count);
 }
+// 简单防爬：识别常见爬虫/机器人 UA（及空 UA），不计入浏览量，避免爬虫虚高
+function argon_is_bot_request(){
+	if (!isset($_SERVER['HTTP_USER_AGENT']) || trim((string) $_SERVER['HTTP_USER_AGENT']) === ''){
+		return true;
+	}
+	$ua = strtolower($_SERVER['HTTP_USER_AGENT']);
+	$bots = array(
+		'bot', 'crawler', 'spider', 'slurp', 'mediapartners-google', 'bingpreview',
+		'facebookexternalhit', 'twitterbot', 'rogerbot', 'linkedinbot', 'embedly',
+		'quora link preview', 'pinterest', 'whatsapp', 'telegrambot', 'discordbot',
+		'slackbot', 'slack-imgproxy', 'yandex', 'baiduspider', 'sogou', 'exabot',
+		'applebot', 'petalbot', 'bytespider', 'semrushbot', 'ahrefsbot', 'mj12bot',
+		'dotbot', 'blexbot', 'scrapy', 'python-requests', 'go-http-client',
+		'java/', 'curl', 'wget', 'okhttp', 'postmanruntime', 'phantomjs',
+		'headlesschrome', 'archive.org_bot', 'ia_archiver', 'feed', 'rss'
+	);
+	foreach ($bots as $b){
+		if (strpos($ua, $b) !== false){
+			return true;
+		}
+	}
+	return false;
+}
 function set_post_views(){
+	// 简单防爬：已知爬虫/机器人 UA 与空 UA 不计入浏览量（降低爬虫虚高）
+	if (argon_is_bot_request()){
+		return;
+	}
 	if (!is_single() && !is_page()) {
 		return;
 	}
@@ -899,11 +963,15 @@ function get_article_meta($type){
 		if (get_option('argon_enable_post_like', 'true') != 'true' || get_post_type() != 'post'){
 			return '';
 		}
-		$threshold = intval(get_option('argon_hot_like_threshold', 50));
+		$threshold = intval(get_option('argon_hot_like_threshold', 1000));
 		ob_start();
 		argon_render_post_like(get_the_ID(), true);
 		$html = ob_get_clean();
-		$count = get_post_upvotes(get_the_ID());
+		if (function_exists('pvc_get_post_views')){
+			$count = intval(pvc_get_post_views(get_the_ID()));
+		}else{
+			$count = intval(get_post_meta(get_the_ID(), 'views', true));
+		}
 		if ($threshold > 0 && $count >= $threshold){
 			$hot_color = get_option('argon_hot_like_color', '#ff5e7e');
 			if (!preg_match('/^#[0-9a-fA-F]{6}$/', $hot_color)){
@@ -922,7 +990,7 @@ function get_article_meta($type){
 				. ';--hot-strong:rgba(' . $hr . ',' . $hg . ',' . $hb . ',0.45)'
 				. ';--hot-glow:rgba(' . $hr . ',' . $hg . ',' . $hb . ',0.45)';
 			$hot_flame = '<svg class="hot-flame" viewBox="0 0 24 24" width="1em" height="1em" aria-hidden="true" focusable="false"><path fill="currentColor" d="M13.5.67s.74 2.65.74 4.8c0 2.06-1.35 3.73-3.41 3.73-2.07 0-3.63-1.67-3.63-3.73l.03-.36C5.21 7.51 4 10.62 4 14c0 4.42 3.58 8 8 8s8-3.58 8-8C20 8.61 17.41 3.8 13.5.67z"/></svg>';
-			$html .= ' <span class="post-upvote-hot" style="' . esc_attr($style) . '" title="' . esc_attr(sprintf(__('高赞文章（点赞数 ≥ %d）', 'argon'), $threshold)) . '">' . $hot_flame . __('热门', 'argon') . '</span>';
+			$html .= ' <span class="post-upvote-hot" style="' . esc_attr($style) . '" title="' . esc_attr(sprintf(__('热门文章（浏览量 ≥ %d）', 'argon'), $threshold)) . '">' . $hot_flame . __('热门', 'argon') . '</span>';
 		}
 		return $html;
 	}
@@ -1074,17 +1142,145 @@ function argon_preprocess_comment_ip($commentdata){
 }
 add_filter('preprocess_comment', 'argon_preprocess_comment_ip');
 
-/* 渲染评论者 IP（需在设置中开启 argon_comment_show_ip；紧跟 UA 之后显示） */
+/* 渲染评论者 IP 与归属地。地区在前、原始 IP 在后；归属地需开启 argon_comment_show_geolocation。
+   服务端仅在缓存命中时直接渲染；缓存未命中时输出占位 span（带 data-ip），
+   由前端脚本 argonInitCommentGeo() 触发服务端 AJAX 兜底查询（按 IP 缓存，规避限流）。 */
 function argon_render_comment_ip($comment){
-	if (get_option('argon_comment_show_ip', 'false') != 'true'){
+	$show_ip = get_option('argon_comment_show_ip', 'false') == 'true';
+	$show_geo = get_option('argon_comment_show_geolocation', 'false') == 'true';
+	if (!$show_ip && !$show_geo){
 		return;
 	}
 	$ip = isset($comment -> comment_author_IP) ? $comment -> comment_author_IP : '';
 	if (empty($ip)){
 		return;
 	}
-	echo '<span class="comment-ip" title="' . esc_attr__('IP 地址', 'argon') . '"><i class="fa fa-map-marker" aria-hidden="true"></i> ' . esc_html($ip) . '</span>';
+	$geo_icon = '<svg viewBox="0 0 1024 1024" style="transform: scale(1.05) translateY(-1px);" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="argonGeoGlobe" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#3aa0ff"/><stop offset="100%" stop-color="#36c98e"/></linearGradient></defs><g transform="scale(42.6667)"><circle cx="12" cy="12" r="10" fill="url(#argonGeoGlobe)"/><g fill="none" stroke="#ffffff" stroke-width="1" stroke-opacity="0.85"><ellipse cx="12" cy="12" rx="4.5" ry="10"/><ellipse cx="12" cy="12" rx="9" ry="10"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="3.2" y1="7.5" x2="20.8" y2="7.5"/><line x1="3.2" y1="16.5" x2="20.8" y2="16.5"/></g></g></svg>';
+	$ip_icon  = '<svg viewBox="0 0 1024 1024" style="transform: scale(1.05) translateY(-1px);" xmlns="http://www.w3.org/2000/svg"><g transform="scale(42.6667)"><path fill="#f5574e" d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/><circle cx="12" cy="9" r="2.8" fill="#ffffff"/></g></svg>';
+	if ($show_geo){
+		$cached = argon_get_ip_geolocation_cache($ip);
+		if ($cached !== false && (!empty($cached['country']) || !empty($cached['country_code']))){
+			echo '<span class="comment-geo" title="' . esc_attr__('IP 归属地', 'argon') . '">' . $geo_icon . ' ' . esc_html(argon_format_geo($cached)) . '</span>';
+		}else{
+			echo '<span class="comment-geo" data-ip="' . esc_attr($ip) . '" title="' . esc_attr__('IP 归属地', 'argon') . '">' . $geo_icon . '</span>';
+		}
+	}
+	if ($show_ip){
+		echo '<span class="comment-ip" title="' . esc_attr__('IP 地址', 'argon') . '">' . $ip_icon . ' ' . esc_html($ip) . '</span>';
+	}
 }
+
+/* 格式化归属地文本：中国显示「中国 · 中文省名」，其他国家保留英文（country · region） */
+function argon_format_geo($geo){
+	if (empty($geo) || (empty($geo['country']) && empty($geo['country_code']))){
+		return '';
+	}
+	if (!empty($geo['country_code']) && $geo['country_code'] == 'CN'){
+		$country = '中国';
+		if (!empty($geo['region_code']) && function_exists('argon_cn_province_code_zh')){
+			$region = argon_cn_province_code_zh($geo['region_code']);
+		}else{
+			$region = !empty($geo['region']) ? argon_cn_province_zh($geo['region']) : '';
+		}
+	}else{
+		$country = !empty($geo['country']) ? $geo['country'] : $geo['country_code'];
+		$region = !empty($geo['region']) ? $geo['region'] : '';
+	}
+	$text = $country;
+	if ($region != ''){
+		$text .= ' · ' . $region;
+	}
+	return $text;
+}
+
+/* 仅读取归属地缓存（transient），不触发 API 请求；未命中返回 false */
+function argon_get_ip_geolocation_cache($ip){
+	$cached = get_transient('argon_geo_' . md5(trim($ip)));
+	return $cached === false ? false : $cached;
+}
+
+/* 服务端归属地查询（兜底用）：先读缓存，未命中则依次尝试 ip.sb、ipwho.is、ip-api.com，
+   各源返回字段结构不同，按 host 归一化为统一结构（country/country_code/region/region_code）。
+   成功缓存 30 天；失败/私有 IP 短负缓存（10 分钟），便于限流恢复后重试。 */
+function argon_get_ip_geolocation($ip){
+	$ip = trim($ip);
+	$cache_key = 'argon_geo_' . md5($ip);
+	$cached = get_transient($cache_key);
+	if ($cached !== false){
+		return $cached;
+	}
+	$result = array('failed' => true);
+	if (!filter_var($ip, FILTER_VALIDATE_IP)){
+		set_transient($cache_key, $result, 10 * MINUTE_IN_SECONDS);
+		return $result;
+	}
+	$sources = array(
+		'https://api.ip.sb/geoip/' . urlencode($ip),
+		'https://ipwho.is/' . urlencode($ip),
+		'http://ip-api.com/json/' . urlencode($ip) . '?fields=status,message,country,countryCode,region,regionName',
+	);
+	foreach ($sources as $url){
+		$response = wp_remote_get($url, array(
+			'timeout' => 5,
+			'headers' => array('User-Agent' => 'Argon-Theme'),
+		));
+		if (is_wp_error($response) || wp_remote_retrieve_response_code($response) != 200){
+			continue;
+		}
+		$body = json_decode(wp_remote_retrieve_body($response), true);
+		if (!is_array($body)){
+			continue;
+		}
+		$host = parse_url($url, PHP_URL_HOST);
+		$parsed = false;
+		if ($host == 'ip-api.com'){
+			// ip-api.com：region=代码(CA)，regionName=全称；status 必须为 success
+			if (empty($body['status']) || $body['status'] !== 'success'){
+				continue;
+			}
+			$parsed = array(
+				'country'      => isset($body['country']) ? $body['country'] : '',
+				'country_code' => isset($body['countryCode']) ? $body['countryCode'] : '',
+				'region'       => isset($body['regionName']) ? $body['regionName'] : '',
+				'region_code'  => isset($body['region']) ? $body['region'] : '',
+			);
+		}else{
+			$parsed = array(
+				'country'      => isset($body['country']) ? $body['country'] : '',
+				'country_code' => isset($body['country_code']) ? $body['country_code'] : '',
+				'region'       => isset($body['region']) ? $body['region'] : '',
+				'region_code'  => isset($body['region_code']) ? $body['region_code'] : '',
+			);
+		}
+		if (empty($parsed['country']) && empty($parsed['country_code'])){
+			continue;
+		}
+		$result = $parsed;
+		break;
+	}
+	if (!empty($result['country']) || !empty($result['country_code'])){
+		set_transient($cache_key, $result, 30 * DAY_IN_SECONDS);
+	}else{
+		set_transient($cache_key, $result, 10 * MINUTE_IN_SECONDS);
+	}
+	return $result;
+}
+
+/* 前端兜底 AJAX：客户端脚本 argonInitCommentGeo() 在直连失败/缓存未命中时调用，
+   由服务端执行 geoip 查询（已按 IP 缓存）并返回格式化中文文本。 */
+function argon_ajax_comment_geo(){
+	argon_verify_ajax_nonce();
+	if (empty($_POST['ip']) || !filter_var($_POST['ip'], FILTER_VALIDATE_IP)){
+		wp_send_json(array('failed' => true));
+	}
+	$geo = argon_get_ip_geolocation($_POST['ip']);
+	if (empty($geo['country']) && empty($geo['country_code'])){
+		wp_send_json(array('failed' => true));
+	}
+	wp_send_json(array('display' => argon_format_geo($geo)));
+}
+add_action('wp_ajax_nopriv_argon_comment_geo', 'argon_ajax_comment_geo');
+add_action('wp_ajax_argon_comment_geo', 'argon_ajax_comment_geo');
 //发送邮件
 function send_mail($to, $subject, $content){
 	wp_mail($to, $subject, $content, array('Content-Type: text/html; charset=UTF-8'));
@@ -1771,6 +1967,7 @@ add_action('wp_ajax_ajax_post_comment', 'ajax_post_comment');
 add_action('wp_ajax_nopriv_ajax_post_comment', 'ajax_post_comment');
 //评论 Markdown 解析
 require_once(get_template_directory() . '/parsedown.php');
+require_once(get_template_directory() . '/argon-geo-china-provinces.php');
 function comment_markdown_parse($comment_content){
 	//HTML 过滤
 	global $allowedtags;

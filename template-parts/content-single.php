@@ -10,7 +10,7 @@
 				echo "
 				<style>
 					body section.banner {
-						background-image: url(" . $thumbnail_url . ") !important;
+						background-image: url('" . esc_url($thumbnail_url) . "') !important;
 					}
 				</style>";
 			}

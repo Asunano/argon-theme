@@ -2398,6 +2398,7 @@ $(document).pjax("a[href]:not([no-pjax]):not(.no-pjax):not([target='_blank']):no
 	lazyloadInit();
 	liveSearchInit();
 	tableReflow();
+	runtimeInit();
 });
 
 /*Reference 跳转*/
@@ -3319,22 +3320,26 @@ function runtimeInit(){
 	var birthDay = new Date();
 	birthDay.setUTCFullYear(parseInt(parts[0], 10), (parseInt(parts[1], 10) || 1) - 1, parseInt(parts[2], 10) || 1);
 	birthDay.setUTCHours(0, 0, 0, 0);
-	var el = document.getElementById('showsectime');
-	if (!el){ return; }
+	/* Pjax 重渲染后 #showsectime 可能是新节点：旧定时器持有失效引用，innerHTML 更新不落屏。
+	   故每次 update 重新获取元素，并在每次初始化前清除旧定时器，保证幂等可重复调用。 */
+	if (window.__argonRuntimeTimer){ clearTimeout(window.__argonRuntimeTimer); }
 	function pad(n){ return n < 10 ? '0' + n : '' + n; }
 	function update(){
-		var today = new Date();
-		var timeold = today.getTime() - birthDay.getTime();
-		var msPerDay = 24 * 60 * 60 * 1000;
-		var e_daysold = timeold / msPerDay;
-		var daysold = Math.floor(e_daysold);
-		var e_hrsold = (daysold - e_daysold) * -24;
-		var hrsold = Math.floor(e_hrsold);
-		var e_minsold = (hrsold - e_hrsold) * -60;
-		var minsold = Math.floor(e_minsold);
-		var seconds = Math.floor((minsold - e_minsold) * -60);
-		el.innerHTML = "本站已安全运行" + daysold + "天" + hrsold + "小时" + minsold + "分" + pad(seconds) + "秒";
-		setTimeout(update, 1000);
+		var el = document.getElementById('showsectime');
+		if (el){
+			var today = new Date();
+			var timeold = today.getTime() - birthDay.getTime();
+			var msPerDay = 24 * 60 * 60 * 1000;
+			var e_daysold = timeold / msPerDay;
+			var daysold = Math.floor(e_daysold);
+			var e_hrsold = (daysold - e_daysold) * -24;
+			var hrsold = Math.floor(e_hrsold);
+			var e_minsold = (hrsold - e_hrsold) * -60;
+			var minsold = Math.floor(e_minsold);
+			var seconds = Math.floor((minsold - e_minsold) * -60);
+			el.innerHTML = "本站已安全运行" + daysold + "天" + hrsold + "小时" + minsold + "分" + pad(seconds) + "秒";
+		}
+		window.__argonRuntimeTimer = setTimeout(update, 1000);
 	}
 	update();
 }

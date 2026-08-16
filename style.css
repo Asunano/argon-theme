@@ -3,7 +3,7 @@ Theme Name: argon (Enhanced By Asunano)
 Author: solstice23, Enhanced By Asunano
 Author URI: https://solstice23.top/
 Description: 轻盈、简洁、美观的 Wordpress 主题 (Enhanced By Asunano)
-Version: 1.3.21
+Version: 1.3.22
 License: GNU General Public License v3.0
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 Tags: 简约, 两栏, 侧栏在左边, 浮动侧栏, 文章目录, 自适应, 夜间模式, 可自定义
@@ -2007,9 +2007,11 @@ html.filter-grayscale {
 	color: rgb(var(--themecolor-R), var(--themecolor-G), var(--themecolor-B));
 	box-shadow: 0 5px 14px rgba(var(--themecolor-R), var(--themecolor-G), var(--themecolor-B), 0.18);
 }
+/* meta 行图标统一着色：恒主题色（与点赞心形图标同一套逻辑），文字仍为灰、hover 才转主题色 */
 .post-meta-detail i {
 	margin-right: 5px;
 	font-size: 12px;
+	color: rgb(var(--themecolor-R), var(--themecolor-G), var(--themecolor-B));
 	transition: transform .22s ease, color .22s ease;
 }
 .post-meta-detail:hover i {
@@ -2137,9 +2139,11 @@ article.post-full .post-header.post-header-with-thumbnail > .post-title {
 	transform: translateY(2px);
 }
 .post-header-with-thumbnail + .post-content > .post-outdated-info {
-	/* 带缩略图时 header 的 margin-bottom 为 0（被 .post-header-with-thumbnail 重置），
-	   此处直接控制提示相对缩略图下沿的重叠量，保持约 10px。 */
-	margin-top: -10px;
+	/* 带缩略图时 .post-header-with-thumbnail 的 margin 被重置为 -30px -30px 0 -30px，
+	   即 margin-bottom 为 0，不再有 20px 可供抵消。若继续沿用 -10px，折叠结果为
+	   0 + (-10) = -10px，提示会上移压住 meta 行；这里直接给正的 10px，
+	   折叠结果 max(0, 10) = 10px，与无缩略图分支的可见间距保持一致。 */
+	margin-top: 10px;
 }
 .post-content {
 	line-height: 1.8;
@@ -2966,17 +2970,17 @@ html.darkmode .post-upvote {
 	display: inline-flex;
 	align-items: center;
 	position: relative;
-	color: #525f7f;
+	color: rgb(var(--themecolor-R), var(--themecolor-G), var(--themecolor-B));
 	transition: all 0.3s ease;
 }
-/*点赞图标（内联 SVG，避免依赖主题 FA 子集缺字）按状态切换：未赞描边灰、已赞实心主题色*/
+/*点赞图标（内联 SVG，避免依赖主题 FA 子集缺字）按状态切换：未赞描边主题色、已赞实心主题色*/
 .post-upvote .btn-inner--icon svg {
 	width: 1em;
 	height: 1em;
 }
 .post-upvote .icon-heart-outline {
 	display: inline-block;
-	color: #525f7f;
+	color: inherit;
 }
 /* 描边加粗，与 meta 行其他图标视觉粗细一致 */
 .post-upvote .icon-heart-outline path {
@@ -3117,10 +3121,14 @@ html.darkmode .post-upvote.upvoted .btn-inner--text {
 	vertical-align: middle;
 	transition: background-color .22s ease, color .22s ease, border-color .22s ease, transform .22s ease, box-shadow .22s ease !important;
 }
+/* 图标规格对齐 .post-meta-detail i：12px + 恒主题色 + hover 放大 1.18 */
 .post-upvote.post-upvote-meta .btn-inner--icon {
-	font-size: 13px !important;
-	color: #525f7f !important;
-	transition: transform .22s ease;
+	font-size: 12px !important;
+	color: rgb(var(--themecolor-R), var(--themecolor-G), var(--themecolor-B)) !important;
+	transition: transform .22s ease, color .22s ease;
+}
+.post-upvote.post-upvote-meta:hover .btn-inner--icon {
+	transform: scale(1.18);
 }
 .post-upvote.post-upvote-meta .btn-inner--text {
 	font-size: 13px !important;
@@ -3176,7 +3184,7 @@ html.darkmode .post-upvote.post-upvote-meta {
 	color: #c7cde0 !important;
 }
 html.darkmode .post-upvote.post-upvote-meta .btn-inner--icon {
-	color: #c7cde0 !important;
+	color: rgb(var(--themecolor-R), var(--themecolor-G), var(--themecolor-B)) !important;
 }
 html.darkmode .post-upvote.post-upvote-meta.upvoted {
 	background-color: rgba(255, 255, 255, 0.07) !important;
@@ -3222,7 +3230,7 @@ html.darkmode .post-upvote.post-upvote-meta {
 }
 .post-header-text-container .post-meta-detail i,
 .post-header-text-container .post-upvote.post-upvote-meta .btn-inner--icon {
-	color: #fff;
+	color: #fff !important;
 }
 /* banner 之上的 meta 选中态：半透明珊瑚底 + 白字，区别于未选中态且清晰可读 */
 .post-header-text-container .post-upvote.post-upvote-meta.upvoted {
@@ -3377,11 +3385,49 @@ html.darkmode .post-upvote.post-upvote-meta {
 	font-size: 22px;
 	font-weight: 700;
 	letter-spacing: 1px;
+	white-space: nowrap;
 }
 html.darkmode .argon-like-toast {
 	background: rgba(42, 42, 48, 0.97);
 	color: #ff8fa3;
 	box-shadow: 0 18px 60px rgba(0, 0, 0, 0.5);
+}
+/* 移动端：整体等比缩小（fixed + left:50% 时可用宽度仅 50vw，原尺寸会挤压换行）
+   --fx-scale 同时驱动火箭 / 光晕 / 烟花粒子的尺寸与迸发距离，保证全套动画同比缩放 */
+@media (max-width: 600px) {
+	:root {
+		--fx-scale: 0.7;
+	}
+	.argon-like-toast {
+		gap: 11px;
+		padding: 22px 32px;
+		border-radius: 18px;
+	}
+	.argon-like-toast .toast-heart svg {
+		width: 46px;
+		height: 46px;
+	}
+	.argon-like-toast .toast-text {
+		font-size: 16px;
+	}
+}
+@media (max-width: 380px) {
+	:root {
+		--fx-scale: 0.58;
+	}
+	.argon-like-toast {
+		gap: 9px;
+		padding: 18px 24px;
+		border-radius: 16px;
+	}
+	.argon-like-toast .toast-heart svg {
+		width: 38px;
+		height: 38px;
+	}
+	.argon-like-toast .toast-text {
+		font-size: 14px;
+		letter-spacing: 0.5px;
+	}
 }
 @keyframes argon-like-toast {
 	0%   { opacity: 0; transform: translate(-50%, -50%) scale(.5); }
@@ -3400,19 +3446,19 @@ html.darkmode .argon-like-toast {
 	80%  { transform: scale(1); }
 	100% { transform: scale(1); }
 }
-/*烟花发射：从底部升空到屏幕中央*/
+/*烟花发射：从底部升空到屏幕中央（尺寸统一乘以 --fx-scale，移动端整体缩小）*/
 .argon-like-rocket {
 	position: fixed;
 	left: 50%;
 	bottom: -8px;
 	z-index: 9997;
-	width: 10px;
-	height: 10px;
-	margin-left: -5px;
+	width: calc(10px * var(--fx-scale, 1));
+	height: calc(10px * var(--fx-scale, 1));
+	margin-left: calc(-5px * var(--fx-scale, 1));
 	border-radius: 50% 50% 50% 0;
 	transform: rotate(45deg);
 	background: linear-gradient(135deg, #ffd54f, #ff6b81);
-	box-shadow: 0 0 14px 5px rgba(255, 107, 129, 0.75);
+	box-shadow: 0 0 calc(14px * var(--fx-scale, 1)) calc(5px * var(--fx-scale, 1)) rgba(255, 107, 129, 0.75);
 	pointer-events: none;
 	animation: argon-rocket-rise 0.36s cubic-bezier(.4, 0, .7, 1) forwards;
 }
@@ -3427,9 +3473,9 @@ html.darkmode .argon-like-toast {
 	left: 50%;
 	top: 50%;
 	z-index: 9997;
-	width: 24px;
-	height: 24px;
-	margin: -12px 0 0 -12px;
+	width: calc(24px * var(--fx-scale, 1));
+	height: calc(24px * var(--fx-scale, 1));
+	margin: calc(-12px * var(--fx-scale, 1)) 0 0 calc(-12px * var(--fx-scale, 1));
 	border-radius: 50%;
 	background: radial-gradient(circle, rgba(255,221,128,.95) 0%, rgba(255,107,129,.55) 42%, rgba(255,59,92,0) 72%);
 	pointer-events: none;
@@ -3446,13 +3492,13 @@ html.darkmode .argon-like-toast {
 	left: 50%;
 	top: 50%;
 	z-index: 9998;
-	width: var(--s, 10px);
-	height: var(--s, 10px);
-	margin-left: calc(var(--s, 10px) / -2);
-	margin-top: calc(var(--s, 10px) / -2);
+	width: calc(var(--s, 10px) * var(--fx-scale, 1));
+	height: calc(var(--s, 10px) * var(--fx-scale, 1));
+	margin-left: calc(var(--s, 10px) * var(--fx-scale, 1) / -2);
+	margin-top: calc(var(--s, 10px) * var(--fx-scale, 1) / -2);
 	border-radius: 50%;
 	background: var(--c, #ff3b5c);
-	box-shadow: 0 0 10px var(--c, #ff3b5c);
+	box-shadow: 0 0 calc(10px * var(--fx-scale, 1)) var(--c, #ff3b5c);
 	pointer-events: none;
 	opacity: 0;
 	animation: argon-spark 1.2s ease-out forwards;
@@ -3461,10 +3507,10 @@ html.darkmode .argon-like-toast {
 @keyframes argon-spark {
 	0%   { opacity: 1; transform: translate(0, 0) scale(1); }
 	70%  { opacity: 1; }
-	100% { opacity: 0; transform: translate(var(--tx, 0), var(--ty, 0)) scale(.25); }
+	100% { opacity: 0; transform: translate(calc(var(--tx, 0px) * var(--fx-scale, 1)), calc(var(--ty, 0px) * var(--fx-scale, 1))) scale(.25); }
 }
 html.darkmode .argon-like-spark {
-	box-shadow: 0 0 12px var(--c, #ff8fa3);
+	box-shadow: 0 0 calc(12px * var(--fx-scale, 1)) var(--c, #ff8fa3);
 }
 /*评论内容*/
 .comment-item-text .comment-sticker {
@@ -5339,6 +5385,7 @@ pre.hljs-codeblock {
 	overflow: visible;
 	position: relative;
 	tab-size: 4;
+	margin: 15px 0;
 }
 pre.hljs-codeblock:before {
 	content: "";
@@ -5359,8 +5406,7 @@ code[hljs-codeblock-inner] {
 	padding: 22px 20px !important;
 	border-radius: 8px;
 	box-shadow: rgba(0, 0, 0, 0.2) 0px 5px 20px;
-	margin-top: 15px !important;
-	margin-bottom: 15px !important;
+	margin: 0 !important;
 	padding-top: 55px !important;
 	display: block;
 }
@@ -6450,3 +6496,179 @@ a[data-fancybox].argon-lightbox-img img,
 a[data-fancybox].comment-image img {
 	cursor: zoom-in;
 }
+
+/* 友链自助提交/修改表单（Enhanced） */
+/* 友链自主申请按钮 + 弹窗（仿赞赏 / 评论区风格） */
+.friendlink-apply{position:relative;display:block;text-align:center;margin:30px 0 12px;}
+.friendlink-apply-btn{margin:0 auto;border-radius:100px;padding:10px 26px;font-size:16px;font-weight:500;display:inline-flex;align-items:center;justify-content:center;gap:10px;border:1.5px solid #e8e8e8!important;color:#555;background-color:#fff;transition:all .25s ease;cursor:pointer;outline:none;-webkit-tap-highlight-color:transparent;}
+.friendlink-apply-btn .btn-inner--icon{font-size:18px;line-height:1;display:inline-flex;align-items:center;color:#fa7268;transition:all .3s ease;}
+.friendlink-apply-btn .btn-inner--text{font-size:15px;font-weight:600;}
+.friendlink-apply-btn:hover{border-color:#ff6b81!important;color:#fff!important;background:linear-gradient(135deg,#ff6b81 0%,#ee5a6f 100%)!important;transform:translateY(-2px);box-shadow:0 3px 12px rgba(255,107,129,.3);}
+.friendlink-apply-btn:hover .btn-inner--icon,.friendlink-apply-btn:hover .btn-inner--text{color:#fff!important;}
+.friendlink-apply-btn:hover .btn-inner--icon{transform:scale(1.18);}
+.friendlink-apply-btn:active{transform:translateY(0);box-shadow:0 1px 4px rgba(255,107,129,.12);}
+/* 遮罩：背景模糊 + 暗化，点击关闭 */
+.friendlink-apply-backdrop{position:fixed;inset:0;z-index:1075;background:rgba(15,23,42,.42);opacity:0;visibility:hidden;pointer-events:none;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);transition:opacity .26s ease, visibility .26s;}
+.friendlink-apply-backdrop.open{opacity:1;visibility:visible;pointer-events:auto;}
+/* 弹窗：居中显示（固定定位 + translate(-50%,-50%) 双轴居中），左右分栏：左舞台 / 右表单 */
+.friendlink-apply-modal{display:flex;position:fixed;left:50%;top:50%;z-index:1080;width:min(900px,94vw);max-height:min(90vh,720px);overflow:hidden;animation:none;opacity:0;visibility:hidden;pointer-events:none;transform:translate(-50%,-50%) scale(.96);transform-origin:center;transition:opacity .3s ease, transform .38s cubic-bezier(.16,1,.3,1), visibility .3s;background-color:var(--color-widgets)!important;border:none;border-radius:var(--card-radius);box-shadow:0 30px 80px rgba(15,23,42,.35), 0 8px 24px rgba(15,23,42,.16);}
+.friendlink-apply-modal.open{opacity:1;visibility:visible;pointer-events:auto;transform:translate(-50%,-50%) scale(1);}
+
+/* 左：连接舞台（渐变 + 流动连线 + 破框预览卡） */
+.friendlink-apply-stage{flex:0 0 40%;display:flex;flex-direction:column;position:relative;overflow:hidden;padding:26px 24px;color:#fff;background:var(--themecolor-gradient,linear-gradient(135deg,#ff6b81,#ee5a6f));border-top-left-radius:var(--card-radius);border-bottom-left-radius:var(--card-radius);transform:translateZ(0);}
+.friendlink-apply-stage:before{content:"";position:absolute;top:-50px;right:-50px;width:180px;height:180px;border-radius:50%;background:rgba(255,255,255,.14);filter:blur(14px);pointer-events:none;animation:fl-glow 8s ease-in-out infinite;}
+.friendlink-apply-stage:after{content:"";position:absolute;bottom:-60px;left:-30px;width:160px;height:160px;border-radius:50%;background:rgba(255,255,255,.08);filter:blur(16px);pointer-events:none;}
+@keyframes fl-glow{0%,100%{transform:scale(1);opacity:.9;}50%{transform:scale(1.15);opacity:1;}}
+.friendlink-apply-stage > *{position:relative;z-index:1;}
+.fl-stage-kicker{margin:0;font-size:11px;font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:rgba(255,255,255,.7);}
+.fl-stage-title{margin:6px 0 6px;font-size:28px;font-weight:900;line-height:1.25;color:#fff;text-shadow:0 0 18px rgba(255,255,255,.5), 0 2px 8px rgba(0,0,0,.42), 0 1px 2px rgba(0,0,0,.28);animation:fl-stage-in .45s ease both;}
+/* 预览字段的「模糊渐变」入场：仅在字段出现/消失新数据时播放一次 */
+.fl-blur-in{animation:fl-blur-in .48s ease both;}
+@keyframes fl-blur-in{from{opacity:0;filter:blur(12px);}to{opacity:1;filter:blur(0);}}
+@keyframes fl-stage-in{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}
+.fl-stage-flow{flex:0 0 auto;display:flex;align-items:center;justify-content:center;margin:6px 0;}
+.fl-stage-flow svg{width:100%;max-width:240px;height:auto;}
+.fl-node-core,.fl-node-core2{transform-box:fill-box;transform-origin:center;animation:fl-core 2.4s ease-in-out infinite;}
+.fl-node-core2{animation-delay:.8s;}
+@keyframes fl-core{0%,100%{transform:scale(1);}50%{transform:scale(1.25);}}
+/* 节点声纳环：由核心向外扩散并淡出，强化“连接中”的脉冲感 */
+.fl-node-ring,.fl-node-ring2{transform-box:fill-box;transform-origin:center;animation:fl-ring 2.6s ease-out infinite;}
+.fl-node-ring2{animation-delay:1.3s;}
+@keyframes fl-ring{0%{transform:scale(.55);opacity:0;}28%{opacity:.6;}100%{transform:scale(2.4);opacity:0;}}
+/* 流动虚线：连接“正在建立” */
+.fl-link-flow{stroke-dasharray:2 14;animation:fl-flow 1.4s linear infinite;transform-box:fill-box;}
+@keyframes fl-flow{to{stroke-dashoffset:-32;}}
+/* 连接高亮脉冲：周期性提亮整条连线，强调“已连通” */
+.fl-link-glow{opacity:0;animation:fl-link-glow 2.6s ease-in-out infinite;transform-box:fill-box;}
+@keyframes fl-link-glow{0%,100%{opacity:0;}50%{opacity:.85;}}
+/* 正向数据包：本站 → 你的站（连接握手） */
+.fl-packet{transform-box:fill-box;transform-origin:center;animation:fl-packet 2.2s ease-in-out infinite;}
+@keyframes fl-packet{0%{transform:translateX(44px);opacity:0;}12%{opacity:1;}50%{transform:translateX(120px);opacity:1;}88%{opacity:1;}100%{transform:translateX(196px);opacity:0;}}
+/* 反向数据包：你的站 → 本站（与正向错相位，形成双向握手） */
+.fl-packet2{transform-box:fill-box;transform-origin:center;animation:fl-packet2 2.2s ease-in-out infinite;animation-delay:1.1s;}
+@keyframes fl-packet2{0%{transform:translateX(196px);opacity:0;}12%{opacity:.85;}50%{transform:translateX(120px);opacity:.85;}88%{opacity:.85;}100%{transform:translateX(44px);opacity:0;}}
+/* 端点柔光晕：两端交替呼吸，暗示“各自在线” */
+.fl-node-halo,.fl-node-halo2{transform-box:fill-box;transform-origin:center;animation:fl-halo 2.8s ease-in-out infinite;}
+.fl-node-halo2{animation-delay:1.4s;}
+@keyframes fl-halo{0%,100%{opacity:.28;transform:scale(.85);}50%{opacity:.6;transform:scale(1.08);}}
+/* 中点脉冲：两端数据在中途“会合”的节拍点 */
+.fl-center-pulse{transform-box:fill-box;transform-origin:center;animation:fl-center-pulse 2.2s ease-in-out infinite;}
+@keyframes fl-center-pulse{0%,100%{transform:scale(.5);opacity:.35;}50%{transform:scale(1.25);opacity:.95;}}
+/* 双向粒子流：正/反各 2 颗小点，慢速且相位均匀铺开，保持稀疏不杂乱 */
+.fl-particle{transform-box:fill-box;transform-origin:center;opacity:0;}
+.fl-particle.pf1,.fl-particle.pf2{animation:fl-pf 3.8s linear infinite;}
+.fl-particle.pr1,.fl-particle.pr2{animation:fl-pr 3.8s linear infinite;}
+.fl-particle.pf1{animation-delay:0s;}
+.fl-particle.pf2{animation-delay:1.9s;}
+.fl-particle.pr1{animation-delay:.95s;}
+.fl-particle.pr2{animation-delay:2.85s;}
+@keyframes fl-pf{0%{transform:translateX(44px);opacity:0;}10%{opacity:.9;}50%{opacity:.9;}90%{opacity:.9;}100%{transform:translateX(196px);opacity:0;}}
+@keyframes fl-pr{0%{transform:translateX(196px);opacity:0;}10%{opacity:.65;}50%{opacity:.65;}90%{opacity:.65;}100%{transform:translateX(44px);opacity:0;}}
+/* 刻度标记：随连线整体轻微呼吸，避免过于静态 */
+.fl-ticks{animation:fl-ticks 2.8s ease-in-out infinite;}
+@keyframes fl-ticks{0%,100%{opacity:.5;}50%{opacity:1;}}
+/* 气泡引线：虚线向下流动，把气泡与连线串联 */
+.fl-drop{animation:fl-drop 1.6s linear infinite;}
+.fl-drop2{animation-delay:.8s;}
+@keyframes fl-drop{to{stroke-dashoffset:-9;}}
+/* 气泡描边与外光环：呼吸扩散，突出焦点 */
+.fl-bubble-edge{transform-box:fill-box;transform-origin:center;animation:fl-bubble-edge 3s ease-in-out infinite;}
+.fl-bubble-edge2{animation-delay:1.5s;}
+@keyframes fl-bubble-edge{0%,100%{opacity:.5;}50%{opacity:1;}}
+.fl-bubble-ring{transform-box:fill-box;transform-origin:center;animation:fl-bubble-ring 3.2s ease-out infinite;}
+.fl-bubble-ring2{animation-delay:1.6s;}
+@keyframes fl-bubble-ring{0%{transform:scale(.92);opacity:0;}30%{opacity:.55;}100%{transform:scale(1.28);opacity:0;}}
+/* 卫星点：绕气泡缓慢公转（以气泡圆心为轴） */
+.fl-orbit{transform-box:view-box;transform-origin:44px 30px;animation:fl-orbit 9s linear infinite;}
+.fl-orbit2{transform-origin:196px 30px;animation-direction:reverse;}
+@keyframes fl-orbit{to{transform:rotate(360deg);}}
+/* 站点图气泡（装饰）：漂浮在两端上方，点缀“本站 / 你的站” */
+.fl-site-bubble,.fl-site-bubble2{transform-box:fill-box;transform-origin:center;animation:fl-bubble 3s ease-in-out infinite;}
+.fl-site-bubble2{animation-delay:1.5s;}
+@keyframes fl-bubble{0%,100%{transform:translateY(0);opacity:.9;}50%{transform:translateY(-4px);opacity:1;}}
+/* 实时预览卡：与主题友链墙同款结构（friend-link-container / friend-link-content / friend-link-avatar 等） */
+.fl-preview{position:relative;display:flex;flex-direction:row;align-items:stretch;background:var(--color-widgets);border:1px solid var(--color-border);border-radius:var(--card-radius);box-shadow:0 10px 30px rgba(15,23,42,.18),0 2px 8px rgba(15,23,42,.1);overflow:hidden;margin-top:auto;margin-bottom:22px;height:130px;max-width:100%;animation:fl-card-in .55s cubic-bezier(.16,1,.3,1) both;}
+@keyframes fl-card-in{from{opacity:0;transform:translateY(12px);}to{opacity:1;transform:translateY(0);}}
+/* 注：预览头像被主题 auto-lazyload 命中（article img.lazyload[src^="data:"] → height:500px/width:100%），
+   用 !important 压制其覆盖；JS 还会剥离 lazyload 类以彻底禁用 spinner。空态保留 bg-gradient-secondary 渐变。 */
+.fl-preview .friend-link-avatar{width:32%!important;flex:0 0 32%!important;min-width:90px;max-width:120px;height:100%!important;min-height:96px;max-height:none!important;object-fit:cover;background-color:#e9ecef;background-size:cover;background-position:center;pointer-events:auto!important;}
+.fl-preview .friend-link-content{flex:1;min-width:0;padding:14px 20px 30px;position:relative;display:flex;flex-direction:column;justify-content:flex-start;}
+.fl-preview .friend-link-title{font-weight:800;font-size:17px;line-height:1.35;margin-bottom:5px;white-space:normal;overflow:visible;overflow-wrap:anywhere;word-break:break-word;}
+.fl-preview .friend-link-title a{color:var(--themecolor);text-decoration:none;}
+.fl-preview .friend-link-title a:hover{text-decoration:underline;}
+.fl-preview .friend-link-description{font-size:13px;color:#64748b;line-height:1.5;overflow-wrap:anywhere;word-break:break-word;padding-right:22px;}
+/* 箭头固定在卡片右下角，描述再长也不偏移 */
+.fl-preview .friend-link-links{position:absolute;right:16px;bottom:10px;margin:0;text-align:right;}
+.fl-preview .friend-link-links a{color:var(--themecolor);font-size:18px;}
+.fl-stage-caption{margin:4px 0 0;text-align:center;font-size:11px;font-weight:500;opacity:.82;line-height:1.4;display:flex;align-items:center;justify-content:center;gap:6px;}
+/* 空态：极轻微降透明度，标识为占位预览（卡片结构与真实友链墙一致） */
+.fl-preview.is-empty{opacity:.95;}
+/* 表单区错落淡入，动效更优雅 */
+.friendlink-apply-form{animation:fl-form-in .45s ease both;}
+@keyframes fl-form-in{from{opacity:0;transform:translateX(10px);}to{opacity:1;transform:translateX(0);}}
+/* 提交按钮：中间凸起 + 弹性动效（直接使用主题渐变，不缩放背景，避免常态发白） */
+.fl-submit{position:relative;width:100%;margin-top:auto;border:none;border-radius:var(--card-radius);padding:12px;font-size:16px;font-weight:700;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;background:var(--themecolor-gradient,linear-gradient(135deg,#ff6b81,#ee5a6f));box-shadow:0 8px 18px rgba(var(--themecolor-rgbstr),.30);transition:transform .3s cubic-bezier(.34,1.56,.64,1),box-shadow .3s ease,filter .3s ease;}
+.fl-submit:hover{transform:translateY(-2px) scale(1.025);box-shadow:0 14px 30px rgba(var(--themecolor-rgbstr),.42);filter:saturate(1.12);}
+.fl-submit:active{transform:translateY(0) scale(.97);box-shadow:0 5px 12px rgba(var(--themecolor-rgbstr),.32),inset 0 2px 5px rgba(0,0,0,.18);}
+.fl-submit .arrow{transition:transform .25s cubic-bezier(.34,1.56,.64,1);}
+.fl-submit:hover .arrow{transform:translateX(5px);}
+/* 表单字段错落淡入 */
+.friendlink-apply-form .fl-grid .fl-field{animation:fl-field-in .5s cubic-bezier(.16,1,.3,1) both;}
+.friendlink-apply-form .fl-grid .fl-field:nth-child(1){animation-delay:.04s;}
+.friendlink-apply-form .fl-grid .fl-field:nth-child(2){animation-delay:.10s;}
+.friendlink-apply-form .fl-grid .fl-field:nth-child(3){animation-delay:.16s;}
+.friendlink-apply-form .fl-grid .fl-field:nth-child(4){animation-delay:.22s;}
+.friendlink-apply-form .fl-grid .fl-field:nth-child(5){animation-delay:.28s;}
+@keyframes fl-field-in{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:translateY(0);}}
+/* 无障碍：尊重用户的减弱动效偏好 */
+@media (prefers-reduced-motion: reduce){
+	.friendlink-apply-modal,.friendlink-apply-stage:before,.fl-stage-title,.fl-preview,.friendlink-apply-form,.fl-node-core,.fl-node-core2,.fl-node-ring,.fl-node-ring2,.fl-link-flow,.fl-link-glow,.fl-packet,.fl-packet2,.fl-node-halo,.fl-node-halo2,.fl-center-pulse,.fl-particle,.fl-ticks,.fl-drop,.fl-bubble-edge,.fl-bubble-ring,.fl-orbit,.fl-site-bubble,.fl-site-bubble2,.fl-blur-in{animation:none!important;transition:none!important;}
+	.fl-particle,.fl-bubble-ring{display:none!important;}
+}
+
+/* 右：表单 */
+.friendlink-apply-form{flex:1;display:flex;flex-direction:column;min-width:0;overflow:hidden;border-top-right-radius:var(--card-radius);border-bottom-right-radius:var(--card-radius);transform:translateZ(0);}
+.fl-form-head{display:flex;align-items:center;justify-content:space-between;padding:18px 22px 12px;}
+.fl-form-title{display:flex;align-items:center;gap:8px;margin:0;font-size:18px;font-weight:700;color:var(--color-text-deeper);}
+.fl-form-title svg{color:var(--themecolor);}
+.fl-close{width:34px;height:34px;border:none;background:transparent;border-radius:9px;display:flex;align-items:center;justify-content:center;color:#94a3b8;cursor:pointer;transition:background .15s,color .15s;}
+.fl-close:hover{background:rgba(0,0,0,.06);color:#475569;}
+.fl-form-body{overflow-y:auto;padding:4px 22px 22px;flex:1;display:flex;flex-direction:column;}
+.friendlink-apply-form #friendlink_apply_form{flex:1;display:flex;flex-direction:column;}
+.fl-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+.fl-field{margin:0;}
+.fl-field-full{grid-column:1 / -1;}
+/* 输入框：标题在上 + 圆角输入框（紧凑、不浮夸） */
+.fl-label{display:block;font-weight:600;font-size:13px;margin-bottom:6px;color:var(--color-text-deeper);}
+.fl-label .req{color:var(--themecolor);}
+.fl-label .opt{color:#94a3b8;font-weight:400;}
+.friendlink-apply-form .fl-input{position:relative;}
+.friendlink-apply-form .form-control{margin-top:0;width:100%;border:1.5px solid var(--color-border);border-radius:var(--card-radius);background-color:#fff;color:var(--color-text-deeper);padding:11px 13px;transition:border-color .2s ease, box-shadow .2s ease, background-color .2s ease;}
+.friendlink-apply-form textarea.form-control{resize:none;min-height:84px;padding:11px 13px;line-height:1.5;}
+.friendlink-apply-form .form-control:hover{border-color:rgba(var(--themecolor-rgbstr),.45);}
+.friendlink-apply-form .form-control:focus{outline:none;border-color:var(--themecolor);box-shadow:0 0 0 3px rgba(var(--themecolor-rgbstr),.16);background-color:#fff;}
+.fl-msg{min-height:1em;margin:8px 0 12px;font-size:13px;}
+.fl-msg.error{color:#c0392b;}
+.fl-msg.ok{color:#1e8e4b;}
+/* （.fl-submit 统一定义见上方“提交按钮”块，避免重复覆盖） */
+
+/* 窄屏：堆叠为单列（梯度舞台转顶部条） */
+@media (max-width:680px){
+	.friendlink-apply-modal{flex-direction:column;width:94vw;max-height:90vh;}
+	.friendlink-apply-stage{flex:none;padding:18px 18px 16px;}
+	.friendlink-apply-stage:before{display:none;}
+	.fl-stage-flow{display:none;}
+	.fl-preview{margin-top:0;margin-bottom:0;}
+	.fl-stage-caption{display:none;}
+	.friendlink-apply-form{overflow-y:auto;}
+	.fl-form-body{overflow:visible;}
+	.fl-grid{grid-template-columns:1fr;}
+}
+
+/* 提交成功：按钮弹跳，复用主题 argon-heart-pop */
+.friendlink-apply-btn.just-submitted{animation:argon-heart-pop .5s cubic-bezier(.22,1.4,.36,1);}
+html.darkmode .friendlink-apply-btn{border-color:rgba(255,255,255,.15)!important;color:#ccc;background-color:rgba(255,255,255,.05);}
+html.darkmode .friendlink-apply-btn .btn-inner--icon{color:#f0a09a;}
+html.darkmode .friendlink-apply-btn:hover{border-color:#ff6b81!important;color:#fff!important;background:linear-gradient(135deg,#ff6b81 0%,#ee5a6f 100%)!important;}
+html.darkmode .friendlink-apply-modal{box-shadow:0 30px 80px rgba(0,0,0,.6), 0 8px 24px rgba(0,0,0,.4);}
+html.darkmode .fl-close:hover{background:rgba(255,255,255,.1);color:#cbd5e1;}

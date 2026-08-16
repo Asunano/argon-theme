@@ -71,6 +71,16 @@
 	}
 ?>
 <head>
+	<?php /* 编码/视口声明必须紧跟 <head>：HTML 规范的编码预扫描只读取文档最前 1024 字节，
+	         若 charset 落在其后，社交平台抓取器（QQ / 微信等，多不采信 HTTP 头的 charset）
+	         会回退到本地默认编码（中文环境常为 GBK），使 og:title / og:description 的中文
+	         变成乱码，卡片因而无法识别。故此处置于所有内联 style/script 之前。 */ ?>
+	<meta charset="<?php bloginfo( 'charset' ); ?>">
+	<?php if (get_option('argon_enable_mobile_scale') != 'true'){ ?>
+	<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+	<?php }else{ ?>
+	<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5">
+	<?php } ?>
 	<?php /* 字体域名资源提示：加速异步 googlefont 的 DNS/连接建立，减少 FOUT 时长（不影响渲染阻塞） */ ?>
 	<link rel="preconnect" href="https://fonts.googleapis.com">
 	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -131,12 +141,6 @@
 		}catch(e){}
 	})();
 	</script>
-	<?php } ?>
-	<meta charset="<?php bloginfo( 'charset' ); ?>">
-	<?php if (get_option('argon_enable_mobile_scale') != 'true'){ ?>
-		<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-	<?php }else{ ?>
-		<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5">
 	<?php } ?>
 	<!-- SEO / OG / Twitter -->
 	<?php if (get_option('argon_enable_social_meta', 'true') != 'false'){ ?>

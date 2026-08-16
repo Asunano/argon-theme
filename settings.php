@@ -1815,7 +1815,7 @@ window.pjaxLoaded = function(){
 								<option value="false" <?php if ($argon_hide_footer_author=='false'){echo 'selected';} ?>>Theme Argon By solstice23 | Enhanced By Asunano</option>
 								<option value="true" <?php if ($argon_hide_footer_author=='true'){echo 'selected';} ?>>Theme Argon | Enhanced By Asunano</option>
 							</select>
-							<p class="description"><?php _e('页脚署名格式：可显示/隐藏原作者 “By solstice23”，右侧分支署名 “Enhanced By Asunano” 始终带竖线分隔显示。', 'argon');?></p>
+							<p class="description"></p>
 						</td>
 					</tr>
 				<tr><th class="subtitle"><h2>Enhanced</h2></th></tr>
@@ -1920,6 +1920,26 @@ window.pjaxLoaded = function(){
 							<label style="margin-top:8px;display:inline-block;"><?php _e('建站日期（年-月-日）：', 'argon');?></label>
 							<input type="text" name="argon_runtime_start_date" class="regular-text" style="margin-top:6px;" value="<?php echo esc_attr(get_option('argon_runtime_start_date', '2020-10-31'));?>" placeholder="2020-10-31">
 							<p class="description"><?php _e('用于计算运行时长，格式为 年-月-日。', 'argon');?></p>
+						</td>
+					</tr>
+					<tr><th class="subtitle"><h3><?php _e('友链自助提交', 'argon');?></h3></th></tr>
+					<tr>
+						<th><label><?php _e('启用友链自助提交', 'argon');?></label></th>
+						<td>
+							<input type="checkbox" name="argon_fl_enable" value="true" <?php $argon_fl_enable = get_option('argon_fl_enable', 'false'); if ($argon_fl_enable=='true'){echo 'checked';}?>/> <?php _e('在 [friendlinks] 友链界面显示“申请友链”按钮，访客填写后作为待审评论提交（无需验证码，邮箱必填），管理员在后台评论中审核通过即转为标准友链（可在 link-manager 管理），并向申请者邮箱发送可管理链接', 'argon');?>
+						</td>
+					</tr>
+					<tr>
+						<th><label><?php _e('审核通知邮箱', 'argon');?></label></th>
+						<td>
+							<input type="text" name="argon_fl_notify_email" class="regular-text" value="<?php echo esc_attr(get_option('argon_fl_notify_email', '')); ?>" placeholder="<?php echo esc_attr(get_option('admin_email')); ?>">
+							<p class="description"><?php _e('有新友链申请时通知到此邮箱，留空则通知管理员邮箱', 'argon');?></p>
+						</td>
+					</tr>
+					<tr>
+						<th><label><?php _e('审核通过发送管理链接', 'argon');?></label></th>
+						<td>
+							<input type="checkbox" name="argon_fl_send_edit_link" value="true" <?php $argon_fl_send_edit_link = get_option('argon_fl_send_edit_link', 'true'); if ($argon_fl_send_edit_link=='true'){echo 'checked';}?>/> <?php _e('友链审核通过后，向申请者邮箱发送一条带 token 的管理链接，访客可凭此在前端修改友链信息（名称/链接/描述/站点图），无需登录', 'argon');?>
 						</td>
 					</tr>
 				</tbody>
@@ -2311,6 +2331,10 @@ function argon_update_themeoptions(){
 		argon_update_option_checkbox('argon_enable_runtime');
 		argon_update_option('argon_runtime_start_date');
 		argon_update_option_checkbox('argon_enable_preloader');
+		// 友链自助提交
+		argon_update_option_checkbox('argon_fl_enable');
+		argon_update_option_checkbox('argon_fl_send_edit_link');
+		argon_update_option('argon_fl_notify_email');
 		argon_update_option('argon_darkmode_autoswitch');
 		argon_update_option('argon_enable_amoled_dark');
 		argon_update_option('argon_outdated_info_time_type');

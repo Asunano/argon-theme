@@ -3403,6 +3403,10 @@ function shortcode_friend_link($attr,$content=""){
 			</div>";
 	}
 	$out .= "</div></div>";
+	// 申请友链按钮（启用时）
+		if (get_option('argon_fl_enable', 'false') == 'true'){
+			$out .= argon_fl_apply_button_html($style);
+		}
 	return $out;
 }
 add_shortcode('sfriendlinks','shortcode_friend_link_simple');
@@ -3776,6 +3780,8 @@ function argon_tinymce_add_plugin($plugins){
 function themeoptions_admin_menu(){
 	/*后台管理面板侧栏添加选项*/
 	add_menu_page(__("Argon 主题设置", 'argon'), __("Argon 主题选项", 'argon'), 'edit_theme_options', basename(__FILE__), 'themeoptions_page');
+	/*友链自助申请整理页*/
+	add_submenu_page(basename(__FILE__), __("友链申请", 'argon'), __("友链申请", 'argon'), 'edit_theme_options', 'argon-friendlinks', 'argon_fl_admin_page');
 }
 include_once(get_template_directory() . '/settings.php');
 	
@@ -3985,4 +3991,1307 @@ function argon_render_post_like($ID = 0, $compact = false){
 		. ' <span class="post-upvote-num">' . format_number_in_kilos(get_post_upvotes($ID)) . '</span>'
 		. '</span>'
 		. '</button>';
+}
+/* ============================================================
+   Enhanced 友链自主申请（本分支新增）
+   - 在 [friendlinks] 友链界面提供「申请友链」按钮，点击弹出填写窗口（评论区风格）。
+   - 提交信息以“待审评论”形式落到当前友链页，复用评论的邮箱收集与审核流，
+     不写 wp_links / 不引入额外存储。
+   - 审核通过后，该评论以友链卡片形式渲染进 [friendlinks]（普通评论列表中隐藏，避免重复）。
+   ============================================================ */
+
+// AJAX：访客提交友链申请 -> 创建待审评论
+// 获取访客 IP（仅用于发信限流；反代头只取第一个合法 IP）
+function argon_fl_client_ip(){
+	$candidates = array('HTTP_CF_CONNECTING_IP', 'HTTP_X_REAL_IP', 'HTTP_X_FORWARDED_FOR', 'REMOTE_ADDR');
+	foreach ($candidates as $key){
+		if (empty($_SERVER[$key])){
+			continue;
+		}
+		$parts = explode(',', $_SERVER[$key]);
+		$ip = trim($parts[0]);
+		if (filter_var($ip, FILTER_VALIDATE_IP)){
+			return $ip;
+		}
+	}
+	return '0.0.0.0';
+}
+
+// 通知日志：写入选项 argon_fl_notifications（环形保留最近 50 条），后台「友链申请」页展示
+function argon_fl_log_notification($type, $msg, $link_id = 0){
+	$logs = get_option('argon_fl_notifications', array());
+	if (!is_array($logs)){
+		$logs = array();
+	}
+	array_unshift($logs, array(
+		'time'    => time(),
+		'type'    => $type,
+		'msg'     => $msg,
+		'link_id' => (int) $link_id,
+	));
+	if (count($logs) > 50){
+		$logs = array_slice($logs, 0, 50);
+	}
+	update_option('argon_fl_notifications', $logs);
+}
+
+// 统一通知入口：按类型发邮件（管理员一律用 admin_email，argon_fl_notify_email 非空时优先）+ 记录后台日志
+function argon_fl_notify($type, $data = array()){
+	$site    = get_bloginfo('name');
+	$headers = array('Content-Type: text/plain; charset=UTF-8');
+	$admin   = get_option('argon_fl_notify_email', '');
+	if ($admin === ''){
+		$admin = get_option('admin_email');
+	}
+	$name     = isset($data['name']) ? $data['name'] : '';
+	$url      = isset($data['url']) ? $data['url'] : '';
+	$email    = isset($data['email']) ? $data['email'] : '';
+	$linkpage = isset($data['linkpage']) ? $data['linkpage'] : '';
+	$checked  = isset($data['checked_url']) ? $data['checked_url'] : '';
+	$link_id  = isset($data['link_id']) ? (int) $data['link_id'] : 0;
+
+	switch ($type){
+		// 提交后发确认链接（申请者）：点击后才正式进入待审
+		case 'confirm_mail':
+			$subject = '[' . $site . '] ' . __('请确认您的友链申请', 'argon');
+			$body = sprintf(__('您好，我们收到了来自「%s」的友链申请。', 'argon'), $name) . "\n\n"
+				. __('请点击下面的链接确认提交（1 小时内有效）：', 'argon') . "\n"
+				. (isset($data['confirm_url']) ? $data['confirm_url'] : '') . "\n\n"
+				. __('确认后申请才会提交给管理员审核。若非本人操作，请忽略此邮件。', 'argon');
+			$ok = ($email !== '') ? wp_mail($email, $subject, $body, $headers) : false;
+			argon_fl_log_notification($type, $ok ? sprintf(__('已向 %1$s 发送确认邮件（%2$s）', 'argon'), $email, $name) : sprintf(__('确认邮件发送失败：%s', 'argon'), $email));
+			return $ok;
+
+		// 确认成功、正式进入待审（申请者 + 管理员）
+		case 'submitted':
+			$ok = true;
+			if (get_option('argon_fl_notify_submitted', 'true') == 'true' && $email !== ''){
+				$subject = '[' . $site . '] ' . __('您的友链申请已提交', 'argon');
+				$body = __('您好，您的友链申请已确认并提交，正在等待管理员审核。', 'argon') . "\n\n"
+					. __('站点名称：', 'argon') . $name . "\n"
+					. __('链接：', 'argon') . $url . "\n\n"
+					. __('审核通过后会再发一封邮件通知您，并附上可自助修改友链信息的管理链接。', 'argon');
+				$ok = wp_mail($email, $subject, $body, $headers);
+			}
+			wp_mail(
+				$admin,
+				'[' . $site . '] ' . __('新友链申请待审核', 'argon'),
+				__('站点名称：', 'argon') . $name . "\n"
+					. __('链接：', 'argon') . $url . "\n"
+					. __('邮箱：', 'argon') . $email . "\n"
+					. ($linkpage !== '' ? __('友链页：', 'argon') . $linkpage . "\n" : '')
+					. "\n" . __('请在后台「友链申请」页审核：', 'argon') . "\n"
+					. admin_url('admin.php?page=argon-friendlinks'),
+				$headers
+			);
+			argon_fl_log_notification($type, sprintf(__('友链申请已提交待审：%1$s（%2$s）', 'argon'), $name, $url));
+			return $ok;
+
+		// 审核通过（申请者）：添加友链提醒 + 管理链接
+		case 'approved':
+			$subject = '[' . $site . '] ' . __('您的友链申请已通过审核', 'argon');
+			$body = __('您好，您申请的友链已通过审核，现已展示在友链界面。', 'argon') . "\n\n"
+				. __('站点名称：', 'argon') . $name . "\n"
+				. __('链接：', 'argon') . $url . "\n";
+			if (!empty($data['desc'])){
+				$body .= __('描述：', 'argon') . $data['desc'] . "\n";
+			}
+			$body .= "\n" . __('别忘了在您的站点添加本站友链，保持互链：', 'argon') . "\n"
+				. __('本站名称：', 'argon') . $site . "\n"
+				. __('本站链接：', 'argon') . home_url('/') . "\n";
+			if (!empty($data['edit_url'])){
+				$body .= "\n" . __('如需修改友链信息（名称 / 链接 / 描述 / 站点图 / 友链页），请访问：', 'argon') . "\n"
+					. $data['edit_url'] . "\n\n"
+					. __('该管理链接仅您本人持有，换浏览器或换网络均可使用，请妥善保管。', 'argon');
+			}
+			$ok = ($email !== '') ? wp_mail($email, $subject, $body, $headers) : false;
+			argon_fl_log_notification($type, sprintf(__('友链已通过审核：%s', 'argon'), $name), $link_id);
+			return $ok;
+
+		// 填了友链页但未检测到互链：提醒管理员与申请者（不阻断审核）
+		case 'backlink_missing':
+			if (get_option('argon_fl_backlink_notify_missing', 'true') != 'true'){
+				return false;
+			}
+			wp_mail(
+				$admin,
+				'[' . $site . '] ' . __('友链互链未检测到', 'argon'),
+				sprintf(__('友链「%s」填写了友链页，但未在该页面检测到指向本站的链接。', 'argon'), $name) . "\n\n"
+					. __('检查地址：', 'argon') . $checked . "\n"
+					. __('对方站点：', 'argon') . $url . "\n\n"
+					. __('这不影响审核，请按需人工确认：', 'argon') . "\n"
+					. admin_url('admin.php?page=argon-friendlinks'),
+				$headers
+			);
+			if ($email !== ''){
+				wp_mail(
+					$email,
+					'[' . $site . '] ' . __('未检测到您站点上的本站友链', 'argon'),
+					__('您好，我们在您提供的友链页未检测到指向本站的链接：', 'argon') . "\n"
+						. $checked . "\n\n"
+						. __('若您已添加，可能是缓存或页面结构原因，可忽略此邮件；若尚未添加，欢迎补充以保持互链：', 'argon') . "\n"
+						. __('本站名称：', 'argon') . $site . "\n"
+						. __('本站链接：', 'argon') . home_url('/'),
+					$headers
+				);
+			}
+			argon_fl_log_notification($type, sprintf(__('未检测到互链：%1$s（检查 %2$s）', 'argon'), $name, $checked), $link_id);
+			return true;
+
+		// 互链状态由「已互链」变为「未互链 / 不可达」：疑似撤链或站点异常，提醒管理员
+		case 'backlink_changed':
+			$reason = isset($data['reason']) ? $data['reason'] : 'none';
+			if ($reason === 'error'){
+				$subject = '[' . $site . '] ' . __('友链站点异常', 'argon');
+				$body = sprintf(__('友链「%s」此前检测为已互链，本次复查无法访问其页面（可能已关闭站点或网络异常）。', 'argon'), $name) . "\n\n"
+					. __('对方站点：', 'argon') . $url . "\n"
+					. __('检查地址：', 'argon') . $checked . "\n\n"
+					. __('请核查后决定是否保留该友链：', 'argon') . "\n"
+					. admin_url('admin.php?page=argon-friendlinks');
+			} else {
+				$subject = '[' . $site . '] ' . __('友链疑似已撤链', 'argon');
+				$body = sprintf(__('友链「%s」此前检测为已互链，本次复查未再检测到指向本站的链接。', 'argon'), $name) . "\n\n"
+					. __('对方站点：', 'argon') . $url . "\n"
+					. __('检查地址：', 'argon') . $checked . "\n\n"
+					. __('请核查后决定是否保留该友链：', 'argon') . "\n"
+					. admin_url('admin.php?page=argon-friendlinks');
+			}
+			wp_mail($admin, $subject, $body, $headers);
+			argon_fl_log_notification($type, sprintf(__('疑似撤链/异常：%s', 'argon'), $name), $link_id);
+			return true;
+
+		// 首次检测到互链：仅记录后台日志，不额外发信（避免噪音）
+		case 'backlink_mutual':
+			argon_fl_log_notification($type, sprintf(__('已确认互链：%s', 'argon'), $name), $link_id);
+			return true;
+	}
+	return false;
+}
+
+// 发信限流检查：同邮箱 60 秒 1 封；同 IP 每分钟 / 每日上限（后台可配）。返回空串表示允许
+function argon_fl_mail_rate_limit_check($email){
+	if (get_transient('argon_fl_mail_e_' . md5(strtolower($email)))){
+		return __('验证邮件刚刚已发送，请查收邮箱；如需重发请稍后再试。', 'argon');
+	}
+	$ip      = argon_fl_client_ip();
+	$per_min = max(1, (int) get_option('argon_fl_mail_limit_ip_min', 5));
+	$per_day = max(1, (int) get_option('argon_fl_mail_limit_ip_day', 30));
+	if ((int) get_transient('argon_fl_mail_ipm_' . md5($ip)) >= $per_min){
+		return __('操作过于频繁，请一分钟后再试。', 'argon');
+	}
+	if ((int) get_transient('argon_fl_mail_ipd_' . md5($ip . date('Ymd'))) >= $per_day){
+		return __('今日提交次数过多，请明日再试。', 'argon');
+	}
+	return '';
+}
+
+// 发信限流计数：发送成功后调用
+function argon_fl_mail_rate_limit_hit($email){
+	$ip   = argon_fl_client_ip();
+	$mkey = 'argon_fl_mail_ipm_' . md5($ip);
+	$dkey = 'argon_fl_mail_ipd_' . md5($ip . date('Ymd'));
+	set_transient('argon_fl_mail_e_' . md5(strtolower($email)), 1, MINUTE_IN_SECONDS);
+	set_transient($mkey, ((int) get_transient($mkey)) + 1, MINUTE_IN_SECONDS);
+	set_transient($dkey, ((int) get_transient($dkey)) + 1, DAY_IN_SECONDS);
+}
+
+// 强制友链申请进入「待审核」：wp_new_comment 会用 wp_allow_comment 的结果覆盖状态，
+// 若站点关闭了评论审核，申请会被自动通过而跳过管理员审核，故创建期间临时挂此过滤器
+function argon_fl_force_moderation($approved){
+	return is_wp_error($approved) ? $approved : 0;
+}
+
+// 由申请数据创建「待审核」友链申请（评论形态）；邮箱确认链接与关闭确认两条路径共用
+function argon_fl_create_pending($data){
+	$name     = isset($data['name']) ? $data['name'] : '';
+	$url      = isset($data['url']) ? $data['url'] : '';
+	$image    = isset($data['image']) ? $data['image'] : '';
+	$desc     = isset($data['desc']) ? $data['desc'] : '';
+	$email    = isset($data['email']) ? $data['email'] : '';
+	$linkpage = isset($data['linkpage']) ? $data['linkpage'] : '';
+	$post_id  = isset($data['post_id']) ? (int) $data['post_id'] : 0;
+
+	// 友链评论正文存为结构化多行文本（名称/链接/描述/头像/友链页），评论区一目了然；
+	// 纯描述另存 argon_friendlink_desc，供友链卡片与审核邮件使用
+	$content_lines = array(
+		__('名称：', 'argon') . $name,
+		__('链接：', 'argon') . $url,
+	);
+	if ($desc !== ''){
+		$content_lines[] = __('描述：', 'argon') . $desc;
+	}
+	if ($image !== ''){
+		$content_lines[] = __('头像：', 'argon') . $image;
+	}
+	if ($linkpage !== ''){
+		$content_lines[] = __('友链页：', 'argon') . $linkpage;
+	}
+
+	// 友链申请不要求算术验证码：临时移除全局评论验证码过滤，提交后立即恢复
+	remove_filter('preprocess_comment', 'check_comment_captcha');
+	add_filter('pre_comment_approved', 'argon_fl_force_moderation', 99);
+	$comment_id = wp_new_comment(array(
+		'comment_post_ID'      => $post_id,
+		'comment_author'       => $name,
+		'comment_author_email' => $email,
+		'comment_author_url'   => $url,
+		'comment_content'      => implode("\n", $content_lines),
+		'comment_type'         => 'comment',
+		'comment_meta'         => array(
+			'argon_friendlink'          => '1',
+			'argon_friendlink_image'    => $image,
+			'argon_friendlink_desc'     => $desc,
+			'argon_friendlink_linkpage' => $linkpage,
+		),
+	), true); // $wp_error = true
+	remove_filter('pre_comment_approved', 'argon_fl_force_moderation', 99);
+	add_filter('preprocess_comment', 'check_comment_captcha');
+
+	return $comment_id;
+}
+
+function argon_fl_apply_ajax(){
+	if (get_option('argon_fl_enable', 'false') != 'true'){
+		wp_send_json(array('status' => 'error', 'msg' => __('友链自助申请功能未开启', 'argon')));
+	}
+	argon_verify_ajax_nonce(); // 校验失败会直接 exit（主题约定：无返回值=通过）
+	$name  = sanitize_text_field($_POST['argon_fl_name'] ?? '');
+	$url   = esc_url_raw(trim($_POST['argon_fl_url'] ?? ''));
+	$image = esc_url_raw(trim($_POST['argon_fl_image'] ?? ''));
+	$desc  = sanitize_textarea_field($_POST['argon_fl_desc'] ?? '');
+	$email = sanitize_email(trim($_POST['argon_fl_email'] ?? ''));
+	$linkpage = esc_url_raw(trim($_POST['argon_fl_linkpage'] ?? ''));
+	$post_id = intval($_POST['argon_fl_post_id'] ?? 0);
+
+	$errors = array();
+	if ($name === ''){
+		$errors[] = __('请填写站点名称', 'argon');
+	}
+	if ($url === '' || !wp_http_validate_url($url)){
+		$errors[] = __('请填写合法的网站 URL', 'argon');
+	}
+	if ($email === ''){
+		$errors[] = __('请填写邮箱（用于确认申请与发送可管理链接）', 'argon');
+	}
+	if ($linkpage !== '' && !wp_http_validate_url($linkpage)){
+		$errors[] = __('友链页 URL 不合法', 'argon');
+	}
+	if ($post_id <= 0 || !get_post($post_id)){
+		$errors[] = __('提交目标页面无效', 'argon');
+	}
+	if (!empty($errors)){
+		wp_send_json(array('status' => 'error', 'msg' => implode('<br>', $errors)));
+	}
+
+	$data = array(
+		'name'     => $name,
+		'url'      => $url,
+		'image'    => $image,
+		'desc'     => $desc,
+		'email'    => $email,
+		'linkpage' => $linkpage,
+		'post_id'  => $post_id,
+	);
+
+	// 未启用邮箱确认：退回「直接进入待审 + 人工审核」
+	if (get_option('argon_fl_email_confirm_enable', 'true') != 'true'){
+		$comment_id = argon_fl_create_pending($data);
+		if (is_wp_error($comment_id) || empty($comment_id)){
+			wp_send_json(array('status' => 'error', 'msg' => __('提交失败，请稍后重试', 'argon')));
+		}
+		argon_fl_notify('submitted', $data);
+		wp_send_json(array('status' => 'success', 'msg' => __('提交成功，等待管理员审核。审核通过后将在友链界面展示。', 'argon')));
+	}
+
+	// 发信限流：防脚本刷邮件
+	$limit_msg = argon_fl_mail_rate_limit_check($email);
+	if ($limit_msg !== ''){
+		wp_send_json(array('status' => 'error', 'msg' => $limit_msg));
+	}
+
+	// 暂存待确认数据（1 小时过期）。未点击确认链接则自动丢弃：不入库、不审核、不做回链检查
+	$token = get_random_token();
+	set_transient('argon_fl_pending_' . $token, $data, HOUR_IN_SECONDS);
+	argon_fl_mail_rate_limit_hit($email);
+
+	$confirm_url = get_template_directory_uri() . '/confirm-friendlink.php?t=' . rawurlencode($token);
+	argon_fl_notify('confirm_mail', array_merge($data, array('confirm_url' => $confirm_url)));
+
+	wp_send_json(array(
+		'status' => 'need_confirm',
+		'msg'    => sprintf(__('验证邮件已发送至 %s，请查收并点击邮件中的链接完成提交。', 'argon'), $email),
+	));
+}
+add_action('wp_ajax_nopriv_argon_fl_apply', 'argon_fl_apply_ajax');
+add_action('wp_ajax_argon_fl_apply', 'argon_fl_apply_ajax');
+
+// 审核通过：把自助友链评论转成标准友链（wp_links），生成可管理 token，发送编辑邮件，随后删除原评论。
+// 这样友链按主题原有方式渲染（get_bookmarks）、可在 link-manager.php 管理，且不污染评论区/评论计数。
+add_action('transition_comment_status', 'argon_fl_on_comment_approve', 10, 3);
+function argon_fl_on_comment_approve($new_status, $old_status, $comment){
+	if ($new_status !== 'approved'){
+		return;
+	}
+	if (get_comment_meta($comment->comment_ID, 'argon_friendlink', true) !== '1'){
+		return;
+	}
+	// wp_insert_link 定义在 wp-admin/includes/bookmark.php，仅后台自动加载；前台需手动引入
+	if (!function_exists('wp_insert_link')){
+		require_once ABSPATH . 'wp-admin/includes/bookmark.php';
+	}
+	$image = get_comment_meta($comment->comment_ID, 'argon_friendlink_image', true);
+	$desc  = get_comment_meta($comment->comment_ID, 'argon_friendlink_desc', true);
+	$linkpage = get_comment_meta($comment->comment_ID, 'argon_friendlink_linkpage', true);
+	$link_id = wp_insert_link(array(
+		'link_name'        => $comment->comment_author,
+		'link_url'         => $comment->comment_author_url,
+		'link_description' => $desc,
+		'link_image'       => $image,
+		'link_visible'     => 'Y',
+	));
+	if (empty($link_id)){
+		return;
+	}
+	// wp_links 无 meta，用选项映射记录 link 维度的可管理 token / 申请者邮箱 / 友链页 URL
+	$token = get_random_token();
+	$fl_tokens = get_option('argon_fl_link_tokens', array());
+	$fl_tokens[$link_id] = array(
+		'token'    => $token,
+		'email'    => $comment->comment_author_email,
+		'linkpage' => $linkpage,
+	);
+	update_option('argon_fl_link_tokens', $fl_tokens);
+	// 审核通过通知（含添加友链提醒 + 管理链接），受开关 argon_fl_send_edit_link 控制
+	if (get_option('argon_fl_send_edit_link', 'true') == 'true'){
+		$edit_url = get_template_directory_uri() . '/edit-friendlink.php?link=' . $link_id . '&token=' . rawurlencode($token);
+	} else {
+		$edit_url = '';
+	}
+	argon_fl_notify('approved', array(
+		'name'     => $comment->comment_author,
+		'url'      => $comment->comment_author_url,
+		'desc'     => $desc,
+		'email'    => $comment->comment_author_email,
+		'link_id'  => $link_id,
+		'edit_url' => $edit_url,
+	));
+	// 审核通过即触发首次回链检查；填了友链页但未检测到时由 check 内触发 missing 通知
+	if (get_option('argon_fl_backlink_enable', 'true') == 'true'){
+		argon_fl_check_backlink_with_notify($link_id);
+	}
+	// 转换完成，删除原评论（不再作为评论存在）
+	wp_delete_comment($comment->comment_ID, true);
+}
+
+// —— 自动回链检查（Phase 2/3） ——
+
+// 取 link 的检查结果缓存
+function argon_fl_get_link_status($link_id){
+	$all = get_option('argon_fl_link_status', array());
+	return (is_array($all) && isset($all[$link_id])) ? $all[$link_id] : array();
+}
+
+// 保存 link 的检查结果
+function argon_fl_save_link_status($link_id, $status, $checked_url, $found_url = ''){
+	$all = get_option('argon_fl_link_status', array());
+	if (!is_array($all)){
+		$all = array();
+	}
+	$all[$link_id] = array(
+		'last_check'  => time(),
+		'status'      => $status, // mutual | none | error
+		'checked_url' => $checked_url,
+		'found_url'   => $found_url,
+	);
+	update_option('argon_fl_link_status', $all);
+}
+
+// 归一化主机名（去 www. 前缀、小写），用于互链比对
+function argon_fl_host_key($url){
+	$host = parse_url($url, PHP_URL_HOST);
+	if (!is_string($host)){
+		return '';
+	}
+	$host = strtolower($host);
+	if (strpos($host, 'www.') === 0){
+		$host = substr($host, 4);
+	}
+	return $host;
+}
+
+// 在 HTML 中查找指向本站的链接；可选排除 nofollow
+function argon_fl_find_self_link($html, $strict){
+	if ($html === '' || strpos($html, ':') === false){
+		return '';
+	}
+	$self = argon_fl_host_key(home_url('/'));
+	if ($self === ''){
+		return '';
+	}
+	$found = '';
+	if (class_exists('WP_HTML_Tag_Processor')){
+		$p = new WP_HTML_Tag_Processor($html);
+		while ($p->next_tag('a')){
+			$href = $p->get_attribute('href');
+			if (!is_string($href) || $href === ''){
+				continue;
+			}
+			if (argon_fl_host_key($href) !== $self){
+				continue;
+			}
+			if ($strict){
+				$rel = $p->get_attribute('rel');
+				if (is_string($rel) && preg_match('/\bnofollow\b/i', $rel)){
+					continue;
+				}
+			}
+			$found = $href;
+			break;
+		}
+	}
+	if ($found === ''){
+		// 回退：无 WP_HTML_Tag_Processor 时用轻量正则（仅取 href 属性值）
+		if (preg_match_all('/<a[^>]+href\s*=\s*(["\'])(.*?)\1/i', $html, $m)){
+			foreach ($m[2] as $href){
+				if (argon_fl_host_key($href) !== $self){
+					continue;
+				}
+				if ($strict && preg_match('/rel\s*=\s*(["\'])[^"\']*nofollow/i', $m[0][array_search($href, $m[2], true)] ?? '')){
+					continue;
+				}
+				$found = $href;
+				break;
+			}
+		}
+	}
+	return $found;
+}
+
+// 核心：抓取对方友链页/首页并检查是否包含指向本站的链接。返回本次 status。
+// $force=true 表示手动重查，忽略 24h 结果缓存
+function argon_fl_check_backlink($link_id, $force = false){
+	if (!$force){
+		$cached = argon_fl_get_link_status($link_id);
+		if (!empty($cached['last_check']) && (time() - (int) $cached['last_check']) < DAY_IN_SECONDS){
+			return isset($cached['status']) ? $cached['status'] : 'error';
+		}
+	}
+	$link = get_bookmark($link_id);
+	if (!$link || empty($link->link_url)){
+		return 'error';
+	}
+	$fl_tokens = get_option('argon_fl_link_tokens', array());
+	$linkpage  = (isset($fl_tokens[$link_id]['linkpage'])) ? $fl_tokens[$link_id]['linkpage'] : '';
+	$target = ($linkpage !== '') ? $linkpage : $link->link_url;
+	if (!wp_http_validate_url($target)){
+		return 'error';
+	}
+	$resp = wp_remote_get($target, array(
+		'timeout'     => 5,
+		'redirection' => 3,
+		'user-agent'  => 'ArgonFriendlinkChecker/1.0',
+		'sslverify'   => true,
+	));
+	if (is_wp_error($resp)){
+		argon_fl_save_link_status($link_id, 'error', $target);
+		return 'error';
+	}
+	$strict = (get_option('argon_fl_backlink_nofollow_strict', 'false') == 'true');
+	$body   = wp_remote_retrieve_body($resp);
+	$found  = argon_fl_find_self_link($body, $strict);
+	$status = ($found !== '') ? 'mutual' : 'none';
+	argon_fl_save_link_status($link_id, $status, $target, $found);
+	return $status;
+}
+
+// 回链检查包装：检查后按需触发通知。
+// missing 通知仅当「填了友链页 URL」且「首次进入 none」时发一次（计划书 4.3），避免 cron 重复骚扰
+function argon_fl_check_backlink_with_notify($link_id, $force = false){
+	$prev   = argon_fl_get_link_status($link_id); // 必须先读旧状态，check 会覆盖写入
+	$status = argon_fl_check_backlink($link_id, $force);
+	if ($status === 'none'){
+		$link = get_bookmark($link_id);
+		$fl_tokens = get_option('argon_fl_link_tokens', array());
+		$linkpage  = isset($fl_tokens[$link_id]['linkpage']) ? $fl_tokens[$link_id]['linkpage'] : '';
+		$was_not_none = empty($prev['status']) || $prev['status'] !== 'none';
+		if ($link && $linkpage !== '' && $was_not_none){
+			$cur = argon_fl_get_link_status($link_id);
+			argon_fl_notify('backlink_missing', array(
+				'name'        => $link->link_name,
+				'url'         => $link->link_url,
+				'email'       => isset($fl_tokens[$link_id]['email']) ? $fl_tokens[$link_id]['email'] : '',
+				'link_id'     => $link_id,
+				'checked_url' => isset($cur['checked_url']) ? $cur['checked_url'] : '',
+			));
+		}
+	}
+	return $status;
+}
+
+// 手动「重新检查」：前台管理页与后台共用（前台需 link+token 校验）
+function argon_fl_recheck_ajax(){
+	$link_id = intval($_POST['link_id'] ?? 0);
+	if ($link_id <= 0 || !get_bookmark($link_id)){
+		wp_send_json(array('status' => 'error', 'msg' => __('友链不存在', 'argon')));
+	}
+	$fl_tokens = get_option('argon_fl_link_tokens', array());
+	if (!current_user_can('edit_theme_options')){
+		$token = $_POST['token'] ?? '';
+		if ($token === '' || !isset($fl_tokens[$link_id]['token']) || $fl_tokens[$link_id]['token'] !== $token){
+			wp_send_json(array('status' => 'error', 'msg' => __('管理链接无效或已失效', 'argon')));
+		}
+	}
+	if (get_option('argon_fl_backlink_enable', 'true') != 'true'){
+		wp_send_json(array('status' => 'error', 'msg' => __('回链检查功能未开启', 'argon')));
+	}
+	$status = argon_fl_check_backlink_with_notify($link_id, true); // 手动重查：忽略 24h 缓存
+	$labels = array(
+		'mutual' => __('已互链', 'argon'),
+		'none'   => __('未检测到互链', 'argon'),
+		'error'  => __('检查失败', 'argon'),
+	);
+	wp_send_json(array(
+		'status' => 'ok',
+		'result' => isset($labels[$status]) ? $labels[$status] : $status,
+	));
+}
+add_action('wp_ajax_nopriv_argon_fl_recheck', 'argon_fl_recheck_ajax');
+add_action('wp_ajax_argon_fl_recheck', 'argon_fl_recheck_ajax');
+
+// 每日 Cron：02:00–05:00 分批复查全部自助友链
+add_action('init', 'argon_fl_maybe_schedule_backlink_cron');
+function argon_fl_maybe_schedule_backlink_cron(){
+	if (get_option('argon_fl_backlink_cron_enable', 'true') != 'true'){
+		wp_clear_scheduled_hook('argon_fl_daily_backlink');
+		return;
+	}
+	if (!wp_next_scheduled('argon_fl_daily_backlink')){
+		$hour = rand(2, 4);            // 02:00–05:00 随机起点
+		$min  = rand(0, 59);
+		$ts   = strtotime(sprintf('today %02d:%02d', $hour, $min));
+		if ($ts < time()){
+			$ts += DAY_IN_SECONDS;
+		}
+		wp_schedule_event($ts, 'daily', 'argon_fl_daily_backlink');
+	}
+}
+add_action('switch_theme', 'argon_fl_clear_backlink_cron');
+function argon_fl_clear_backlink_cron(){
+	wp_clear_scheduled_hook('argon_fl_daily_backlink');
+}
+
+add_action('argon_fl_daily_backlink', 'argon_fl_run_daily_backlink');
+function argon_fl_run_daily_backlink(){
+	if (get_option('argon_fl_backlink_enable', 'true') != 'true'){
+		return;
+	}
+	// 双保险限窗口：防止服务器时区漂移导致不在 02:00–05:00 执行
+	if ((int) date('G') < 2 || (int) date('G') >= 5){
+		return;
+	}
+	$fl_tokens = get_option('argon_fl_link_tokens', array());
+	$ids = is_array($fl_tokens) ? array_keys($fl_tokens) : array();
+	if (empty($ids)){
+		return;
+	}
+	$prev = get_option('argon_fl_link_status', array());
+	$checked = 0;
+	foreach ($ids as $link_id){
+		if ($checked >= 20){
+			break;
+		}
+		$before = isset($prev[$link_id]['status']) ? $prev[$link_id]['status'] : '';
+		$after  = argon_fl_check_backlink($link_id);
+		// 由「已互链」变为「未互链 / 不可达」：提示对方可能撤链或站点异常（仅状态变更时通知一次，避免重复骚扰）
+		if ($before === 'mutual' && ($after === 'none' || $after === 'error')){
+			$link = get_bookmark($link_id);
+			$status_data = argon_fl_get_link_status($link_id);
+			if ($link){
+				argon_fl_notify('backlink_changed', array(
+					'name'        => $link->link_name,
+					'url'         => $link->link_url,
+					'link_id'     => $link_id,
+					'checked_url' => isset($status_data['checked_url']) ? $status_data['checked_url'] : '',
+					'reason'      => $after,
+				));
+			}
+		}
+		// 首次检测到互链：记录日志
+		if ($before !== 'mutual' && $after === 'mutual'){
+			$link = get_bookmark($link_id);
+			if ($link){
+				argon_fl_notify('backlink_mutual', array(
+					'name'    => $link->link_name,
+					'link_id' => $link_id,
+				));
+			}
+		}
+		$checked++;
+	}
+	argon_fl_log_notification('cron_run', sprintf(__('每日回链复查完成，共检查 %d 个友链。', 'argon'), $checked));
+}
+
+// 后台「友链申请」管理页：列出待审申请（评论）与已通过友链（wp_links）
+function argon_fl_admin_page(){
+	if (!current_user_can('edit_theme_options')){
+		wp_die(__('权限不足', 'argon'));
+	}
+	$pending = get_comments(array(
+		'meta_key'   => 'argon_friendlink',
+		'meta_value' => '1',
+		'status'     => 'unapproved',
+		'number'     => 100,
+		'orderby'    => 'comment_date_gmt',
+		'order'      => 'DESC',
+	));
+	$fl_tokens = get_option('argon_fl_link_tokens', array());
+	$approved_links = array();
+	if (!empty($fl_tokens)){
+		$approved_links = get_bookmarks(array('include' => array_keys($fl_tokens)));
+	}
+	echo '<div class="wrap"><h1>' . __('友链申请', 'argon') . '</h1>';
+	if (isset($_GET['updated'])){
+		echo '<div class="notice notice-success"><p>' . __('设置已保存。', 'argon') . '</p></div>';
+	}
+	if (isset($_GET['recheck'])){ // admin_post 重查后带回结果
+		echo '<div class="notice notice-info"><p>' . esc_html($_GET['recheck']) . '</p></div>';
+	}
+
+	// 顶部导航（WP 原生 nav-tab）：待审核 / 已通过 / 设置 / 通知记录
+	$tabs = array(
+		'pending'  => __('待审核', 'argon'),
+		'approved' => __('已通过', 'argon'),
+		'settings' => __('设置', 'argon'),
+		'notices'  => __('通知记录', 'argon'),
+	);
+	$current = (isset($_GET['tab']) && isset($tabs[$_GET['tab']])) ? $_GET['tab'] : 'pending';
+	echo '<nav class="nav-tab-wrapper" style="margin-bottom:16px;">';
+	foreach ($tabs as $key => $label){
+		$count = 0;
+		if ($key === 'pending'){ $count = count($pending); }
+		if ($key === 'approved'){ $count = count($approved_links); }
+		$badge = $count > 0 ? ' <span class="update-plugins count-' . $count . '"><span class="plugin-count">' . $count . '</span></span>' : '';
+		$cls = ($key === $current) ? 'nav-tab nav-tab-active' : 'nav-tab';
+		echo '<a href="' . esc_url(admin_url('admin.php?page=argon-friendlinks&tab=' . $key)) . '" class="' . esc_attr($cls) . '">'
+			. esc_html($label) . $badge . '</a>';
+	}
+	echo '</nav>';
+
+	// —— 各 tab 内容 ——
+	if ($current === 'settings'){
+		// 设置（决策 7：全部放在本页，不动主题主设置界面）
+		// 每项：[分组, 名称, 说明, 类型, 默认值]
+		$set = array(
+			'argon_fl_enable'                  => array('basic', __('启用友链自助申请', 'argon'), __('关闭后申请按钮与提交接口均不可用', 'argon'), 'bool', 'false'),
+			'argon_fl_email_confirm_enable'    => array('basic', __('启用邮箱确认链接', 'argon'), __('开启后提交需点击邮件链接确认才进入待审，可防脚本刷申请', 'argon'), 'bool', 'true'),
+			'argon_fl_notify_submitted'        => array('basic', __('发送「已提交待审核」确认邮件', 'argon'), __('点击确认链接提交成功后，通知申请者申请已受理', 'argon'), 'bool', 'true'),
+			'argon_fl_send_edit_link'          => array('basic', __('审核通过邮件附管理链接', 'argon'), __('申请者可凭链接自助修改友链信息', 'argon'), 'bool', 'true'),
+			'argon_fl_mail_limit_ip_min'       => array('mail',  __('同 IP 每分钟发信上限', 'argon'), __('同一 IP 每分钟最多发送确认邮件数', 'argon'), 'num', 5),
+			'argon_fl_mail_limit_ip_day'       => array('mail',  __('同 IP 每日发信上限', 'argon'), __('同一 IP 每日最多发送确认邮件数，防恶意刷邮件', 'argon'), 'num', 30),
+			'argon_fl_backlink_enable'         => array('link',  __('启用自动互链检查', 'argon'), __('审核通过时检查，并每日 Cron 复查；检查目标为对方「友链页 URL」，未填则抓首页', 'argon'), 'bool', 'true'),
+			'argon_fl_backlink_nofollow_strict'=> array('link',  __('互链严格模式', 'argon'), __('勾选后带 nofollow 的回链不计为互链', 'argon'), 'bool', 'false'),
+			'argon_fl_backlink_notify_missing' => array('link',  __('未检测到互链时发通知', 'argon'), __('填了友链页但未检测到互链，通知管理员与申请者（不阻断审核）', 'argon'), 'bool', 'true'),
+			'argon_fl_backlink_cron_enable'    => array('link',  __('启用每日复查（02:00–05:00）', 'argon'), __('关闭后仅审核通过时与手动检查', 'argon'), 'bool', 'true'),
+		);
+		$groups = array(
+			'basic' => array(__('基本功能', 'argon'), __('友链自助申请的启用与邮件流程', 'argon')),
+			'mail'  => array(__('邮件与限流', 'argon'), __('确认邮件发送频次控制，防止恶意请求', 'argon')),
+			'link'  => array(__('回链检查', 'argon'), __('自动互链检查的开关与检查策略', 'argon')),
+		);
+		echo '<style>'
+			. '.fl-settings-card{border:1px solid #dcdcde;border-radius:8px;background:#fff;padding:14px 20px 6px;margin-bottom:16px;box-shadow:0 1px 2px rgba(0,0,0,.03);}'
+			. '.fl-settings-card h3{margin:0 0 2px;font-size:14px;font-weight:600;}'
+			. '.fl-settings-card .fl-settings-desc{color:#646970;margin:0 0 10px;font-size:12px;}'
+			. '.fl-settings-card table{margin-top:0;width:100%;}'
+			. '</style>';
+		echo '<form method="post" action="' . admin_url('admin-post.php') . '">'
+			. '<input type="hidden" name="action" value="argon_fl_save_settings">'
+			. wp_nonce_field('argon_fl_admin', '_wpnonce', false);
+		foreach ($groups as $gid => $ginfo){
+			echo '<div class="fl-settings-card">'
+				. '<h3>' . esc_html($ginfo[0]) . '</h3>'
+				. '<p class="fl-settings-desc">' . esc_html($ginfo[1]) . '</p>'
+				. '<table class="form-table"><tbody>';
+			foreach ($set as $opt => $meta){
+				if ($meta[0] !== $gid){
+					continue;
+				}
+				$cur = get_option($opt, $meta[4]);
+				echo '<tr><th scope="row" style="width:220px;"><label for="' . esc_attr($opt) . '">' . esc_html($meta[1]) . '</label></th><td>';
+				if ($meta[3] === 'bool'){
+					echo '<input type="checkbox" id="' . esc_attr($opt) . '" name="' . esc_attr($opt) . '" value="1" ' . checked($cur, 'true', false) . '>'
+						. '<p class="description" style="margin-top:4px;">' . esc_html($meta[2]) . '</p>';
+				} else {
+					echo '<input type="number" min="1" class="small-text" id="' . esc_attr($opt) . '" name="' . esc_attr($opt) . '" value="' . esc_attr($cur ? $cur : 1) . '">'
+						. '<p class="description" style="margin-top:4px;">' . esc_html($meta[2]) . '</p>';
+				}
+				echo '</td></tr>';
+			}
+			echo '</tbody></table>';
+			// 回链检查组尾部：显示每日复查 Cron 调度状态
+			if ($gid === 'link'){
+				$next = wp_next_scheduled('argon_fl_daily_backlink');
+				$cron_on = (get_option('argon_fl_backlink_cron_enable', 'true') == 'true');
+				echo '<p class="description" style="border-top:1px solid #f0f0f1;padding-top:10px;">'
+					. __('每日复查 Cron：', 'argon')
+					. ($cron_on
+						? ($next ? sprintf(__('已调度，下次执行 %s', 'argon'), wp_date('Y-m-d H:i', $next)) : __('待首次调度（下次访问站点后生效）', 'argon'))
+						: __('已关闭', 'argon'))
+					. '</p>';
+			}
+			echo '</div>';
+		}
+		echo '<p class="submit"><button type="submit" class="button button-primary">' . __('保存设置', 'argon') . '</button></p>'
+			. '</form>';
+	} elseif ($current === 'approved'){
+		// —— 已通过（自助申请） ——
+		if (empty($approved_links)){
+			echo '<p>' . __('暂无已通过的自助友链。', 'argon') . '</p>';
+		} else {
+			$status_labels = array('mutual' => __('已互链', 'argon'), 'none' => __('未检测到互链', 'argon'), 'error' => __('检查失败', 'argon'));
+			$status_colors = array('mutual' => '#2dce89', 'none' => '#f5a623', 'error' => '#f5365c');
+			echo '<table class="widefat striped"><thead><tr>'
+				. '<th>' . __('站点名称', 'argon') . '</th>'
+				. '<th>' . __('网站 URL', 'argon') . '</th>'
+				. '<th>' . __('描述', 'argon') . '</th>'
+				. '<th>' . __('邮箱', 'argon') . '</th>'
+				. '<th>' . __('互链状态', 'argon') . '</th>'
+				. '<th>' . __('操作', 'argon') . '</th>'
+				. '</tr></thead><tbody>';
+			foreach ($approved_links as $l){
+				$info   = $fl_tokens[$l->link_id];
+				$st     = argon_fl_get_link_status($l->link_id);
+				$sval   = isset($st['status']) ? $st['status'] : '';
+				$slabel = isset($status_labels[$sval]) ? $status_labels[$sval] : __('未检查', 'argon');
+				$scolor = isset($status_colors[$sval]) ? $status_colors[$sval] : '#8898aa';
+				echo '<tr>'
+					. '<td>' . esc_html($l->link_name) . '</td>'
+					. '<td><a href="' . esc_url($l->link_url) . '" target="_blank">' . esc_html($l->link_url) . '</a></td>'
+					. '<td>' . esc_html($l->link_description) . '</td>'
+					. '<td>' . esc_html(isset($info['email']) ? $info['email'] : '') . '</td>'
+					. '<td style="color:' . $scolor . ';font-weight:600;">' . $slabel
+						. (isset($st['checked_url']) && $sval !== '' ? '<br><span style="color:#8898aa;font-weight:400;font-size:11px;">' . esc_html($st['checked_url']) . '</span>' : '')
+						. '</td>'
+					. '<td>';
+				echo '<a href="' . admin_url('link.php?action=edit&link_id=' . $l->link_id) . '">' . __('编辑', 'argon') . '</a> ';
+				echo '<form method="post" action="' . admin_url('admin-post.php') . '" style="display:inline;">'
+					. '<input type="hidden" name="action" value="argon_fl_recheck_admin">'
+					. '<input type="hidden" name="link_id" value="' . $l->link_id . '">'
+					. wp_nonce_field('argon_fl_admin', '_wpnonce', false)
+					. '<button type="submit" class="button">' . __('重新检查', 'argon') . '</button></form> ';
+				echo '<form method="post" action="' . admin_url('admin-post.php') . '" style="display:inline;" onsubmit="return confirm(\'' . esc_js(__('确定删除该友链？', 'argon')) . '\');">'
+					. '<input type="hidden" name="action" value="argon_fl_delete">'
+					. '<input type="hidden" name="link_id" value="' . $l->link_id . '">'
+					. wp_nonce_field('argon_fl_admin', '_wpnonce', false)
+					. '<button type="submit" class="button">' . __('删除', 'argon') . '</button></form>';
+				echo '</td></tr>';
+			}
+			echo '</tbody></table>';
+		}
+	} elseif ($current === 'notices'){
+		// —— 通知记录 ——
+		$logs = get_option('argon_fl_notifications', array());
+		if (!is_array($logs) || empty($logs)){
+			echo '<p>' . __('暂无通知记录。', 'argon') . '</p>';
+		} else {
+			echo '<table class="widefat striped"><thead><tr>'
+				. '<th style="width:160px;">' . __('时间', 'argon') . '</th>'
+				. '<th>' . __('内容', 'argon') . '</th>'
+				. '</tr></thead><tbody>';
+			foreach (array_slice($logs, 0, 50) as $log){
+				echo '<tr><td>' . esc_html(wp_date('Y-m-d H:i', (int) $log['time'])) . '</td>'
+					. '<td>' . esc_html($log['msg']) . '</td></tr>';
+			}
+			echo '</tbody></table>';
+		}
+	} else {
+		// —— 待审核（默认 tab） ——
+		if (empty($pending)){
+			echo '<p>' . __('暂无待审核的友链申请。', 'argon') . '</p>';
+		} else {
+			echo '<table class="widefat striped"><thead><tr>'
+				. '<th>' . __('站点名称', 'argon') . '</th>'
+				. '<th>' . __('网站 URL', 'argon') . '</th>'
+				. '<th>' . __('描述', 'argon') . '</th>'
+				. '<th>' . __('邮箱', 'argon') . '</th>'
+				. '<th>' . __('友链页', 'argon') . '</th>'
+				. '<th>' . __('操作', 'argon') . '</th>'
+				. '</tr></thead><tbody>';
+			foreach ($pending as $c){
+				$lp = get_comment_meta($c->comment_ID, 'argon_friendlink_linkpage', true);
+				echo '<tr>'
+					. '<td>' . esc_html($c->comment_author) . '</td>'
+					. '<td><a href="' . esc_url($c->comment_author_url) . '" target="_blank">' . esc_html($c->comment_author_url) . '</a></td>'
+					. '<td>' . esc_html(get_comment_meta($c->comment_ID, 'argon_friendlink_desc', true)) . '</td>'
+					. '<td>' . esc_html($c->comment_author_email) . '</td>'
+					. '<td>' . ($lp !== '' ? '<a href="' . esc_url($lp) . '" target="_blank">' . esc_html($lp) . '</a>' : '—') . '</td>'
+					. '<td>';
+				echo '<a href="' . admin_url('comment.php?action=editcomment&c=' . $c->comment_ID) . '">' . __('编辑', 'argon') . '</a> ';
+				echo '<form method="post" action="' . admin_url('admin-post.php') . '" style="display:inline;">'
+					. '<input type="hidden" name="action" value="argon_fl_approve">'
+					. '<input type="hidden" name="comment_id" value="' . $c->comment_ID . '">'
+					. wp_nonce_field('argon_fl_admin', '_wpnonce', false)
+					. '<button type="submit" class="button button-primary">' . __('通过', 'argon') . '</button></form> ';
+				echo '<form method="post" action="' . admin_url('admin-post.php') . '" style="display:inline;" onsubmit="return confirm(\'' . esc_js(__('确定删除该友链申请？', 'argon')) . '\');">'
+					. '<input type="hidden" name="action" value="argon_fl_delete">'
+					. '<input type="hidden" name="comment_id" value="' . $c->comment_ID . '">'
+					. wp_nonce_field('argon_fl_admin', '_wpnonce', false)
+					. '<button type="submit" class="button">' . __('删除', 'argon') . '</button></form>';
+				echo '</td></tr>';
+			}
+			echo '</tbody></table>';
+		}
+	}
+
+	echo '<p class="description" style="margin-top:16px;">' . __('手动添加的友链请在后台「链接」中管理；此处仅列出访客自助申请。', 'argon') . '</p>';
+	echo '</div>';
+}
+
+// 后台设置保存：校验 nonce 后逐项 update_option，并按需调整每日 Cron
+add_action('admin_post_argon_fl_save_settings', 'argon_fl_admin_save_settings');
+function argon_fl_admin_save_settings(){
+	if (!current_user_can('edit_theme_options') || !wp_verify_nonce($_POST['_wpnonce'] ?? '', 'argon_fl_admin')){
+		wp_die(__('权限不足或校验失败', 'argon'));
+	}
+	$bool_opts = array('argon_fl_enable', 'argon_fl_email_confirm_enable', 'argon_fl_backlink_enable', 'argon_fl_backlink_nofollow_strict', 'argon_fl_backlink_notify_missing', 'argon_fl_backlink_cron_enable', 'argon_fl_notify_submitted', 'argon_fl_send_edit_link');
+	foreach ($bool_opts as $opt){
+		update_option($opt, isset($_POST[$opt]) ? 'true' : 'false');
+	}
+	$num_opts = array('argon_fl_mail_limit_ip_min', 'argon_fl_mail_limit_ip_day');
+	foreach ($num_opts as $opt){
+		update_option($opt, max(1, (int) ($_POST[$opt] ?? 1)));
+	}
+	// 每日 Cron 随开关启停
+	if (get_option('argon_fl_backlink_cron_enable', 'true') == 'true'){
+		if (!wp_next_scheduled('argon_fl_daily_backlink')){
+			argon_fl_maybe_schedule_backlink_cron();
+		}
+	} else {
+		wp_clear_scheduled_hook('argon_fl_daily_backlink');
+	}
+	wp_redirect(add_query_arg(array('updated' => 1, 'tab' => 'settings'), admin_url('admin.php?page=argon-friendlinks')));
+	exit;
+}
+
+// 后台手动「重新检查」回链
+add_action('admin_post_argon_fl_recheck_admin', 'argon_fl_admin_recheck');
+function argon_fl_admin_recheck(){
+	if (!current_user_can('edit_theme_options') || !wp_verify_nonce($_POST['_wpnonce'] ?? '', 'argon_fl_admin')){
+		wp_die(__('权限不足或校验失败', 'argon'));
+	}
+	$link_id = intval($_POST['link_id'] ?? 0);
+	if ($link_id <= 0 || !get_bookmark($link_id)){
+		wp_die(__('友链不存在', 'argon'));
+	}
+	$status = argon_fl_check_backlink_with_notify($link_id, true); // 手动重查：忽略 24h 缓存
+	$labels = array('mutual' => __('互链检查完成：已互链。', 'argon'), 'none' => __('互链检查完成：未检测到互链。', 'argon'), 'error' => __('互链检查失败（网络或超时）。', 'argon'));
+	wp_redirect(add_query_arg(array('recheck' => rawurlencode(isset($labels[$status]) ? $labels[$status] : __('互链检查完成。', 'argon')), 'tab' => 'approved'), admin_url('admin.php?page=argon-friendlinks')));
+	exit;
+}
+
+// 管理页快捷操作
+add_action('admin_post_argon_fl_approve', 'argon_fl_admin_approve');
+function argon_fl_admin_approve(){
+	if (!current_user_can('edit_theme_options') || !wp_verify_nonce($_POST['_wpnonce'] ?? '', 'argon_fl_admin')){
+		wp_die(__('权限不足或校验失败', 'argon'));
+	}
+	$id = intval($_POST['comment_id'] ?? 0);
+	if ($id > 0){
+		// 触发 transition_comment_status -> 转 wp_links + 发邮件 + 删评论
+		wp_set_comment_status($id, 'approve');
+	}
+	wp_redirect(admin_url('admin.php?page=argon-friendlinks'));
+	exit;
+}
+add_action('admin_post_argon_fl_delete', 'argon_fl_admin_delete');
+function argon_fl_admin_delete(){
+	if (!current_user_can('edit_theme_options') || !wp_verify_nonce($_POST['_wpnonce'] ?? '', 'argon_fl_admin')){
+		wp_die(__('权限不足或校验失败', 'argon'));
+	}
+	if (!empty($_POST['comment_id'])){
+		wp_delete_comment(intval($_POST['comment_id']), true);
+	}
+	if (!empty($_POST['link_id'])){
+		$lid = intval($_POST['link_id']);
+		if (!function_exists('wp_delete_link')){
+			require_once ABSPATH . 'wp-admin/includes/bookmark.php';
+		}
+		wp_delete_link($lid);
+		$fl_tokens = get_option('argon_fl_link_tokens', array());
+		unset($fl_tokens[$lid]);
+		update_option('argon_fl_link_tokens', $fl_tokens);
+	}
+	wp_redirect(admin_url('admin.php?page=argon-friendlinks'));
+	exit;
+}
+
+// 「申请友链」按钮 + 弹窗（评论区风格），仅当功能启用时由 [friendlinks] 调用
+function argon_fl_apply_button_html($style = '1'){
+	$nonce   = wp_create_nonce('argon_ajax_action');
+	$ajaxurl = admin_url('admin-ajax.php');
+	$post_id = (int) get_the_ID();
+	// 头像圆角跟随当前友链墙风格（style1 为「右圆破框」，方/style2 为直角），确保预览与主题一致
+	switch ($style){
+		case '1':          $avatar_radius = '0 65px 65px 0'; break;
+		case '1-square':   $avatar_radius = '0'; break;
+		default:           $avatar_radius = '0'; break; // style2 / 2-big 等
+	}
+	// 连接动画中“本站”气泡用的真实站点图标（站点图标，缺失时回退到内置默认）
+	$site_icon_url = get_site_icon_url();
+	if (!$site_icon_url){
+		$site_icon_url = 'data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22%20viewBox=%220%200%2024%2024%22%3E%3Ccircle%20cx=%2212%22%20cy=%2212%22%20r=%2210%22%20fill=%22%23ffffff%22/%3E%3Ccircle%20cx=%2212%22%20cy=%2212%22%20r=%225%22%20fill=%22%23ff6b81%22/%3E%3C/svg%3E';
+	}
+	ob_start();
+	?>
+	<div class="friendlink-apply">
+		<button type="button" id="friendlink_apply_btn" class="friendlink-apply-btn">
+			<span class="btn-inner--icon"><i class="fa fa-link"></i></span>
+			<span class="btn-inner--text"><?php _e('申请友链', 'argon'); ?></span>
+		</button>
+		<div class="friendlink-apply-backdrop" id="friendlink_apply_backdrop"></div>
+		<div class="friendlink-apply-modal" role="dialog" aria-modal="true" aria-label="<?php esc_attr_e('申请友链', 'argon'); ?>">
+			<!-- 左：连接舞台（渐变 + 流动连线 + 破框预览卡） -->
+			<div class="friendlink-apply-stage">
+				<p class="fl-stage-kicker"><?php _e('申请友链', 'argon'); ?></p>
+				<h3 class="fl-stage-title"><?php _e('和本站<br>互换友链', 'argon'); ?></h3>
+				<div class="fl-stage-flow">
+					<svg viewBox="0 0 240 120" aria-hidden="true">
+						<defs>
+							<linearGradient id="flLineGrad" x1="0" y1="0" x2="1" y2="0">
+								<stop offset="0%" stop-color="rgba(255,255,255,.22)"/>
+								<stop offset="100%" stop-color="rgba(255,255,255,.7)"/>
+							</linearGradient>
+							<clipPath id="flBubbleClip"><circle cx="44" cy="30" r="20"/></clipPath>
+							<clipPath id="flBubbleClip2"><circle cx="196" cy="30" r="20"/></clipPath>
+							<radialGradient id="flHalo"><stop offset="0%" stop-color="rgba(255,255,255,.9)"/><stop offset="100%" stop-color="rgba(255,255,255,0)"/></radialGradient>
+						</defs>
+						<!-- 连接动画（辅助，细节丰富）：纤细半透明，让上方站点图气泡成为焦点 -->
+						<line x1="44" y1="82" x2="196" y2="82" stroke="url(#flLineGrad)" stroke-width="1.5" stroke-linecap="round" opacity=".7"/>
+						<!-- 流动虚线：连接“正在建立” -->
+						<line x1="44" y1="82" x2="196" y2="82" class="fl-link-flow" stroke="#fff" stroke-width="1.5" stroke-linecap="round" opacity=".8"/>
+						<!-- 连接高亮脉冲：周期性提亮，强调“已连通” -->
+						<line x1="44" y1="82" x2="196" y2="82" class="fl-link-glow" stroke="#fff" stroke-width="1.5" stroke-linecap="round" opacity=".5"/>
+						<!-- 刻度标记（细节） -->
+						<g class="fl-ticks" stroke="rgba(255,255,255,.32)" stroke-width="1">
+							<line x1="68" y1="79" x2="68" y2="85"/>
+							<line x1="92" y1="79" x2="92" y2="85"/>
+							<line x1="120" y1="78" x2="120" y2="86"/>
+							<line x1="148" y1="79" x2="148" y2="85"/>
+							<line x1="172" y1="79" x2="172" y2="85"/>
+						</g>
+						<!-- 气泡到节点的引线：把焦点气泡与下方连线视觉串联 -->
+						<line x1="44" y1="54" x2="44" y2="70" stroke="rgba(255,255,255,.3)" stroke-width="1" stroke-dasharray="1.5 3" class="fl-drop"/>
+						<line x1="196" y1="54" x2="196" y2="70" stroke="rgba(255,255,255,.3)" stroke-width="1" stroke-dasharray="1.5 3" class="fl-drop fl-drop2"/>
+						<!-- 方向指示：已移除，避免与粒子流重复表达双向 -->
+
+						<!-- 节点柔光晕（丰富层次） -->
+						<circle cx="44" cy="82" r="16" fill="url(#flHalo)" class="fl-node-halo"/>
+						<circle cx="196" cy="82" r="16" fill="url(#flHalo)" class="fl-node-halo2"/>
+						<!-- 两端节点声纳环 + 核心 -->
+						<circle cx="44" cy="82" r="9" fill="none" stroke="rgba(255,255,255,.4)" stroke-width="1.5" class="fl-node-ring"/>
+						<circle cx="196" cy="82" r="9" fill="none" stroke="rgba(255,255,255,.4)" stroke-width="1.5" class="fl-node-ring2"/>
+						<circle cx="44" cy="82" r="5" fill="#fff" class="fl-node-core"/>
+						<circle cx="196" cy="82" r="5" fill="rgba(255,255,255,.92)" class="fl-node-core2"/>
+						<!-- 中心连接点（握手中点） -->
+						<circle cx="120" cy="82" r="3" fill="#fff" class="fl-center-pulse"/>
+						<!-- 双向数据包（主） -->
+						<circle cx="0" cy="82" r="4" fill="#fff" class="fl-packet"/>
+						<circle cx="0" cy="82" r="3.5" fill="rgba(255,255,255,.7)" class="fl-packet2"/>
+						<!-- 双向数据流（细节粒子，正反各 2 颗，跟在主数据包之后形成尾迹） -->
+						<circle cx="0" cy="82" r="1.8" fill="rgba(255,255,255,.85)" class="fl-particle pf1"/>
+						<circle cx="0" cy="82" r="1.4" fill="rgba(255,255,255,.7)" class="fl-particle pf2"/>
+						<circle cx="0" cy="82" r="1.6" fill="rgba(255,255,255,.55)" class="fl-particle pr1"/>
+						<circle cx="0" cy="82" r="1.3" fill="rgba(255,255,255,.45)" class="fl-particle pr2"/>
+						<text x="44" y="106" text-anchor="middle" fill="rgba(255,255,255,.7)" font-size="10" font-weight="600"><?php _e('本站', 'argon'); ?></text>
+						<text x="196" y="106" text-anchor="middle" fill="rgba(255,255,255,.7)" font-size="10" font-weight="600"><?php _e('友站', 'argon'); ?></text>
+						<!-- 真实站点图气泡（焦点）：漂浮在两端上方，分别显示“本站”与“友站”的真实站点图 -->
+						<g class="fl-site-bubble" clip-path="url(#flBubbleClip)">
+							<circle cx="44" cy="30" r="20" fill="rgba(255,255,255,.95)"/>
+							<image id="fl_bubble_site" x="24" y="10" width="40" height="40" preserveAspectRatio="xMidYMid slice" href="<?php echo (strpos($site_icon_url, 'data:') === 0) ? $site_icon_url : esc_url($site_icon_url); ?>"/>
+						</g>
+						<g class="fl-site-bubble2" clip-path="url(#flBubbleClip2)">
+							<circle cx="196" cy="30" r="20" fill="rgba(255,255,255,.95)"/>
+							<image id="fl_bubble_yours" x="176" y="10" width="40" height="40" preserveAspectRatio="xMidYMid slice"/>
+						</g>
+						<!-- 气泡描边 + 呼吸光环（强化焦点层次） -->
+						<circle cx="44" cy="30" r="20" fill="none" stroke="rgba(255,255,255,.55)" stroke-width="1.2" class="fl-bubble-edge"/>
+						<circle cx="196" cy="30" r="20" fill="none" stroke="rgba(255,255,255,.55)" stroke-width="1.2" class="fl-bubble-edge fl-bubble-edge2"/>
+						<circle cx="44" cy="30" r="23" fill="none" stroke="rgba(255,255,255,.4)" stroke-width="1" class="fl-bubble-ring"/>
+						<circle cx="196" cy="30" r="23" fill="none" stroke="rgba(255,255,255,.4)" stroke-width="1" class="fl-bubble-ring fl-bubble-ring2"/>
+						<!-- 环绕卫星点：气泡周围缓慢公转，增加细节 -->
+						<g class="fl-orbit"><circle cx="44" cy="4" r="2" fill="rgba(255,255,255,.85)"/></g>
+						<g class="fl-orbit fl-orbit2"><circle cx="196" cy="4" r="2" fill="rgba(255,255,255,.85)"/></g>
+					</svg>
+				</div>
+				<!-- 实时预览卡：与主题友链墙同款结构（friend-link-container / friend-link-content / friend-link-avatar 等） -->
+				<div class="fl-preview friend-link-container card shadow-sm is-empty" id="fl_preview">
+					<img id="fl_pv_avatar" class="friend-link-avatar bg-gradient-secondary" alt="" style="border-radius:<?php echo $avatar_radius; ?>">
+					<div class="friend-link-content">
+						<div class="friend-link-title title text-primary">
+							<a id="fl_pv_name" href="#" target="_blank" rel="noopener"><?php _e('友站', 'argon'); ?></a>
+						</div>
+						<div id="fl_pv_desc" class="friend-link-description"><?php _e('填写后这里会实时预览友链墙效果', 'argon'); ?></div>
+						<div class="friend-link-links">
+							<a id="fl_pv_arrow" href="#" target="_blank" rel="noopener"><i class="fa fa-angle-right" style="font-weight: bold;"></i></a>
+						</div>
+					</div>
+				</div>
+				<!-- 默认文案：由浏览器解码 HTML 实体后再交给 JS，避免 .text() 直接显示 &#xxxx; -->
+				<div class="fl-preview-defaults" aria-hidden="true" style="position:absolute;width:0;height:0;overflow:hidden;">
+					<span id="fl_pv_default_name"><?php _e('友站', 'argon'); ?></span>
+					<span id="fl_pv_default_desc_empty"><?php _e('填写后这里会实时预览友链墙效果', 'argon'); ?></span>
+					<span id="fl_pv_default_desc_filled"><?php _e('这里会显示友站描述，让访客一眼了解你。', 'argon'); ?></span>
+				</div>
+			</div>
+			<!-- 右：表单 -->
+			<div class="friendlink-apply-form">
+				<div class="fl-form-head">
+					<h3 class="fl-form-title">
+						<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+						<?php _e('申请友链', 'argon'); ?>
+					</h3>
+					<button type="button" class="fl-close" aria-label="<?php esc_attr_e('关闭', 'argon'); ?>">
+						<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+					</button>
+				</div>
+				<div class="fl-form-body">
+					<form id="friendlink_apply_form" method="post" action="" data-ajaxurl="<?php echo esc_url($ajaxurl); ?>" data-nonce="<?php echo $nonce; ?>">
+						<input type="hidden" name="argon_fl_post_id" value="<?php echo $post_id; ?>">
+					<div class="fl-grid">
+						<div class="fl-field">
+							<label class="fl-label" for="flf_name"><?php _e('站点名称', 'argon'); ?> <span class="req">*</span></label>
+							<input type="text" class="form-control" id="flf_name" name="argon_fl_name" required>
+						</div>
+						<div class="fl-field">
+							<label class="fl-label" for="flf_url"><?php _e('网站 URL', 'argon'); ?> <span class="req">*</span></label>
+							<input type="url" class="form-control" id="flf_url" name="argon_fl_url" required placeholder="https://">
+						</div>
+						<div class="fl-field">
+							<label class="fl-label" for="flf_image"><?php _e('站点图 URL', 'argon'); ?> <span class="opt">（可选）</span></label>
+							<input type="url" class="form-control" id="flf_image" name="argon_fl_image" placeholder="https://">
+						</div>
+						<div class="fl-field">
+							<label class="fl-label" for="flf_email"><?php _e('邮箱', 'argon'); ?> <span class="req">*</span></label>
+							<input type="email" class="form-control" id="flf_email" name="argon_fl_email" required placeholder="your@email.com">
+						</div>
+						<div class="fl-field fl-field-full">
+							<label class="fl-label" for="flf_desc"><?php _e('描述', 'argon'); ?> <span class="opt">（可选）</span></label>
+							<textarea class="form-control" id="flf_desc" name="argon_fl_desc" rows="3" maxlength="60"></textarea>
+						</div>
+						<div class="fl-field fl-field-full">
+							<label class="fl-label" for="flf_linkpage"><?php _e('友链页 URL', 'argon'); ?> <span class="opt">（可选，用于自动互链检查）</span></label>
+							<input type="url" class="form-control" id="flf_linkpage" name="argon_fl_linkpage" placeholder="https://">
+						</div>
+					</div>
+						<p class="fl-msg"></p>
+						<button type="submit" class="fl-submit"><?php _e('建立友链连接', 'argon'); ?> <span class="arrow">&rarr;</span></button>
+					</form>
+				</div>
+			</div>
+		</div>
+	</div>
+	<script>
+		(function(){
+			// 原生 JS 实现，避免依赖 jQuery 加载时序（主题 jQuery 在页脚合并包中，body 内联脚本执行时尚未就绪）
+			function initFriendLinkModal(){
+				var modal = document.querySelector('.friendlink-apply-modal');
+				if (!modal || modal.dataset.flmReady) return;   // 幂等：Pjax 重复初始化时跳过
+				modal.dataset.flmReady = '1';
+
+				var btn      = document.getElementById('friendlink_apply_btn');
+				var backdrop = document.getElementById('friendlink_apply_backdrop');
+				var form     = document.getElementById('friendlink_apply_form');
+				var preview  = document.getElementById('fl_preview');
+				var nameEl   = document.getElementById('fl_pv_name');
+				var descEl   = document.getElementById('fl_pv_desc');
+				var avatar   = document.getElementById('fl_pv_avatar');
+				var arrowEl  = document.getElementById('fl_pv_arrow');
+				var bubbleYours = document.getElementById('fl_bubble_yours');
+				var defName        = document.getElementById('fl_pv_default_name');
+				var defDescEmpty   = document.getElementById('fl_pv_default_desc_empty');
+				var defDescFilled  = document.getElementById('fl_pv_default_desc_filled');
+
+				function val(name){ var el = form.querySelector && form.querySelector('[name="' + name + '"]'); return el ? el.value.trim() : ''; }
+
+				// 主题会对 article 内所有图片自动加 lazyload 类，其 CSS 会把头像撑成 500px 高/100% 宽，
+				// 导致预览卡 UI 错乱。这里在初始化与每次同步时剥离这些类（spinner 规则随之失效），
+				// 并用清晰的默认头像占位，避免空态「头像不显示」。
+				var FL_DEFAULT_AVATAR = 'data:image/svg+xml,%3Csvg%20xmlns=%27http://www.w3.org/2000/svg%27%20viewBox=%270%200%2024%2024%27%20fill=%27%2394a3b8%27%3E%3Ccircle%20cx=%2712%27%20cy=%278%27%20r=%274%27/%3E%3Cpath%20d=%27M4%2020c0-4%204-6%208-6s8%202%208%206%27/%3E%3C/svg%3E';
+				function stripLazyload(){
+					if (!avatar) return;
+					avatar.classList.remove('lazyload');
+					avatar.className = avatar.className.replace(/\blazyload-style-\d+\b/g, '').replace(/\s{2,}/g, ' ').trim();
+				}
+
+				// 数据变化时的「模糊渐变」入场：仅在字段从空↔有 的状态切换时触发，
+				// 避免每改一个字就整段重放动画。用 CSS 类重放，规避 WAAPI filter 在内联元素上不生效的问题
+				function blurIn(el){
+					if (!el || !el.classList) return;
+					el.classList.remove('fl-blur-in');
+					void el.offsetWidth;   // 强制重排以重启动画
+					el.classList.add('fl-blur-in');
+				}
+				var prev = {name:'', desc:'', img:''};
+
+				// 实时预览：随表单输入更新，结构与友链墙一致；描述与名称解耦，任意字段有内容即退出空态
+				function sync(){
+					var name = val('argon_fl_name');
+					var desc = val('argon_fl_desc');
+					var img  = val('argon_fl_image');
+					var url  = val('argon_fl_url');
+
+					// 头像：仅由「站点图 URL」决定，与站点名称是否填写无关（否则只填图片不显示）
+					stripLazyload();
+					if (img){
+						if (avatar.getAttribute('src') !== img){ avatar.src = img; if (prev.img === '') blurIn(avatar); }   // 仅从“无图”变为“有图”时模糊渐入
+						avatar.setAttribute('data-original', img);
+					} else {
+						if (avatar.getAttribute('src') !== FL_DEFAULT_AVATAR){ avatar.src = FL_DEFAULT_AVATAR; }
+						avatar.removeAttribute('data-original');
+					}
+					// “友站”连接气泡同步显示所填站点图（无图时清空，露出底层白色圆作占位）
+					if (bubbleYours){
+						if (img){ bubbleYours.setAttribute('href', img); } else { bubbleYours.removeAttribute('href'); }
+					}
+
+					// 空态：仅当所有可见字段都为空时才显示占位文案
+					var hasContent = name || desc || img || url;
+					if (hasContent){
+						preview.classList.remove('is-empty');
+					} else {
+						preview.classList.add('is-empty');
+					}
+
+					// 名称与描述各自独立实时更新；仅当字段“从无到有 / 从有到无”时对该字段做模糊渐变，
+					// 避免每改一个字就让整段文字反复模糊（即上次反馈的“整段数据动画”异常）
+					var newName = name || (defName ? defName.textContent : '<?php echo esc_js(__('友站', 'argon')); ?>');
+					nameEl.textContent = newName;
+					if ((name !== '') !== (prev.name !== '')){ blurIn(nameEl.parentElement || nameEl); }
+
+					var newDesc;
+					if (desc){
+						newDesc = desc;
+					} else if (name){
+						newDesc = defDescFilled ? defDescFilled.textContent : '';
+					} else {
+						newDesc = defDescEmpty ? defDescEmpty.textContent : '<?php echo esc_js(__('填写后这里会实时预览友链墙效果', 'argon')); ?>';
+					}
+					descEl.textContent = newDesc;
+					if ((desc !== '') !== (prev.desc !== '')){ blurIn(descEl); }
+
+					// 站点链接：标题与箭头指向所填 URL（头像不再包裹链接，与主题友链墙一致）
+					nameEl.href = url || '#';
+					arrowEl.href = url || '#';
+
+					// 描述输入框随内容自动增高（无手动调节手柄）
+					autoResizeTextarea();
+
+					prev.name = name; prev.desc = desc; prev.img = img;
+				}
+				function autoResizeTextarea(){
+					var ta = form.querySelector('textarea[name="argon_fl_desc"]');
+					if (!ta) return;
+					ta.style.height = 'auto';
+					ta.style.height = ta.scrollHeight + 'px';
+				}
+				form.addEventListener('input', sync);
+
+				// 居中兜底（CSS 已用 fixed + translate 双轴居中，这里仅处理超出视口的情况）
+				function positionModal(){
+					if (!modal.classList.contains('open')) return;
+					var vw = window.innerWidth, vh = window.innerHeight;
+					var mw = modal.offsetWidth, mh = modal.offsetHeight;
+					var left = vw / 2, top = vh / 2;
+					if (mw > vw - 16) left = (vw - mw) / 2 + 8;
+					if (mh > vh - 16) top  = (vh - mh) / 2 + 8;
+					modal.style.left = left + 'px';
+					modal.style.top  = top + 'px';
+				}
+				var rafId = null;
+				function onScrollResize(){
+					if (rafId) return;
+					rafId = requestAnimationFrame(function(){ rafId = null; positionModal(); });
+				}
+				function closeModal(){
+					modal.classList.remove('open');
+					backdrop.classList.remove('open');
+					window.removeEventListener('scroll', onScrollResize);
+					window.removeEventListener('resize', onScrollResize);
+				}
+
+				btn.addEventListener('click', function(e){
+					e.preventDefault();
+					if (modal.classList.contains('open')){ closeModal(); return; }
+					// 移出到 body，脱离祖先 overflow/transform 包含块，避免被裁剪或定位错位
+					document.querySelectorAll('.friendlink-apply-modal').forEach(function(m){ if (m !== modal) m.remove(); });
+					document.querySelectorAll('.friendlink-apply-backdrop').forEach(function(b){ if (b !== backdrop) b.remove(); });
+					if (modal.parentNode !== document.body) document.body.appendChild(modal);
+					if (backdrop.parentNode !== document.body) document.body.appendChild(backdrop);
+					sync();
+					positionModal();
+					// 强制回流：先让浏览器以「关闭态」完成一次样式计算，否则与上面的 DOM 移动同帧执行时会跳过过渡，弹窗直接闪现
+					void modal.offsetWidth;
+					backdrop.classList.add('open');
+					modal.classList.add('open');
+					window.addEventListener('scroll', onScrollResize);
+					window.addEventListener('resize', onScrollResize);
+				});
+				backdrop.addEventListener('click', closeModal);
+				modal.querySelector('.fl-close').addEventListener('click', function(e){ e.preventDefault(); closeModal(); });
+				document.addEventListener('click', function(e){
+					if (modal.classList.contains('open') && !modal.contains(e.target) && !btn.contains(e.target)) closeModal();
+				});
+				document.addEventListener('keydown', function(e){
+					if (e.key === 'Escape' && modal.classList.contains('open')) closeModal();
+				});
+
+				form.addEventListener('submit', function(e){
+					e.preventDefault();
+					var msg = form.querySelector('.fl-msg');
+					msg.classList.remove('error', 'ok'); msg.textContent = '';
+					if (!form.checkValidity()){ form.reportValidity(); return; }
+					var ajaxurl = form.getAttribute('data-ajaxurl');
+					var nonce   = form.getAttribute('data-nonce');
+					var fd = new FormData(form);
+					fd.append('action', 'argon_fl_apply');
+					fd.append('argon_ajax_nonce', nonce);
+					fetch(ajaxurl, { method: 'POST', body: fd, credentials: 'same-origin' })
+						.then(function(r){ return r.json(); })
+						.then(function(res){
+							if (res && res.status === 'success'){
+								msg.classList.add('ok'); msg.textContent = res.msg;
+								form.reset();
+								sync();
+								btn.classList.add('just-submitted');
+								setTimeout(function(){ btn.classList.remove('just-submitted'); }, 600);
+								setTimeout(closeModal, 2500);
+							} else if (res && res.status === 'need_confirm'){
+								// 邮箱确认流程：保留已填内容，提示查收邮件点击链接
+								msg.classList.add('ok'); msg.textContent = res.msg;
+								btn.classList.add('just-submitted');
+								setTimeout(function(){ btn.classList.remove('just-submitted'); }, 600);
+								setTimeout(closeModal, 2500);
+							} else {
+								msg.classList.add('error'); msg.textContent = (res && res.msg) ? res.msg : '<?php echo esc_js(__('未知错误', 'argon')); ?>';
+							}
+						})
+						.catch(function(){
+							msg.classList.add('error'); msg.textContent = '<?php echo esc_js(__('提交失败，请稍后重试', 'argon')); ?>';
+						});
+				});
+
+				sync();
+			}
+
+			if (document.readyState === 'loading'){
+				document.addEventListener('DOMContentLoaded', initFriendLinkModal);
+			} else {
+				initFriendLinkModal();
+			}
+			document.addEventListener('pjax:end', initFriendLinkModal);
+			window.addEventListener('load', initFriendLinkModal);
+		})();
+	</script>
+	<?php
+	return ob_get_clean();
 }

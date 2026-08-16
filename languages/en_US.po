@@ -2802,6 +2802,464 @@ msgstr "Email notification of comment #"
 msgid " 的邮件通知<br>该评论下有新回复时您将不会再收到通知"
 msgstr " is unsubscribed successfully."
 
+# ---- Friend Link Application (added 2026-08-16) ----
+msgid "参数错误：缺少验证标识"
+msgstr "Invalid request: missing verification token"
+
+msgid "参数错误：缺少友链标识"
+msgstr "Invalid request: missing friend link ID"
+
+msgid "验证链接无效或已过期，请重新提交申请。"
+msgstr "The verification link is invalid or has expired. Please submit a new application."
+
+msgid "友链 #"
+msgstr "Friend Link #"
+
+msgid "提交失败，请稍后重试或重新提交申请。"
+msgstr "Submission failed. Please try again later or submit a new application."
+
+msgid "主题功能异常，请联系站点管理员。"
+msgstr "The theme encountered an error. Please contact the site administrator."
+
+msgid "请填写有效的站点名称与网站 URL"
+msgstr "Please provide a valid site name and website URL"
+
+msgid "友链申请提交成功"
+msgstr "Friend Link Application Submitted"
+
+msgid "友链信息已更新，将在友链界面立即生效。"
+msgstr "Your friend link has been updated and will take effect on the friend link page immediately."
+
+msgid "管理我的友链"
+msgstr "Manage My Friend Link"
+
+msgid "该申请已提交，无需重复确认"
+msgstr "This application has already been submitted. No need to confirm again."
+
+msgid "提交成功，等待管理员审核"
+msgstr "Submitted successfully, awaiting admin review"
+
+msgid "您的友链申请此前已确认并提交，请等待管理员审核。"
+msgstr "Your friend link application was previously confirmed and submitted. Please wait for admin review."
+
+msgid "您的友链申请已确认并提交，审核通过后会通过邮件通知您，并附上可自助修改友链信息的管理链接。"
+msgstr "Your friend link application has been confirmed and submitted. You will be notified by email once it is approved, along with a management link to edit your friend link."
+
+msgid "返回首页"
+msgstr "Back to Home"
+
+msgid "无法确认"
+msgstr "Unable to Confirm"
+
+msgid "无法管理"
+msgstr "Unable to Manage"
+
+msgid "互链状态："
+msgstr "Linkback Status:"
+
+msgid "站点图 URL（可选）"
+msgstr "Site Image URL (optional)"
+
+msgid "描述（可选）"
+msgstr "Description (optional)"
+
+msgid "友链页 URL（可选，用于自动互链检查）"
+msgstr "Friend Link Page URL (optional, used for the automatic linkback check)"
+
+msgid "保存修改"
+msgstr "Save Changes"
+
+msgid "检查中…"
+msgstr "Checking…"
+
+msgid "请确认您的友链申请"
+msgstr "Please Confirm Your Friend Link Application"
+
+msgid "您好，我们收到了来自「%s」的友链申请。"
+msgstr "Hello, we have received a friend link application from \"%s\"."
+
+msgid "请点击下面的链接确认提交（1 小时内有效）："
+msgstr "Click the link below to confirm your submission (valid for 1 hour):"
+
+msgid "确认后申请才会提交给管理员审核。若非本人操作，请忽略此邮件。"
+msgstr "Your application will be submitted for admin review only after confirmation. If you did not request this, please ignore this email."
+
+msgid "已向 %1$s 发送确认邮件（%2$s）"
+msgstr "Confirmation email sent to %1$s (%2$s)"
+
+msgid "确认邮件发送失败：%s"
+msgstr "Failed to send confirmation email: %s"
+
+msgid "您的友链申请已提交"
+msgstr "Your Friend Link Application Has Been Submitted"
+
+msgid "您好，您的友链申请已确认并提交，正在等待管理员审核。"
+msgstr "Hello, your friend link application has been confirmed and is now awaiting admin review."
+
+msgid "站点名称："
+msgstr "Site Name:"
+
+msgid "链接："
+msgstr "URL:"
+
+msgid "审核通过后会再发一封邮件通知您，并附上可自助修改友链信息的管理链接。"
+msgstr "You will receive another email once your application is approved, along with a management link to edit your friend link."
+
+msgid "新友链申请待审核"
+msgstr "New Friend Link Application Pending Review"
+
+msgid "邮箱："
+msgstr "Email:"
+
+msgid "友链页："
+msgstr "Friend Link Page:"
+
+msgid "请在后台「友链申请」页审核："
+msgstr "Please review it in the Friend Links admin page:"
+
+msgid "友链申请已提交待审：%1$s（%2$s）"
+msgstr "Friend link application submitted for review: %1$s (%2$s)"
+
+msgid "您的友链申请已通过审核"
+msgstr "Your Friend Link Application Has Been Approved"
+
+msgid "您好，您申请的友链已通过审核，现已展示在友链界面。"
+msgstr "Hello, your friend link application has been approved and is now displayed on the friend link page."
+
+msgid "描述："
+msgstr "Description:"
+
+msgid "别忘了在您的站点添加本站友链，保持互链："
+msgstr "Don't forget to add our friend link to your site to keep the linkback:"
+
+msgid "本站名称："
+msgstr "Our Site Name:"
+
+msgid "本站链接："
+msgstr "Our Site URL:"
+
+msgid "如需修改友链信息（名称 / 链接 / 描述 / 站点图 / 友链页），请访问："
+msgstr "To edit your friend link (name / URL / description / site image / friend link page), visit:"
+
+msgid "该管理链接仅您本人持有，换浏览器或换网络均可使用，请妥善保管。"
+msgstr "This management link is only held by you and works across browsers and networks. Please keep it safe."
+
+msgid "友链已通过审核：%s"
+msgstr "Friend link approved: %s"
+
+msgid "友链互链未检测到"
+msgstr "Linkback Not Detected"
+
+msgid "友链「%s」填写了友链页，但未在该页面检测到指向本站的链接。"
+msgstr "Friend link \"%s\" provided a friend link page, but no link to our site was found on it."
+
+msgid "检查地址："
+msgstr "Checked URL:"
+
+msgid "对方站点："
+msgstr "Their Site:"
+
+msgid "这不影响审核，请按需人工确认："
+msgstr "This does not affect the review process, but please verify it manually as needed:"
+
+msgid "未检测到您站点上的本站友链"
+msgstr "Our Friend Link Not Detected on Your Site"
+
+msgid "您好，我们在您提供的友链页未检测到指向本站的链接："
+msgstr "Hello, we could not find a link to our site on the friend link page you provided:"
+
+msgid "若您已添加，可能是缓存或页面结构原因，可忽略此邮件；若尚未添加，欢迎补充以保持互链："
+msgstr "If you have already added it, this may be due to caching or page structure; feel free to ignore this email. If not, we welcome you to add it to keep the linkback:"
+
+msgid "未检测到互链：%1$s（检查 %2$s）"
+msgstr "Linkback not detected: %1$s (checked %2$s)"
+
+msgid "友链站点异常"
+msgstr "Friend Link Site Unreachable"
+
+msgid "友链「%s」此前检测为已互链，本次复查无法访问其页面（可能已关闭站点或网络异常）。"
+msgstr "Friend link \"%s\" was previously verified as mutual, but its page could not be accessed this time (the site may be down or have a network issue)."
+
+msgid "请核查后决定是否保留该友链："
+msgstr "Please verify and decide whether to keep this friend link:"
+
+msgid "友链疑似已撤链"
+msgstr "Friend Link Possibly Removed"
+
+msgid "友链「%s」此前检测为已互链，本次复查未再检测到指向本站的链接。"
+msgstr "Friend link \"%s\" was previously verified as mutual, but no link to our site was detected this time."
+
+msgid "疑似撤链/异常：%s"
+msgstr "Possible removal/issue: %s"
+
+msgid "已确认互链：%s"
+msgstr "Linkback confirmed: %s"
+
+msgid "验证邮件刚刚已发送，请查收邮箱；如需重发请稍后再试。"
+msgstr "The verification email was just sent. Please check your inbox; try again later if you need a resend."
+
+msgid "操作过于频繁，请一分钟后再试。"
+msgstr "Too many attempts. Please try again in a minute."
+
+msgid "今日提交次数过多，请明日再试。"
+msgstr "Too many submissions today. Please try again tomorrow."
+
+msgid "名称："
+msgstr "Name:"
+
+msgid "头像："
+msgstr "Avatar:"
+
+msgid "友链自助申请功能未开启"
+msgstr "The friend link application feature is not enabled"
+
+msgid "请填写站点名称"
+msgstr "Please enter the site name"
+
+msgid "请填写合法的网站 URL"
+msgstr "Please enter a valid website URL"
+
+msgid "请填写邮箱（用于确认申请与发送可管理链接）"
+msgstr "Please enter your email (used to confirm your application and receive a management link)"
+
+msgid "友链页 URL 不合法"
+msgstr "Invalid friend link page URL"
+
+msgid "提交目标页面无效"
+msgstr "Invalid submission target page"
+
+msgid "提交失败，请稍后重试"
+msgstr "Submission failed, please try again later"
+
+msgid "提交成功，等待管理员审核。审核通过后将在友链界面展示。"
+msgstr "Submitted successfully. Awaiting admin review; it will appear on the friend link page once approved."
+
+msgid "验证邮件已发送至 %s，请查收并点击邮件中的链接完成提交。"
+msgstr "A verification email has been sent to %s. Please check your inbox and click the link to complete your submission."
+
+msgid "友链不存在"
+msgstr "Friend link does not exist"
+
+msgid "管理链接无效或已失效"
+msgstr "Invalid or expired management link"
+
+msgid "回链检查功能未开启"
+msgstr "The linkback check feature is not enabled"
+
+msgid "已互链"
+msgstr "Mutual"
+
+msgid "未检测到互链"
+msgstr "Linkback not detected"
+
+msgid "检查失败"
+msgstr "Check failed"
+
+msgid "每日回链复查完成，共检查 %d 个友链。"
+msgstr "Daily linkback recheck completed; %d friend links checked."
+
+msgid "权限不足"
+msgstr "Insufficient permissions"
+
+msgid "友链申请"
+msgstr "Friend Links"
+
+msgid "设置已保存。"
+msgstr "Settings saved."
+
+msgid "已通过"
+msgstr "Approved"
+
+msgid "通知记录"
+msgstr "Notifications"
+
+msgid "启用友链自助申请"
+msgstr "Enable friend link self-application"
+
+msgid "关闭后申请按钮与提交接口均不可用"
+msgstr "When disabled, the apply button and submission endpoint are unavailable"
+
+msgid "启用邮箱确认链接"
+msgstr "Enable email confirmation link"
+
+msgid "开启后提交需点击邮件链接确认才进入待审，可防脚本刷申请"
+msgstr "When enabled, submissions require clicking the email confirmation link before entering the review queue, preventing spam scripts"
+
+msgid "发送「已提交待审核」确认邮件"
+msgstr "Send \"submitted, awaiting review\" confirmation email"
+
+msgid "点击确认链接提交成功后，通知申请者申请已受理"
+msgstr "Notify applicants that their application has been received after they submit via the confirmation link"
+
+msgid "审核通过邮件附管理链接"
+msgstr "Include management link in approval email"
+
+msgid "申请者可凭链接自助修改友链信息"
+msgstr "Applicants can use the link to edit their friend link info on their own"
+
+msgid "同 IP 每分钟发信上限"
+msgstr "Max confirmation emails per IP per minute"
+
+msgid "同一 IP 每分钟最多发送确认邮件数"
+msgstr "Maximum confirmation emails that can be sent per minute from the same IP"
+
+msgid "同 IP 每日发信上限"
+msgstr "Max confirmation emails per IP per day"
+
+msgid "同一 IP 每日最多发送确认邮件数，防恶意刷邮件"
+msgstr "Maximum confirmation emails per day from the same IP, preventing email spam"
+
+msgid "启用自动互链检查"
+msgstr "Enable automatic linkback check"
+
+msgid "审核通过时检查，并每日 Cron 复查；检查目标为对方「友链页 URL」，未填则抓首页"
+msgstr "Check on approval and recheck daily via Cron; targets the applicant's friend link page URL, or their homepage if not provided"
+
+msgid "互链严格模式"
+msgstr "Strict linkback mode"
+
+msgid "勾选后带 nofollow 的回链不计为互链"
+msgstr "When enabled, links with nofollow are not counted as mutual linkbacks"
+
+msgid "未检测到互链时发通知"
+msgstr "Notify when linkback is not detected"
+
+msgid "填了友链页但未检测到互链，通知管理员与申请者（不阻断审核）"
+msgstr "Notify the admin and applicant when a friend link page is provided but no linkback is found (does not block review)"
+
+msgid "启用每日复查（02:00–05:00）"
+msgstr "Enable daily recheck (02:00–05:00)"
+
+msgid "关闭后仅审核通过时与手动检查"
+msgstr "When disabled, only check on approval and via manual recheck"
+
+msgid "基本功能"
+msgstr "General"
+
+msgid "友链自助申请的启用与邮件流程"
+msgstr "Friend link application enabling and email flow"
+
+msgid "邮件与限流"
+msgstr "Email & Rate Limits"
+
+msgid "确认邮件发送频次控制，防止恶意请求"
+msgstr "Confirmation email rate control to prevent abuse"
+
+msgid "回链检查"
+msgstr "Linkback Check"
+
+msgid "自动互链检查的开关与检查策略"
+msgstr "Linkback check switches and strategy"
+
+msgid "每日复查 Cron："
+msgstr "Daily recheck Cron:"
+
+msgid "已调度，下次执行 %s"
+msgstr "Scheduled, next run %s"
+
+msgid "待首次调度（下次访问站点后生效）"
+msgstr "Waiting for first schedule (takes effect on the next site visit)"
+
+msgid "保存设置"
+msgstr "Save Settings"
+
+msgid "暂无已通过的自助友链。"
+msgstr "No approved friend links yet."
+
+msgid "站点名称"
+msgstr "Site Name"
+
+msgid "网站 URL"
+msgstr "Website URL"
+
+msgid "描述"
+msgstr "Description"
+
+msgid "互链状态"
+msgstr "Linkback Status"
+
+msgid "操作"
+msgstr "Actions"
+
+msgid "未检查"
+msgstr "Not checked"
+
+msgid "重新检查"
+msgstr "Recheck"
+
+msgid "确定删除该友链？"
+msgstr "Delete this friend link?"
+
+msgid "删除"
+msgstr "Delete"
+
+msgid "暂无通知记录。"
+msgstr "No notifications yet."
+
+msgid "时间"
+msgstr "Time"
+
+msgid "暂无待审核的友链申请。"
+msgstr "No friend link applications pending review."
+
+msgid "友链页"
+msgstr "Friend Link Page"
+
+msgid "通过"
+msgstr "Approve"
+
+msgid "确定删除该友链申请？"
+msgstr "Delete this friend link application?"
+
+msgid "手动添加的友链请在后台「链接」中管理；此处仅列出访客自助申请。"
+msgstr "Manually added friend links are managed under Links in the admin; only visitor-submitted applications are listed here."
+
+msgid "权限不足或校验失败"
+msgstr "Insufficient permissions or verification failed"
+
+msgid "互链检查完成：已互链。"
+msgstr "Linkback check complete: mutual."
+
+msgid "互链检查完成：未检测到互链。"
+msgstr "Linkback check complete: no linkback detected."
+
+msgid "互链检查失败（网络或超时）。"
+msgstr "Linkback check failed (network or timeout)."
+
+msgid "互链检查完成。"
+msgstr "Linkback check complete."
+
+msgid "申请友链"
+msgstr "Apply for Friend Link"
+
+msgid "和本站<br>互换友链"
+msgstr "Swap Friend Links<br>with Us"
+
+msgid "本站"
+msgstr "Our Site"
+
+msgid "友站"
+msgstr "Your Site"
+
+msgid "填写后这里会实时预览友链墙效果"
+msgstr "Fill this in and the friend link wall preview updates in real time"
+
+msgid "这里会显示友站描述，让访客一眼了解你。"
+msgstr "Your site description will appear here so visitors can get to know you at a glance."
+
+msgid "站点图 URL"
+msgstr "Site Image URL"
+
+msgid "友链页 URL"
+msgstr "Friend Link Page URL"
+
+msgid "建立友链连接"
+msgstr "Establish Connection"
+
+msgid "未知错误"
+msgstr "Unknown error"
+
+
 #~ msgid "自动折叠顶栏"
 #~ msgstr "Auto Fold Toolbar"
 
@@ -2814,11 +3272,6 @@ msgstr " is unsubscribed successfully."
 #~| msgid "主题色"
 #~ msgid "颜色"
 #~ msgstr "Theme Color"
-
-#, fuzzy
-#~| msgid "发布时间"
-#~ msgid "时间"
-#~ msgstr "Post time"
 
 #~ msgid "菜单"
 #~ msgstr "Menu"

@@ -52,7 +52,7 @@
 	$themecolor = get_option("argon_theme_color", "#5e72e4");
 	$themecolor_origin = $themecolor;
 	if (isset($_COOKIE["argon_custom_theme_color"])){
-		if (checkHEX($_COOKIE["argon_custom_theme_color"]) && get_option('argon_show_customize_theme_color_picker') != 'false'){
+		if (checkHEX($_COOKIE["argon_custom_theme_color"]) && argon_get_option('argon_show_customize_theme_color_picker') != 'false'){
 			$themecolor = $_COOKIE["argon_custom_theme_color"];
 		}
 	}
@@ -207,7 +207,7 @@
 	<meta name="theme-color" content="<?php echo esc_attr($themecolor); ?>">
 	<meta name="theme-color-rgb" content="<?php echo esc_attr(hex2str($themecolor)); ?>">
 	<meta name="theme-color-origin" content="<?php echo esc_attr($themecolor_origin); ?>">
-	<meta name="argon-enable-custom-theme-color" content="<?php echo (get_option('argon_show_customize_theme_color_picker') != 'false' ? 'true' : 'false'); ?>">
+	<meta name="argon-enable-custom-theme-color" content="<?php echo (argon_get_option('argon_show_customize_theme_color_picker') != 'false' ? 'true' : 'false'); ?>">
 
 
 	<meta name="theme-card-radius" content="<?php echo $cardradius; ?>">
@@ -221,20 +221,25 @@
 	<?php endif; ?>
 	<?php
 		wp_enqueue_style("argon_css_merged", $GLOBALS['assets_path'] . "/assets/argon_css_merged.css", null, $GLOBALS['theme_version']);
+		// Font Awesome 6（免费版）：all.min.css 提供 solid/regular/brands + 内置 FA4 别名；
+		// v4-shims.min.css 是 FA6 官方 FA4 兼容层（fa-clock-o / fa-send 等旧类名映射），
+		// 后加载覆盖合并包内的 FA4 裁剪版，保证 `fa fa-xxx` 类名全部可用
+		wp_enqueue_style("font-awesome-full", $GLOBALS['assets_path'] . "/assets/vendor/font-awesome6/css/all.min.css", null, $GLOBALS['theme_version']);
+		wp_enqueue_style("font-awesome-shims", $GLOBALS['assets_path'] . "/assets/vendor/font-awesome6/css/v4-shims.min.css", null, $GLOBALS['theme_version']);
 		wp_enqueue_style("style", $GLOBALS['assets_path'] . "/style.css", null, $GLOBALS['theme_version']);
-		if (get_option('argon_disable_googlefont') != 'true') {wp_enqueue_style("googlefont", "//fonts.googleapis.com/css?family=Open+Sans:300,400,600,700|Noto+Serif+SC:300,600&display=swap");}
+		if (argon_get_option('argon_disable_googlefont') != 'true') {wp_enqueue_style("googlefont", "//fonts.googleapis.com/css?family=Open+Sans:300,400,600,700|Noto+Serif+SC:300,600&display=swap");}
 		wp_enqueue_script("argon_js_merged", $GLOBALS['assets_path'] . "/assets/argon_js_merged.js", null, $GLOBALS['theme_version']);
 		/* 条件加载：仅在使用到的功能开启时才请求对应 vendor，降低首屏 JS 体积 */
-		if (get_option('argon_enable_fancybox') != 'false' && get_option('argon_enable_zoomify') == 'false'){
+		if (argon_get_option('argon_enable_fancybox') != 'false' && argon_get_option('argon_enable_zoomify') == 'false'){
 			wp_enqueue_style("fancybox5", $GLOBALS['assets_path'] . "/assets/vendor/fancybox5/fancybox.css", null, $GLOBALS['theme_version']);
 			wp_enqueue_script("fancybox5", $GLOBALS['assets_path'] . "/assets/vendor/fancybox5/fancybox.umd.js", null, $GLOBALS['theme_version']);
 		}
-		if (get_option('argon_enable_code_highlight') == 'true'){
+		if (argon_get_option('argon_enable_code_highlight') == 'true'){
 			wp_enqueue_script("highlight", $GLOBALS['assets_path'] . "/assets/vendor/highlight/highlight.pack.js", null, $GLOBALS['theme_version']);
 			wp_enqueue_script("highlight-ln", $GLOBALS['assets_path'] . "/assets/vendor/highlight/highlightjs-line-numbers.min.js", null, $GLOBALS['theme_version']);
-			wp_enqueue_style("highlight-style", $GLOBALS['assets_path'] . "/assets/vendor/highlight/styles/" . (get_option('argon_code_theme') == '' ? 'vs2015' : get_option('argon_code_theme')) . ".css", null, $GLOBALS['theme_version']);
+			wp_enqueue_style("highlight-style", $GLOBALS['assets_path'] . "/assets/vendor/highlight/styles/" . (argon_get_option('argon_code_theme') == '' ? 'vs2015' : argon_get_option('argon_code_theme')) . ".css", null, $GLOBALS['theme_version']);
 		}
-		if (get_option('argon_show_customize_theme_color_picker') != 'false'){
+		if (argon_get_option('argon_show_customize_theme_color_picker') != 'false'){
 			/* pickr JS 已为 1.8.2，而 vendor 的 monolith.min.css 仍是 1.5.0(取色变量/面板结构不匹配，
 			   导致色块变黑、面板错位)。此处改用主题自有的、与 JS 同版本的 1.8.2 主题 CSS，避免改动 vendor 文件 */
 			wp_enqueue_style("pickr-style", $GLOBALS['assets_path'] . "/assets/css/pickr-monolith-1.8.2.css", null, $GLOBALS['theme_version']);
@@ -251,7 +256,7 @@
 			ajax_nonce: "<?php echo wp_create_nonce('argon_ajax_action'); ?>",
 			language: "<?php echo argon_get_locate(); ?>",
 			dateFormat: "<?php echo get_option('argon_dateformat', 'YMD'); ?>",
-			<?php if (get_option('argon_enable_zoomify') == 'true'){ ?>
+			<?php if (argon_get_option('argon_enable_zoomify') == 'true'){ ?>
 				zoomify: {
 					duration: <?php echo get_option('argon_zoomify_duration', 200); ?>,
 					easing: "<?php echo get_option('argon_zoomify_easing', 'cubic-bezier(0.4,0,0,1)'); ?>",
@@ -359,13 +364,13 @@
 	</script>
 
 	<?php if (get_option('argon_enable_smoothscroll_type') == '2') { /*平滑滚动*/?>
-		<script src="<?php echo $GLOBALS['assets_path']; ?>/assets/vendor/smoothscroll/smoothscroll2.js"></script>
+		<script defer src="<?php echo $GLOBALS['assets_path']; ?>/assets/vendor/smoothscroll/smoothscroll2.js"></script>
 	<?php }else if (get_option('argon_enable_smoothscroll_type') == '3'){?>
-		<script src="<?php echo $GLOBALS['assets_path']; ?>/assets/vendor/smoothscroll/smoothscroll3.min.js"></script>
+		<script defer src="<?php echo $GLOBALS['assets_path']; ?>/assets/vendor/smoothscroll/smoothscroll3.min.js"></script>
 	<?php }else if (get_option('argon_enable_smoothscroll_type') == '1_pulse'){?>
-		<script src="<?php echo $GLOBALS['assets_path']; ?>/assets/vendor/smoothscroll/smoothscroll1_pulse.js"></script>
+		<script defer src="<?php echo $GLOBALS['assets_path']; ?>/assets/vendor/smoothscroll/smoothscroll1_pulse.js"></script>
 	<?php }else if (get_option('argon_enable_smoothscroll_type') != 'disabled'){?>
-		<script src="<?php echo $GLOBALS['assets_path']; ?>/assets/vendor/smoothscroll/smoothscroll1.js"></script>
+		<script defer src="<?php echo $GLOBALS['assets_path']; ?>/assets/vendor/smoothscroll/smoothscroll1.js"></script>
 	<?php }?>
 </head>
 
@@ -735,7 +740,7 @@
 				<div id="blog_setting_card_radius"></div>
 			</div>
 		</div>
-		<?php if (get_option('argon_show_customize_theme_color_picker') != 'false') {?>
+		<?php if (argon_get_option('argon_show_customize_theme_color_picker') != 'false') {?>
 			<div class="blog-setting-item mt-1 mb-3">
 				<div style="flex: 1;"><?php _e('主题色', 'argon');?></div>
 				<div id="theme-color-picker" class="ml-3"></div>

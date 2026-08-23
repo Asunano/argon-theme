@@ -3,7 +3,7 @@ Theme Name: argon (Enhanced By Asunano)
 Author: solstice23, Enhanced By Asunano
 Author URI: https://solstice23.top/
 Description: 轻盈、简洁、美观的 Wordpress 主题 (Enhanced By Asunano)
-Version: 1.3.22
+Version: 1.3.23
 License: GNU General Public License v3.0
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 Tags: 简约, 两栏, 侧栏在左边, 浮动侧栏, 文章目录, 自适应, 夜间模式, 可自定义
@@ -3387,6 +3387,43 @@ html.darkmode .post-upvote.post-upvote-meta {
 	letter-spacing: 1px;
 	white-space: nowrap;
 }
+/* 友链提交成功变体：复用点赞动效，配色改为主题蓝 + 信封图标 */
+.argon-like-toast.argon-fl-toast {
+	color: #5e72e4 !important;
+	box-shadow: 0 18px 60px rgba(94, 114, 228, 0.32) !important;
+	display: flex !important;
+	flex-direction: column !important;
+	align-items: center !important;
+	text-align: center;
+}
+.argon-fl-toast .toast-text {
+	white-space: normal;
+	line-height: 1.45;
+}
+html.darkmode .argon-like-toast.argon-fl-toast {
+	color: #7e8df5;
+	box-shadow: 0 18px 60px rgba(0, 0, 0, 0.5);
+}
+/* 友链动效：放大 + 放慢（覆盖点赞的 --fx-scale 与动画时长） */
+.argon-fl-fx.argon-like-rocket {
+	--fx-scale: 1.2;
+	animation-duration: .5s;
+}
+.argon-fl-fx.argon-like-burst {
+	--fx-scale: 1.25;
+	animation-duration: .85s;
+}
+.argon-fl-fx.argon-like-spark {
+	animation-duration: 1.6s;
+}
+/* 移动端：友链动效不随点赞的 --fx-scale(0.7) 过度缩小，保持约 1 倍 */
+@media (max-width: 600px){
+	.argon-fl-fx.argon-like-rocket{ --fx-scale: 1.0; }
+	.argon-fl-fx.argon-like-burst{ --fx-scale: 1.0; }
+	.argon-fl-toast{ gap: 12px; padding: 26px 36px; }
+	.argon-fl-toast .toast-heart svg{ width: 54px; height: 54px; }
+	.argon-fl-toast .toast-text{ font-size: 18px; }
+}
 html.darkmode .argon-like-toast {
 	background: rgba(42, 42, 48, 0.97);
 	color: #ff8fa3;
@@ -5386,6 +5423,9 @@ pre.hljs-codeblock {
 	position: relative;
 	tab-size: 4;
 	margin: 15px 0;
+	background: #1E1E1E;
+	border-radius: 8px;
+	box-shadow: rgba(0, 0, 0, 0.25) 0px 5px 20px;
 }
 pre.hljs-codeblock:before {
 	content: "";
@@ -5404,11 +5444,12 @@ code[hljs-codeblock-inner] {
 	line-height: 1.5;
 	font-size: 16px;
 	padding: 22px 20px !important;
-	border-radius: 8px;
-	box-shadow: rgba(0, 0, 0, 0.2) 0px 5px 20px;
 	margin: 0 !important;
 	padding-top: 55px !important;
 	display: block;
+	background: transparent;
+	box-shadow: none;
+	border-radius: 0;
 }
 .hljs-ln-numbers {
 	-webkit-touch-callout: none;
@@ -6526,7 +6567,7 @@ a[data-fancybox].comment-image img {
 .fl-blur-in{animation:fl-blur-in .48s ease both;}
 @keyframes fl-blur-in{from{opacity:0;filter:blur(12px);}to{opacity:1;filter:blur(0);}}
 @keyframes fl-stage-in{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}
-.fl-stage-flow{flex:0 0 auto;display:flex;align-items:center;justify-content:center;margin:6px 0;}
+.fl-stage-flow{flex:0 0 auto;display:flex;align-items:center;justify-content:center;margin:auto 0 6px;}
 .fl-stage-flow svg{width:100%;max-width:240px;height:auto;}
 .fl-node-core,.fl-node-core2{transform-box:fill-box;transform-origin:center;animation:fl-core 2.4s ease-in-out infinite;}
 .fl-node-core2{animation-delay:.8s;}
@@ -6627,7 +6668,7 @@ a[data-fancybox].comment-image img {
 }
 
 /* 右：表单 */
-.friendlink-apply-form{flex:1;display:flex;flex-direction:column;min-width:0;overflow:hidden;border-top-right-radius:var(--card-radius);border-bottom-right-radius:var(--card-radius);transform:translateZ(0);}
+.friendlink-apply-form{flex:1;display:flex;flex-direction:column;min-width:0;min-height:0;overflow:hidden;border-top-right-radius:var(--card-radius);border-bottom-right-radius:var(--card-radius);transform:translateZ(0);}
 .fl-form-head{display:flex;align-items:center;justify-content:space-between;padding:18px 22px 12px;}
 .fl-form-title{display:flex;align-items:center;gap:8px;margin:0;font-size:18px;font-weight:700;color:var(--color-text-deeper);}
 .fl-form-title svg{color:var(--themecolor);}
@@ -6653,16 +6694,48 @@ a[data-fancybox].comment-image img {
 /* （.fl-submit 统一定义见上方“提交按钮”块，避免重复覆盖） */
 
 /* 窄屏：堆叠为单列（梯度舞台转顶部条） */
+/* 移动端：保持居中，内容紧凑避免占满全屏 —— 隐藏预览卡/舞台装饰，表单字段收紧 */
 @media (max-width:680px){
-	.friendlink-apply-modal{flex-direction:column;width:94vw;max-height:90vh;}
-	.friendlink-apply-stage{flex:none;padding:18px 18px 16px;}
+	.friendlink-apply-modal{
+		flex-direction:column;
+		width:94vw;
+		max-height:calc(100vh - 12px);
+		max-height:calc(100dvh - 12px);
+		max-height:calc(100svh - 12px);
+		/* 居中改用 inset:0 + margin:auto：不依赖 translate(-50%) 与动态视口，
+		   避免内层滚动触发背景滚动后整块向上偏移、顶部被裁切出屏 */
+		top:0;right:0;bottom:0;left:0;
+		margin:auto;
+		transform:scale(.98);
+		transform-origin:center;
+	}
+	.friendlink-apply-modal.open{transform:scale(1);}
+	.friendlink-apply-stage{flex:none;padding:10px 16px 8px;}
 	.friendlink-apply-stage:before{display:none;}
 	.fl-stage-flow{display:none;}
-	.fl-preview{margin-top:0;margin-bottom:0;}
+	.fl-stage-kicker{display:none;}
+	.fl-stage-title{font-size:15px;margin:0;}
+	.fl-preview{display:none;}
 	.fl-stage-caption{display:none;}
-	.friendlink-apply-form{overflow-y:auto;}
-	.fl-form-body{overflow:visible;}
-	.fl-grid{grid-template-columns:1fr;}
+	/* 关键：form 必须允许收缩（min-height:0）且裁剪自身，由内部 .fl-form-body 承载滚动，
+	   否则 flex 链不会收缩、内容被弹窗 overflow:hidden 裁掉、提交按钮不可达 */
+	.friendlink-apply-form{
+		flex:1 1 auto;
+		min-height:0;
+		overflow:hidden;
+	}
+	.friendlink-apply-form #friendlink_apply_form{overflow:visible;}
+	.fl-form-head{padding:12px 16px 6px;}
+	.fl-form-title{font-size:15px;}
+	.fl-form-body{
+		overflow-y:auto;
+		-webkit-overflow-scrolling:touch;
+		overscroll-behavior:contain;
+		padding:2px 16px calc(14px + env(safe-area-inset-bottom, 0px));
+	}
+	.fl-grid{grid-template-columns:1fr;gap:10px;}
+	.friendlink-apply-form .form-control{font-size:16px;padding:9px 12px;}
+	.friendlink-apply-form textarea.form-control{min-height:64px;}
 }
 
 /* 提交成功：按钮弹跳，复用主题 argon-heart-pop */
@@ -6672,3 +6745,50 @@ html.darkmode .friendlink-apply-btn .btn-inner--icon{color:#f0a09a;}
 html.darkmode .friendlink-apply-btn:hover{border-color:#ff6b81!important;color:#fff!important;background:linear-gradient(135deg,#ff6b81 0%,#ee5a6f 100%)!important;}
 html.darkmode .friendlink-apply-modal{box-shadow:0 30px 80px rgba(0,0,0,.6), 0 8px 24px rgba(0,0,0,.4);}
 html.darkmode .fl-close:hover{background:rgba(255,255,255,.1);color:#cbd5e1;}
+/* 深色模式：表单输入框 / 预览卡颜色适配（原为固定浅色，深色弹窗内突兀） */
+html.darkmode .friendlink-apply-form .form-control{
+	background-color: rgba(255,255,255,.08);
+	border-color: rgba(255,255,255,.18);
+	color: #e2e8f0;
+}
+html.darkmode .friendlink-apply-form .form-control:hover{border-color:rgba(var(--themecolor-rgbstr),.5);}
+html.darkmode .friendlink-apply-form .form-control:focus{
+	background-color: rgba(255,255,255,.1);
+	border-color: var(--themecolor);
+	box-shadow: 0 0 0 3px rgba(var(--themecolor-rgbstr),.2);
+}
+html.darkmode .friendlink-apply-form .form-control::placeholder{color:rgba(226,232,240,.4);}
+html.darkmode .fl-preview .friend-link-avatar{background-color:rgba(255,255,255,.08);}
+html.darkmode .fl-preview .friend-link-description{color:#94a3b8;}
+/* 提交成功后展示本站友链信息弹窗 */
+.fl-site-info{position:fixed;inset:0;z-index:1200;display:flex;align-items:center;justify-content:center;visibility:hidden;opacity:0;transition:opacity .25s ease,visibility .25s;}
+.fl-site-info.open{visibility:visible;opacity:1;}
+.fl-site-info-backdrop{position:absolute;inset:0;background:rgba(15,23,42,.45);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);}
+.fl-site-info-card{position:relative;z-index:1;width:min(420px,90vw);background:var(--color-widgets);border-radius:16px;box-shadow:0 25px 70px rgba(15,23,42,.35);padding:26px 28px 22px;text-align:center;transform:translateY(12px) scale(.97);transition:transform .3s cubic-bezier(.16,1,.3,1);}
+.fl-site-info.open .fl-site-info-card{transform:translateY(0) scale(1);}
+.fl-site-info-close{position:absolute;top:12px;right:12px;width:30px;height:30px;border:none;background:transparent;color:#94a3b8;font-size:20px;line-height:1;cursor:pointer;border-radius:8px;transition:background .15s,color .15s;}
+.fl-site-info-close:hover{background:rgba(0,0,0,.06);color:#475569;}
+.fl-site-info-title{font-size:17px;font-weight:700;color:var(--color-text-deeper);margin-bottom:18px;}
+.fl-site-info-body{display:flex;gap:16px;align-items:center;justify-content:center;margin-bottom:20px;}
+.fl-site-info-avatar{flex:0 0 auto;}
+.fl-site-info-avatar img{width:74px;height:74px;border-radius:16px;object-fit:cover;box-shadow:0 6px 18px rgba(15,23,42,.18);}
+.fl-site-info-meta{text-align:left;min-width:0;}
+.fl-site-info-name{font-size:16px;font-weight:700;color:var(--color-text-deeper);margin-bottom:5px;}
+.fl-site-info-desc{font-size:13px;color:#64748b;line-height:1.5;margin-bottom:6px;}
+.fl-site-info-link{font-size:12px;color:var(--themecolor);text-decoration:none;word-break:break-all;}
+.fl-site-info-link:hover{text-decoration:underline;}
+.fl-site-info-copy{display:inline-block;border:none;background:var(--themecolor);color:#fff;font-size:14px;font-weight:600;padding:10px 26px;border-radius:999px;cursor:pointer;transition:opacity .15s;}
+.fl-site-info-copy:hover{opacity:.85;}
+.fl-site-info-copied{font-size:12px;color:#1e8e4b;height:0;opacity:0;overflow:hidden;transition:opacity .2s;}
+.fl-site-info-copied.show{opacity:1;height:auto;margin-top:10px;}
+html.darkmode .fl-site-info-card{box-shadow:0 25px 70px rgba(0,0,0,.6);}
+html.darkmode .fl-site-info-close:hover{background:rgba(255,255,255,.1);color:#cbd5e1;}
+html.darkmode .fl-site-info-desc{color:#94a3b8;}
+@media (max-width:600px){
+	.fl-site-info-card{width:92vw;padding:22px 20px calc(18px + env(safe-area-inset-bottom, 0px));}
+	.fl-site-info-body{gap:12px;}
+	.fl-site-info-avatar img{width:60px;height:60px;border-radius:14px;}
+	.fl-site-info-title{font-size:16px;margin-bottom:14px;}
+	.fl-site-info-desc{font-size:12px;}
+	.fl-site-info-copy{padding:9px 22px;font-size:13px;}
+}

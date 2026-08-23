@@ -33,11 +33,11 @@
 			$error = __('验证链接无效或已过期，请重新提交申请。', 'argon');
 		}
 
-		// 校验通过：正式创建待审申请 + 防重放（立即删除 transient）
+		// 校验通过：正式创建独立待审申请 + 防重放（立即删除 transient）
 		if ($error === '' && function_exists('argon_fl_create_pending')){
-			$comment_id = argon_fl_create_pending($pending);
+			$apply_id = argon_fl_create_pending($pending);
 			delete_transient('argon_fl_pending_' . $token);
-			if (is_wp_error($comment_id) || empty($comment_id)){
+			if (empty($apply_id)){
 				$error = __('提交失败，请稍后重试或重新提交申请。', 'argon');
 			} else {
 				$submitted = true;

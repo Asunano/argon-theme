@@ -191,7 +191,7 @@
 
 
 
-@media (max-width:680px){.friendlink-apply-modal{flex-direction:column;width:94vw;max-height:90vh;}.friendlink-apply-stage{flex:none;padding:18px 18px 16px;}.friendlink-apply-stage:before{display:none;}.fl-stage-flow{display:none;}.fl-preview{margin-top:0;margin-bottom:0;}.fl-stage-caption{display:none;}.friendlink-apply-form{overflow-y:auto;}.fl-form-body{overflow:visible;}.fl-grid{grid-template-columns:1fr;}}
+@media (max-width:680px){.friendlink-apply-modal{flex-direction:column;width:94vw;max-height:calc(100dvh - 12px);max-height:calc(100svh - 12px);top:0;right:0;bottom:0;left:0;margin:auto;transform:scale(.98);transform-origin:center;}.friendlink-apply-modal.open{transform:scale(1);}.friendlink-apply-stage{flex:none;padding:10px 16px 8px;}.friendlink-apply-stage:before{display:none;}.fl-stage-flow{display:none;}.fl-stage-kicker{display:none;}.fl-stage-title{font-size:15px;margin:0;}.fl-preview{display:none;}.fl-stage-caption{display:none;}.friendlink-apply-form{flex:1 1 auto;min-height:0;overflow:hidden;}.friendlink-apply-form #friendlink_apply_form{overflow:visible;}.fl-form-head{padding:12px 16px 6px;}.fl-form-title{font-size:15px;}.fl-form-body{overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;padding:2px 16px calc(14px + env(safe-area-inset-bottom,0px));}.fl-grid{grid-template-columns:1fr;gap:10px;}}
 .friendlink-apply-btn.just-submitted{animation:argon-heart-pop .5s cubic-bezier(.22,1.4,.36,1);}
 html.darkmode .friendlink-apply-btn{border-color:rgba(255,255,255,.15)!important;color:#ccc;background-color:rgba(255,255,255,.05);}
 html.darkmode .friendlink-apply-btn .btn-inner--icon{color:#f0a09a;}

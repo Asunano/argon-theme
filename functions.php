@@ -4363,6 +4363,7 @@ function argon_fl_send_json($data){
 }
 function argon_fl_apply_ajax(){
 	ob_start();
+	ini_set('display_errors', '0'); // 防止邮件插件等告警输出到 JSON 响应前，导致前端解析失败误报“提交失败”
 	if (get_option('argon_fl_enable', 'false') != 'true'){
 		argon_fl_send_json(array('status' => 'error', 'msg' => __('友链自助申请功能未开启', 'argon')));
 	}
@@ -4777,6 +4778,7 @@ function argon_fl_check_backlink_with_notify($link_id, $force = false){
 // 手动「重新检查」：前台管理页与后台共用（前台需 link+token 校验）
 function argon_fl_recheck_ajax(){
 	ob_start();
+	ini_set('display_errors', '0'); // 防止告警输出污染 JSON 响应
 	$link_id = intval($_POST['link_id'] ?? 0);
 	if ($link_id <= 0 || !get_bookmark($link_id)){
 		argon_fl_send_json(array('status' => 'error', 'msg' => __('友链不存在', 'argon')));
@@ -4810,6 +4812,7 @@ add_action('wp_ajax_nopriv_argon_fl_edit', 'argon_fl_edit_ajax');
 add_action('wp_ajax_argon_fl_edit', 'argon_fl_edit_ajax');
 function argon_fl_edit_ajax(){
 	ob_start();
+	ini_set('display_errors', '0'); // 防止告警输出污染 JSON 响应
 	argon_verify_ajax_nonce(); // 校验失败会直接 exit
 	$link_id = intval($_POST['link_id'] ?? 0);
 	$token   = $_POST['token'] ?? '';
@@ -5718,8 +5721,30 @@ function argon_fl_apply_button_html($style = '1'){
 					}
 					fd.append('argon_ajax_nonce', nonce);
 					fetch(ajaxurl, { method: 'POST', body: fd, credentials: 'same-origin' })
-						.then(function(r){ return r.json(); })
-						.then(function(res){
+						.then(function(r){ return r.text(); })
+						.then(function(text){
+							// 容错：部分环境（邮件插件 / display_errors）会把告警 flush 到响应体前面，
+							// 导致纯 JSON 解析失败 → 误报“提交失败”。此处尝试解析，失败则从污染文本中截取 {…} 还原 JSON
+							var res = null;
+							try { res = JSON.parse(text); }
+							catch (e){
+								var s = text.indexOf('{'), eIdx = text.lastIndexOf('}');
+								if (s >= 0 && eIdx > s){
+									try { res = JSON.parse(text.substring(s, eIdx + 1)); } catch (e2){}
+								}
+							}
+							if (!res || typeof res !== 'object'){
+								if (typeof iziToast !== 'undefined'){
+									iziToast.show({
+										title: form.dataset.msgFail,
+										class: 'shadow-sm', position: 'topRight',
+										backgroundColor: '#f5365c', titleColor: '#ffffff',
+										messageColor: '#ffffff', iconColor: '#ffffff',
+										progressBarColor: '#ffffff', icon: 'fa fa-close', timeout: 5000
+									});
+								}
+								return;
+							}
 							if (res && res.status === 'success'){
 								if (editCfg && editCfg.edit_mode){
 									// 编辑保存成功：清理 URL 验证参数，动画独立播放，弹窗立即关闭，随后刷新页面让友链墙显示新数据

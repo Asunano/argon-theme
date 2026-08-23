@@ -4579,7 +4579,7 @@ function argon_fl_output_fl_fx(){
 		. 'spark.className = "argon-like-spark argon-fl-fx";spark.style.setProperty("--tx", tx.toFixed(1) + "px");spark.style.setProperty("--ty", ty.toFixed(1) + "px");'
 		. 'spark.style.setProperty("--c", color);spark.style.setProperty("--s", size.toFixed(1) + "px");spark.style.setProperty("--d", delay.toFixed(2) + "s");'
 		. 'document.body.appendChild(spark);(function(s){setTimeout(function(){s.remove();},2000);})(spark);}'
-		. '};<\/script>';
+		. '};</script>';
 }
 
 // wp_footer 输出「提交成功后展示本站友链信息」弹窗：配置 + DOM + JS（脱离 the_content 过滤链，避免闭合标签被破坏）
@@ -4620,7 +4620,7 @@ function argon_fl_output_site_info_modal(){
 		. 'document.addEventListener("click",function(e){if(e.target && (e.target.classList.contains("fl-site-info-close") || e.target.classList.contains("fl-site-info-backdrop"))){window.argonFlHideSiteInfo();}});'
 		. 'document.addEventListener("click",function(e){if(e.target && e.target.classList.contains("fl-site-info-copy")){window.argonFlCopySiteInfo();}});'
 		. 'document.addEventListener("keydown",function(e){if(e.key === "Escape"){window.argonFlHideSiteInfo();}});'
-		. '<\/script>';
+		. '</script>';
 }
 
 // —— 自动回链检查（Phase 2/3） ——

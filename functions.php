@@ -4338,9 +4338,21 @@ function argon_fl_create_pending($data){
 	return $id;
 }
 
+// 友链 AJAX 统一返回：先清空所有输出缓冲，丢弃 wp_mail 等可能产生的 PHP 警告/输出，
+// 否则这些输出会被前置到 JSON 之前，导致前端 fetch().json() 解析失败 → 误报“提交错误”且不关闭弹窗
+function argon_fl_send_json($data){
+	while (ob_get_level() > 0){ ob_end_clean(); }
+	if (!headers_sent()){
+		header('Content-Type: application/json; charset=utf-8');
+		header('X-Content-Type-Options: nosniff');
+	}
+	echo wp_json_encode($data);
+	exit;
+}
 function argon_fl_apply_ajax(){
+	ob_start();
 	if (get_option('argon_fl_enable', 'false') != 'true'){
-		wp_send_json(array('status' => 'error', 'msg' => __('友链自助申请功能未开启', 'argon')));
+		argon_fl_send_json(array('status' => 'error', 'msg' => __('友链自助申请功能未开启', 'argon')));
 	}
 	argon_verify_ajax_nonce(); // 校验失败会直接 exit（主题约定：无返回值=通过）
 	$name  = sanitize_text_field($_POST['argon_fl_name'] ?? '');
@@ -4368,7 +4380,7 @@ function argon_fl_apply_ajax(){
 		$errors[] = __('提交目标页面无效', 'argon');
 	}
 	if (!empty($errors)){
-		wp_send_json(array('status' => 'error', 'msg' => implode('<br>', $errors)));
+		argon_fl_send_json(array('status' => 'error', 'msg' => implode('<br>', $errors)));
 	}
 
 	$data = array(
@@ -4385,16 +4397,16 @@ function argon_fl_apply_ajax(){
 	if (get_option('argon_fl_email_confirm_enable', 'true') != 'true'){
 		$apply_id = argon_fl_create_pending($data);
 		if (empty($apply_id)){
-			wp_send_json(array('status' => 'error', 'msg' => __('提交失败，请稍后重试', 'argon')));
+			argon_fl_send_json(array('status' => 'error', 'msg' => __('提交失败，请稍后重试', 'argon')));
 		}
 		argon_fl_notify('submitted', $data);
-		wp_send_json(array('status' => 'success', 'msg' => __('提交成功，等待管理员审核。审核通过后将在友链界面展示。', 'argon')));
+		argon_fl_send_json(array('status' => 'success', 'msg' => __('提交成功，等待管理员审核。审核通过后将在友链界面展示。', 'argon')));
 	}
 
 	// 发信限流：防脚本刷邮件
 	$limit_msg = argon_fl_mail_rate_limit_check($email);
 	if ($limit_msg !== ''){
-		wp_send_json(array('status' => 'error', 'msg' => $limit_msg));
+		argon_fl_send_json(array('status' => 'error', 'msg' => $limit_msg));
 	}
 
 	// 暂存待确认数据（1 小时过期）。未点击确认链接则自动丢弃：不入库、不审核、不做回链检查
@@ -4405,7 +4417,7 @@ function argon_fl_apply_ajax(){
 	$confirm_url = get_template_directory_uri() . '/confirm-friendlink.php?t=' . rawurlencode($token);
 	argon_fl_notify('confirm_mail', array_merge($data, array('confirm_url' => $confirm_url)));
 
-	wp_send_json(array(
+	argon_fl_send_json(array(
 		'status' => 'need_confirm',
 		'msg'    => sprintf(__('验证邮件已发送至 %s，请查收并点击邮件中的链接完成提交。', 'argon'), $email),
 	));
@@ -4746,19 +4758,20 @@ function argon_fl_check_backlink_with_notify($link_id, $force = false){
 
 // 手动「重新检查」：前台管理页与后台共用（前台需 link+token 校验）
 function argon_fl_recheck_ajax(){
+	ob_start();
 	$link_id = intval($_POST['link_id'] ?? 0);
 	if ($link_id <= 0 || !get_bookmark($link_id)){
-		wp_send_json(array('status' => 'error', 'msg' => __('友链不存在', 'argon')));
+		argon_fl_send_json(array('status' => 'error', 'msg' => __('友链不存在', 'argon')));
 	}
 	$fl_tokens =& argon_fl_link_tokens_ref();
 	if (!current_user_can('edit_theme_options')){
 		$token = $_POST['token'] ?? '';
 		if ($token === '' || !isset($fl_tokens[$link_id]['token']) || $fl_tokens[$link_id]['token'] !== $token){
-			wp_send_json(array('status' => 'error', 'msg' => __('管理链接无效或已失效', 'argon')));
+			argon_fl_send_json(array('status' => 'error', 'msg' => __('管理链接无效或已失效', 'argon')));
 		}
 	}
 	if (get_option('argon_fl_backlink_enable', 'true') != 'true'){
-		wp_send_json(array('status' => 'error', 'msg' => __('回链检查功能未开启', 'argon')));
+		argon_fl_send_json(array('status' => 'error', 'msg' => __('回链检查功能未开启', 'argon')));
 	}
 	$status = argon_fl_check_backlink_with_notify($link_id, true); // 手动重查：忽略 24h 缓存
 	$labels = array(
@@ -4766,7 +4779,7 @@ function argon_fl_recheck_ajax(){
 		'none'   => __('未检测到互链', 'argon'),
 		'error'  => __('检查失败', 'argon'),
 	);
-	wp_send_json(array(
+	argon_fl_send_json(array(
 		'status' => 'ok',
 		'result' => isset($labels[$status]) ? $labels[$status] : $status,
 	));
@@ -4778,12 +4791,13 @@ add_action('wp_ajax_argon_fl_recheck', 'argon_fl_recheck_ajax');
 add_action('wp_ajax_nopriv_argon_fl_edit', 'argon_fl_edit_ajax');
 add_action('wp_ajax_argon_fl_edit', 'argon_fl_edit_ajax');
 function argon_fl_edit_ajax(){
+	ob_start();
 	argon_verify_ajax_nonce(); // 校验失败会直接 exit
 	$link_id = intval($_POST['link_id'] ?? 0);
 	$token   = $_POST['token'] ?? '';
 	$fl_tokens =& argon_fl_link_tokens_ref();
 	if (!isset($fl_tokens[$link_id]) || $fl_tokens[$link_id]['token'] !== $token || !get_bookmark($link_id)){
-		wp_send_json(array('status' => 'error', 'msg' => __('管理链接无效或已失效', 'argon')));
+		argon_fl_send_json(array('status' => 'error', 'msg' => __('管理链接无效或已失效', 'argon')));
 	}
 	$name     = sanitize_text_field($_POST['argon_fl_name'] ?? '');
 	$url      = esc_url_raw(trim($_POST['argon_fl_url'] ?? ''));
@@ -4801,7 +4815,7 @@ function argon_fl_edit_ajax(){
 		$errors[] = __('友链页 URL 不合法', 'argon');
 	}
 	if (!empty($errors)){
-		wp_send_json(array('status' => 'error', 'msg' => implode('<br>', $errors)));
+		argon_fl_send_json(array('status' => 'error', 'msg' => implode('<br>', $errors)));
 	}
 	if (!function_exists('wp_update_link')){
 		require_once ABSPATH . 'wp-admin/includes/bookmark.php';
@@ -4819,7 +4833,7 @@ function argon_fl_edit_ajax(){
 	if (get_option('argon_fl_backlink_enable', 'true') == 'true'){
 		argon_fl_check_backlink_with_notify($link_id, true);
 	}
-	wp_send_json(array('status' => 'success', 'msg' => __('友链信息已更新，将在友链界面立即生效。', 'argon')));
+	argon_fl_send_json(array('status' => 'success', 'msg' => __('友链信息已更新，将在友链界面立即生效。', 'argon')));
 }
 
 // 每日 Cron：02:00–05:00 分批复查全部自助友链

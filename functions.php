@@ -4223,18 +4223,30 @@ function argon_fl_notify($type, $data = array()){
 }
 
 // 发信限流检查：同邮箱 60 秒 1 封；同 IP 每分钟 / 每日上限（后台可配）。返回空串表示允许
+// 返回空字符串表示通过；否则返回 array('status' => ..., 'msg' => ...)。
+// status 语义：need_confirm=「该邮箱已在限流窗内发过确认邮件，视为已发送成功，前端走成功流程并自动关弹窗」；
+//             error=「真实限流（过频/超日配额），前端红色提示且不关弹窗」。
 function argon_fl_mail_rate_limit_check($email){
 	if (get_transient('argon_fl_mail_e_' . md5(strtolower($email)))){
-		return __('验证邮件已发送，请前往邮箱点击链接完成提交；若未收到，可稍后重试。', 'argon');
+		return array(
+			'status' => 'need_confirm',
+			'msg'    => __('验证邮件已发送，请前往邮箱点击链接完成提交；若未收到，可稍后重试。', 'argon'),
+		);
 	}
 	$ip      = argon_fl_client_ip();
 	$per_min = max(1, (int) get_option('argon_fl_mail_limit_ip_min', 10));
 	$per_day = max(1, (int) get_option('argon_fl_mail_limit_ip_day', 100));
 	if ((int) get_transient('argon_fl_mail_ipm_' . md5($ip)) >= $per_min){
-		return __('提交有点频繁，请稍等片刻再试～', 'argon');
+		return array(
+			'status' => 'error',
+			'msg'    => __('提交有点频繁，请稍等片刻再试～', 'argon'),
+		);
 	}
 	if ((int) get_transient('argon_fl_mail_ipd_' . md5($ip . date('Ymd'))) >= $per_day){
-		return __('今天提交的次数有点多啦，请明天再来～', 'argon');
+		return array(
+			'status' => 'error',
+			'msg'    => __('今天提交的次数有点多啦，请明天再来～', 'argon'),
+		);
 	}
 	return '';
 }
@@ -4404,18 +4416,24 @@ function argon_fl_apply_ajax(){
 	}
 
 	// 发信限流：防脚本刷邮件
-	$limit_msg = argon_fl_mail_rate_limit_check($email);
-	if ($limit_msg !== ''){
-		argon_fl_send_json(array('status' => 'error', 'msg' => $limit_msg));
+	$limit = argon_fl_mail_rate_limit_check($email);
+	if ($limit !== ''){
+		// $limit['status'] 已是 need_confirm（已发过，前端走成功关弹窗）或 error（真实限流）
+		argon_fl_send_json(array('status' => $limit['status'], 'msg' => $limit['msg']));
 	}
 
 	// 暂存待确认数据（1 小时过期）。未点击确认链接则自动丢弃：不入库、不审核、不做回链检查
 	$token = get_random_token();
 	set_transient('argon_fl_pending_' . $token, $data, HOUR_IN_SECONDS);
-	argon_fl_mail_rate_limit_hit($email);
 
 	$confirm_url = get_template_directory_uri() . '/confirm-friendlink.php?t=' . rawurlencode($token);
-	argon_fl_notify('confirm_mail', array_merge($data, array('confirm_url' => $confirm_url)));
+	$ok = argon_fl_notify('confirm_mail', array_merge($data, array('confirm_url' => $confirm_url)));
+	if (!$ok){
+		// 发信失败：不要设置限流 transient（允许立即重试，避免误判为「已发送」），并明确告知失败
+		argon_fl_send_json(array('status' => 'error', 'msg' => __('验证邮件发送失败，请稍后重试；若多次失败可联系管理员。', 'argon')));
+	}
+	// 仅发送成功才计入限流，确保 60 秒内重复提交能正确命中「已发过」分支
+	argon_fl_mail_rate_limit_hit($email);
 
 	argon_fl_send_json(array(
 		'status' => 'need_confirm',

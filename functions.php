@@ -4600,25 +4600,24 @@ function argon_fl_output_site_info_modal(){
 		. '<div class="fl-site-info-card" role="dialog" aria-modal="true" aria-label="' . esc_attr__('本站友链信息', 'argon') . '">'
 		. '<button class="fl-site-info-close" type="button" aria-label="' . esc_attr__('关闭', 'argon') . '">' . __('×', 'argon') . '</button>'
 		. '<div class="fl-site-info-title">' . esc_html__('欢迎添加本站为友链', 'argon') . '</div>'
+		. '<div class="fl-site-info-tip">' . esc_html__('点击下方站点名称或链接即可单独复制，方便你添加本站～', 'argon') . '</div>'
 		. '<div class="fl-site-info-body">'
 		. ($avatar !== '' ? '<div class="fl-site-info-avatar"><img src="' . esc_url($avatar) . '" alt="' . esc_attr($name) . '"></div>' : '')
 		. '<div class="fl-site-info-meta">'
-		. '<div class="fl-site-info-name">' . esc_html($name) . '</div>'
+		. '<div class="fl-site-info-name" data-copy="' . esc_attr($name) . '" title="' . esc_attr__('点击复制站点名称', 'argon') . '">' . esc_html($name) . '</div>'
 		. ($desc !== '' ? '<div class="fl-site-info-desc">' . esc_html($desc) . '</div>' : '')
-		. '<a class="fl-site-info-link" href="' . esc_url($url) . '" target="_blank" rel="noopener">' . esc_html($url) . '</a>'
+		. '<a class="fl-site-info-link" data-copy="' . esc_attr($url) . '" href="' . esc_url($url) . '" target="_blank" rel="noopener" title="' . esc_attr__('点击复制链接', 'argon') . '">' . esc_html($url) . '</a>'
 		. '</div></div>'
-		. '<button class="fl-site-info-copy" type="button">' . esc_html__('复制友链信息', 'argon') . '</button>'
-		. '<div class="fl-site-info-copied">' . esc_html__('已复制，欢迎添加～', 'argon') . '</div>'
+		. '<div class="fl-site-info-copied">' . esc_html__('已复制', 'argon') . '</div>'
 		. '</div></div>'
 		. '<script>window.argonFlSiteInfo = ' . wp_json_encode($cfg, JSON_UNESCAPED_UNICODE) . ';'
 		. 'window.argonFlShowSiteInfo = function(){var m = document.getElementById("fl_site_info");if(m){m.classList.add("open");m.setAttribute("aria-hidden","false");}};'
 		. 'window.argonFlHideSiteInfo = function(){var m = document.getElementById("fl_site_info");if(m){m.classList.remove("open");m.setAttribute("aria-hidden","true");}};'
-		. 'window.argonFlCopySiteInfo = function(){var c = window.argonFlSiteInfo || {};var txt = "名称：" + (c.name||"") + "\\n链接：" + (c.url||"") + (c.desc ? "\\n描述：" + c.desc : "") + (c.avatar ? "\\n头像：" + c.avatar : "");'
-		. 'var done = function(){var el = document.querySelector(".fl-site-info-copied");if(el){el.classList.add("show");setTimeout(function(){el.classList.remove("show");},1800);}};'
-		. 'if(navigator.clipboard && navigator.clipboard.writeText){navigator.clipboard.writeText(txt).then(done,function(){var ta = document.createElement("textarea");ta.value = txt;document.body.appendChild(ta);ta.select();document.execCommand("copy");ta.remove();done();});}'
-		. 'else{var ta = document.createElement("textarea");ta.value = txt;document.body.appendChild(ta);ta.select();document.execCommand("copy");ta.remove();done();}};'
+		. 'window.argonFlCopyText = function(txt){var done = function(){var el = document.querySelector(".fl-site-info-copied");if(el){el.classList.add("show");setTimeout(function(){el.classList.remove("show");},1600);}};'
+		. 'if(navigator.clipboard && navigator.clipboard.writeText){return navigator.clipboard.writeText(txt).then(done,function(){var ta = document.createElement("textarea");ta.value = txt;document.body.appendChild(ta);ta.select();document.execCommand("copy");ta.remove();done();});}'
+		. 'var ta = document.createElement("textarea");ta.value = txt;document.body.appendChild(ta);ta.select();document.execCommand("copy");ta.remove();done();};'
 		. 'document.addEventListener("click",function(e){if(e.target && (e.target.classList.contains("fl-site-info-close") || e.target.classList.contains("fl-site-info-backdrop"))){window.argonFlHideSiteInfo();}});'
-		. 'document.addEventListener("click",function(e){if(e.target && e.target.classList.contains("fl-site-info-copy")){window.argonFlCopySiteInfo();}});'
+		. 'document.addEventListener("click",function(e){var t = e.target && e.target.closest ? e.target.closest("[data-copy]") : null;if(t){e.preventDefault();window.argonFlCopyText(t.getAttribute("data-copy"));}});'
 		. 'document.addEventListener("keydown",function(e){if(e.key === "Escape"){window.argonFlHideSiteInfo();}});'
 		. '</script>';
 }
@@ -5761,23 +5760,23 @@ function argon_fl_apply_button_html($style = '1'){
 									setTimeout(function(){ location.reload(); }, 1200);
 									return;
 								}
-								window.flSuccessFx(form.dataset.msgSubmitted);
-								form.reset();
-								sync();
-								btn.classList.add('just-submitted');
-								setTimeout(function(){ btn.classList.remove('just-submitted'); }, 600);
-								closeModal(); // 动画独立播放，弹窗立即关
-								// 提交成功后展示本站友链信息弹窗（若后台启用）
-								if (typeof window.argonFlShowSiteInfo === 'function'){ setTimeout(window.argonFlShowSiteInfo, 600); }
-							} else if (res && res.status === 'need_confirm'){
-								// 邮箱确认流程：邮件已发送，提示查收邮件点击链接
-								window.flSuccessFx(form.dataset.msgMailSent);
-								btn.classList.add('just-submitted');
-								setTimeout(function(){ btn.classList.remove('just-submitted'); }, 600);
-								closeModal(); // 动画独立播放，弹窗立即关
-								// 提交成功后展示本站友链信息弹窗（若后台启用）
-								if (typeof window.argonFlShowSiteInfo === 'function'){ setTimeout(window.argonFlShowSiteInfo, 600); }
-							} else {
+							window.flSuccessFx(form.dataset.msgSubmitted);
+							form.reset();
+							sync();
+							btn.classList.add('just-submitted');
+							setTimeout(function(){ btn.classList.remove('just-submitted'); }, 600);
+							closeModal(); // 动画独立播放，弹窗立即关
+							// 先播完提交成功动画，再展示本站友链信息弹窗（若后台启用），避免与动画冲突
+							if (typeof window.argonFlShowSiteInfo === 'function'){ setTimeout(window.argonFlShowSiteInfo, 1400); }
+						} else if (res && res.status === 'need_confirm'){
+							// 邮箱确认流程：邮件已发送，提示查收邮件点击链接
+							window.flSuccessFx(form.dataset.msgMailSent);
+							btn.classList.add('just-submitted');
+							setTimeout(function(){ btn.classList.remove('just-submitted'); }, 600);
+							closeModal(); // 动画独立播放，弹窗立即关
+							// 先播完提交成功动画，再展示本站友链信息弹窗（若后台启用）
+							if (typeof window.argonFlShowSiteInfo === 'function'){ setTimeout(window.argonFlShowSiteInfo, 1400); }
+						} else {
 								// 错误：iziToast 红色提示（与评论发送失败同款）
 								if (typeof iziToast !== 'undefined'){
 									iziToast.show({

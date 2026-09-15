@@ -21,5 +21,8 @@ playwright-cli.json
 # 本地开发计划书（仅本地参考，不提交 GitHub / 不进发布包）
 docs/friendlink-apply-enhancement.md
 
+# 本地 AI 协作指引（仅本地使用，不提交 GitHub / 不进发布包）
+CODEBUDDY.md
+
 # 本地翻译工具（含腾讯云 API 调用逻辑，仅本地使用，不提交防泄露）
 tools/

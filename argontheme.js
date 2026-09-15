@@ -2014,6 +2014,55 @@ zoomifyInit();
 /* Fancybox v5 灯箱：原生底部缩略图条（Thumbs 组件），默认常开（设置项已移除） */
 /* Fancybox.bind 采用事件委托，Pjax 加载的新内容无需重新绑定 */
 var argonLightboxBound = false;
+/* 移动端点击图片后界面抽搐/错位、需刷新才恢复的根因：
+   Fancybox 打开时给 <html> 加 with-fancybox、给 <body> 加 hide-scrollbar，
+   并施加 margin-right(滚动条补偿) + overflow:hidden !important + touch-action:none。
+   正常情况下 Fancybox 在 destroy 时会自行清理，但移动端某些关闭手势/动画异常可能使
+   该状态残留，导致整页锁死滚动、触摸错位，只能刷新恢复。以下兜底强制复位。*/
+function argonLightboxCleanupScrollLock(){
+	if (document.querySelector(".fancybox__container")){
+		return; /* 仍有灯箱实例在，不要误清 */
+	}
+	var de = document.documentElement;
+	var b = document.body;
+	if (de && de.classList.contains("with-fancybox")){
+		de.classList.remove("with-fancybox");
+	}
+	if (b){
+		if (b.classList.contains("hide-scrollbar")){
+			b.classList.remove("hide-scrollbar");
+		}
+		b.style.marginRight = "";
+		b.style.overflow = "";
+		/* 与 Fancybox 自带复位保持一致：变量写在对应元素上
+		   （--fancybox-body-margin 在 body，--fancybox-scrollbar-compensate 在 html）*/
+		b.style.removeProperty("--fancybox-body-margin");
+	}
+	if (de){
+		de.style.removeProperty("--fancybox-scrollbar-compensate");
+	}
+}
+/* 独立兜底：监听 <html> 的 with-fancybox 类。一旦灯箱关闭后该类仍残留
+   （.fancybox__container 已不存在），强制复位。该机制不依赖 Fancybox 内部销毁
+   流程，可覆盖其清理被中断/异常的场景；正常清理时零副作用。*/
+var argonLightboxWatchScheduled = false;
+function argonLightboxWatch(){
+	if (argonLightboxWatchScheduled){
+		return;
+	}
+	if (!document.documentElement.classList.contains("with-fancybox")){
+		return;
+	}
+	argonLightboxWatchScheduled = true;
+	(function check(){
+		if (!document.querySelector(".fancybox__container")){
+			argonLightboxCleanupScrollLock();
+			argonLightboxWatchScheduled = false;
+			return;
+		}
+		setTimeout(check, 500);
+	})();
+}
 function argonLightboxInit(){
 	if (typeof(Fancybox) == "undefined"){
 		return;
@@ -2027,8 +2076,16 @@ function argonLightboxInit(){
 			Thumbs: {
 				showOnStart: showThumbs,
 				type: "classic"
+			},
+			on: {
+				destroy: function () { argonLightboxCleanupScrollLock(); }
 			}
 		});
+		/* 监听 with-fancybox 类，提供不依赖 Fancybox 内部销毁流程的兜底清理 */
+		if (typeof MutationObserver !== "undefined"){
+			var obs = new MutationObserver(function () { argonLightboxWatch(); });
+			obs.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+		}
 		argonLightboxBound = true;
 	} catch (err) {
 		/* 第三方库异常不应阻断 Pjax 初始化链（pangu / tippy 等） */

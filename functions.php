@@ -1946,8 +1946,11 @@ function argon_comment_format($comment, $args, $depth){
 				</div>
 				<div class="comment-info">
 					<?php if (get_comment_meta(get_comment_ID(), "edited", true) == "true") { ?>
-						<?php /* 「可查看编辑记录」同样按 argon_user_token 判定，改由 JS 依权限补类，
-						       否则整页缓存会把「谁能点开编辑记录」固化分发。数据属性供前端匹配。 */
+						<?php
+						// 「可查看编辑记录」原先按 argon_user_token 判定并直接输出
+						// comment-edithistory-accessible 类，会让整页缓存把「谁能点开编辑记录」
+						// 固化分发。改为只输出 data 属性，由 JS 依 argon_comment_perms 返回结果补类。
+						?>
 						<div class="comment-edited" data-editable-check="<?php comment_ID(); ?>">
 							<i class="fa fa-pencil" aria-hidden="true"></i><?php _e('已编辑', 'argon')?>
 						</div>
@@ -1971,9 +1974,10 @@ function argon_comment_format($comment, $args, $depth){
 						<button class="comment-pin btn btn-sm btn-outline-primary" data-id="<?php comment_ID(); ?>" type="button" style="margin-right: 2px;"><?php _ex('置顶', 'to pin', 'argon')?></button>
 				<?php }
 					} ?>
-				<?php /* 编辑按钮改为由 JS 按当前访客权限填充（见 argon_comment_perms 接口）。
-				       原因：其可见性依据 argon_user_token Cookie 判定，写进 HTML 会让整页缓存
-				       把「是否显示编辑入口」固化分发。默认不渲染，交互逻辑见 argontheme.js。 */
+				<?php
+				// 编辑按钮改为由 JS 按当前访客权限填充（见 argon_comment_perms 接口）。
+				// 原因：其可见性依据 argon_user_token Cookie 判定，写进 HTML 会让整页缓存
+				// 把「是否显示编辑入口」固化分发。默认不渲染，交互逻辑见 argontheme.js。
 				if (get_option("argon_comment_allow_editing") != "false"){ ?>
 					<span class="comment-edit-slot" data-comment-id="<?php comment_ID(); ?>"></span>
 				<?php } ?>

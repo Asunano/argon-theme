@@ -27,6 +27,51 @@ function getCookie(cname) {
 	return "";
 }
 
+/* ——— 本地存储工具（替代 Cookie 承载 UI 偏好）———
+   偏好类数据（点赞记录、主题色、卡片圆角）改存 localStorage：
+   1) 不产生 Set-Cookie，避免响应头干扰整页缓存；
+   2) 免受服务端模板按 Cookie 分支渲染的影响。
+   统一走 try/catch，隐私模式 / 存储配额满时静默降级。 */
+var argonStore = {
+	get: function(key, fallback){
+		try{
+			var raw = window.localStorage.getItem("argon_" + key);
+			return (raw === null || raw === undefined || raw === "") ? fallback : raw;
+		}catch(e){
+			return fallback;
+		}
+	},
+	set: function(key, value){
+		try{
+			window.localStorage.setItem("argon_" + key, String(value));
+		}catch(e){}
+	},
+	/* 读取整型列表（点赞 ID 列表），返回 {key: Set} 形式的判定函数 */
+	getIdSet: function(key){
+		var map = {};
+		var raw = this.get(key, "");
+		if (!raw){ return map; }
+		raw.split(",").forEach(function(id){
+			var n = parseInt(id, 10);
+			if (n > 0){ map[n] = true; }
+		});
+		return map;
+	},
+	/* 把 id 追加进整型列表并写回；返回 true 表示本次新增 */
+	addId: function(key, id){
+		var n = parseInt(id, 10);
+		if (!(n > 0)){ return false; }
+		var map = this.getIdSet(key);
+		if (map[n]){ return false; }
+		map[n] = true;
+		var list = Object.keys(map).map(Number).sort(function(a, b){ return a - b; });
+		/* 上限 500 条，超出丢弃最旧的，避免无限增长 */
+		if (list.length > 500){ list = list.slice(list.length - 500); }
+		this.set(key, list.join(","));
+		return true;
+	}
+};
+
 /* HTML 转义：供搜索、表情面板等全局调用。
    原先仅定义于实时搜索闭包内，导致外层 argonRenderRecentEmotions 调用时
    报 ReferenceError: escapeHtml is not defined。提升为顶层函数声明后全局可用。 */
@@ -723,10 +768,10 @@ if (argonConfig.waterflow_columns != "1") {
 
 /*卡片圆角大小调整*/
 !function(){
-	function setCardRadius(radius, setcookie){
+	function setCardRadius(radius, persist){
 		document.documentElement.style.setProperty('--card-radius', radius + "px");
-		if (setcookie){
-			setCookie("argon_card_radius", radius, 365);
+		if (persist){
+			argonStore.set("card_radius", radius);
 		}
 	}
 	let slider = document.getElementById('blog_setting_card_radius');
@@ -750,8 +795,14 @@ if (argonConfig.waterflow_columns != "1") {
 	$(document).on("click" , "#blog_setting_card_radius_to_default" , function(){
 		slider.noUiSlider.set($("meta[name='theme-card-radius-origin']").attr("content"));
 		setCardRadius($("meta[name='theme-card-radius-origin']").attr("content"), false);
-		setCookie("argon_card_radius", $("meta[name='theme-card-radius-origin']").attr("content"), 0);
+		argonStore.set("card_radius", "");
 	});
+	/* 从 localStorage 恢复本访客的圆角偏好（服务端不再按 Cookie 渲染） */
+	let savedRadius = argonStore.get("card_radius", "");
+	if (savedRadius !== "" && !isNaN(parseFloat(savedRadius))){
+		try{ slider.noUiSlider.set(parseFloat(savedRadius)); }catch(e){}
+		setCardRadius(savedRadius, false);
+	}
 }();
 
 /*评论区 & 发送评论*/
@@ -1387,6 +1438,8 @@ $(document).on("click" , ".comment-upvote" , function(){
 			if (result.status == "success"){
 				$(".comment-upvote-num" , $this).html(result.total_upvote);
 				$this.addClass("upvoted");
+				/* 同步到 localStorage，供下次渲染时恢复（服务端不再按 Cookie 渲染该态） */
+				argonStore.addId("comment_upvoted", ID);
 			}else{
 				$(".comment-upvote-num" , $this).html(result.total_upvote);
 				iziToast.show({
@@ -1463,6 +1516,8 @@ $(document).on("click", ".post-upvote", function(){
 			if (result.status == "success"){
 				$allLikes.find(".post-upvote-num").html(result.total_upvote);
 				$allLikes.addClass("upvoted");
+				/* 同步到 localStorage，供下次渲染时恢复（服务端不再按 Cookie 渲染该态） */
+				argonStore.addId("post_upvoted", ID);
 				// 点赞动画：心跳图标（仅作用于被点击的按钮）
 				$this.addClass("argon-like-animating");
 				setTimeout(function(){ $this.removeClass("argon-like-animating"); }, 650);
@@ -1785,6 +1840,8 @@ $(document).on("submit" , ".post-password-form" , function(){
 				calcHumanTimesOnPage();
 				panguInit();
 				$(".comment-item-text .comment-sticker.lazyload").lazyload(argonConfig.lazyload).removeClass("lazyload");
+				/* 追加的评论需恢复点赞态与编辑按钮占位（服务端不再按 Cookie 渲染） */
+				argonCommentPrivInit();
 			},
 			error : function(){
 				window.location.href = url;
@@ -1799,6 +1856,9 @@ $(document).on("submit" , ".post-password-form" , function(){
 			type: 'POST',
 			url: url,
 			data: {
+				/* 加载更多评论时显式声明不计浏览量。
+				   浏览量已改由 argonPostViewInit() 异步上报，此处保留是为了在
+				   回滚到 legacy 渲染期计数（functions.php 中取消 add_action('get_header',...) 注释）时仍然有效。 */
 				no_post_view: 'true'
 			},
 			dataType : "html",
@@ -1817,6 +1877,8 @@ $(document).on("submit" , ".post-password-form" , function(){
 				calcHumanTimesOnPage();
 				panguInit();
 				$(".comment-item-text .comment-sticker.lazyload").lazyload(argonConfig.lazyload).removeClass("lazyload");
+				/* 追加的评论需恢复点赞态与编辑按钮占位（服务端不再按 Cookie 渲染） */
+				argonCommentPrivInit();
 			},
 			error : function(){
 				window.location.href = url;
@@ -2096,6 +2158,151 @@ function argonLightboxInit(){
 function argonLightboxReload(){
 	/* 事件委托已覆盖 Pjax 新内容，无需重复绑定；仅确保首次加载时已完成绑定 */
 	argonLightboxInit();
+}
+
+/* —— 浏览量异步打点 ——
+   页面渲染期已不再计数（无 Set-Cookie、无写库），改为浏览器端上报 admin-ajax。
+   Beacon 标记以 data-* 属性渲染在 #primary 内，因此 Pjax 换页后需重新取 post_id 打点。 */
+function argonPostViewInit(){
+	if (typeof($) == "undefined"){ return; }
+	/* 必须在 #primary 内取：Pjax 容器不含 body，body class 导航后是过期的 */
+	var $beacon = $("#primary #argon-pv-beacon");
+	/* 只认 beacon，不做 article[id^=post-] 兜底：
+	   列表页（timeline/archive/index）的 #primary 内同样有 article.post-full，
+	   兜底会给列表页的第一篇文章误打点。列表页旧渲染期逻辑本就不计数。 */
+	if ($beacon.length === 0){ return; }
+	var postId = parseInt($beacon.attr("data-post-id"), 10);
+	if (!(postId > 0)){ return; }
+
+	/* L1 客户端去重（sessionStorage，60s）——拦掉刷新与 BFCache 回看，零请求开销 */
+	var skey = "pv_seen_" + postId;
+	var now = Date.now();
+	var last = parseInt(sessionStorage.getItem(skey) || "0", 10);
+	if (last && (now - last) < 60 * 1000){ return; }
+	try{ sessionStorage.setItem(skey, String(now)); }catch(e){}
+
+	var url = (typeof argonConfig != "undefined" && argonConfig.wp_path ? argonConfig.wp_path : "/") + "wp-admin/admin-ajax.php";
+	var body = "action=argon_post_view&post_id=" + encodeURIComponent(postId)
+		+ "&token=" + encodeURIComponent($beacon.attr("data-token") || "");
+
+	/* 优先 sendBeacon（页面卸载也能发出、不阻塞）；降级 fetch keepalive；再降级 jQuery */
+	try{
+		if (navigator.sendBeacon && window.Blob){
+			navigator.sendBeacon(url, new URLSearchParams(body));
+			return;
+		}
+	}catch(e){}
+	try{
+		if (typeof fetch === "function"){
+			fetch(url, {
+				method: "POST",
+				body: body,
+				credentials: "same-origin",
+				keepalive: true,
+				headers: { "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8" }
+			}).then(function(r){ return r.json(); }).then(function(d){
+				if (d && d.views_html){ argonPostViewRefresh(d.views_html); }
+			}).catch(function(){});
+			return;
+		}
+	}catch(e){}
+	$.ajax({
+		url: url, type: "POST", dataType: "json",
+		data: { action: "argon_post_view", post_id: postId, token: $beacon.attr("data-token") || "" },
+		success: function(d){ if (d && d.views_html){ argonPostViewRefresh(d.views_html); } }
+	});
+}
+/* 用打点接口回传的新值就地刷新浏览量数字（避免缓存页长期显示旧值） */
+function argonPostViewRefresh(viewsHtml){
+	$("#primary .post-meta-detail-views").each(function(){
+		var $el = $(this);
+		var icon = $el.find("i").first();
+		$el.empty();
+		if (icon.length){ $el.append(icon); $el.append(" " + viewsHtml); }
+		else{ $el.text(viewsHtml); }
+	});
+}
+
+/* —— 评论点赞态 / 编辑按钮：本访客私有 UI 状态的客户端恢复 ——
+   服务端不再按 Cookie 渲染这两处（会导致整页缓存把他人的状态固化分发），
+   改为：服务端输出中性骨架，浏览器端从 localStorage / 权限接口恢复。
+   必须在 DOM 更新后（首次加载与 pjax:end）调用。 */
+function argonCommentPrivInit(){
+	if (typeof($) == "undefined"){ return; }
+
+	/* C3：评论点赞高亮态 —— 从 localStorage 恢复 */
+	var votedMap = argonStore.getIdSet("comment_upvoted");
+	$(".comment-upvote[data-id]").each(function(){
+		var id = parseInt($(this).attr("data-id"), 10);
+		if (id > 0 && votedMap[id]){
+			$(this).addClass("upvoted");
+		}
+	});
+
+	/* C3：文章点赞高亮态 —— 从 localStorage 恢复
+	   （同一篇文章可能有 meta 紧凑态 + 文末大按钮多个，按 data-id 统一处理） */
+	var postVotedMap = argonStore.getIdSet("post_upvoted");
+	if (Object.keys(postVotedMap).length){
+		$(".post-upvote[data-id]").each(function(){
+			var pid = parseInt($(this).attr("data-id"), 10);
+			if (pid > 0 && postVotedMap[pid]){
+				$(this).addClass("upvoted");
+			}
+		});
+	}
+
+	/* C2：编辑按钮 + 「已编辑」可查看编辑记录态 —— 统一走 argon_comment_perms 接口。
+	   两者都依赖 argon_user_token，服务端不渲染，改为浏览器端按本访客权限补齐。 */
+	var $slots = $(".comment-edit-slot");
+	var $histories = $(".comment-edited[data-editable-check]");
+	if ($slots.length === 0 && $histories.length === 0){ return; }
+	if (typeof argonConfig == "undefined" || !argonConfig.ajax_nonce){ return; }
+
+	/* 待查询的评论 ID：编辑按钮占位符 + 编辑记录标记（去重后一并请求） */
+	var ids = [];
+	$slots.each(function(){ ids.push(parseInt($(this).attr("data-comment-id"), 10)); });
+	$histories.each(function(){ ids.push(parseInt($(this).attr("data-editable-check"), 10)); });
+	ids = ids.filter(function(n){ return n > 0; });
+	ids = ids.filter(function(v, i, a){ return a.indexOf(v) === i; });
+	if (ids.length === 0){ return; }
+	/* 全部已处理过则跳过（避免 Pjax / 评论分页重复填充） */
+	if ($slots.filter(function(){ return $(this).data("perm-filled") === true; }).length === $slots.length
+		&& $histories.filter(function(){ return $(this).data("perm-filled") === true; }).length === $histories.length){ return; }
+
+	$.ajax({
+		url : argonConfig.wp_path + "wp-admin/admin-ajax.php",
+		type : "POST",
+		dataType : "json",
+		data : {
+			action: "argon_comment_perms",
+			argon_ajax_nonce: argonConfig.ajax_nonce,
+			ids: ids
+		},
+		success : function(result){
+			if (!result || result.status != "success"){ return; }
+			/* 编辑记录可见态：加类后 CSS 提供 pointer 光标，点击委托即可展开历史 */
+			var histMap = {};
+			$.each(result.history_visible || [], function(_, v){ histMap[v] = true; });
+			$histories.each(function(){
+				var $el = $(this);
+				var cid = parseInt($el.attr("data-editable-check"), 10);
+				$el.data("perm-filled", true);
+				if (histMap[cid]){ $el.addClass("comment-edithistory-accessible"); }
+			});
+			/* 编辑按钮插入 */
+			var editable = {};
+			$.each(result.editable || [], function(_, v){ editable[v] = true; });
+			$slots.each(function(){
+				var $slot = $(this);
+				var cid = parseInt($slot.attr("data-comment-id"), 10);
+				$slot.data("perm-filled", true);
+				if (editable[cid]){
+					$slot.html('<button class="comment-edit btn btn-sm btn-outline-primary" type="button" data-id="' + cid + '" style="margin-right: 2px;">'
+						+ escapeHtml(result.label || "编辑") + "</button>");
+				}
+			});
+		}
+	});
 }
 argonLightboxInit();
 
@@ -2456,6 +2663,11 @@ $(document).pjax("a[href]:not([no-pjax]):not(.no-pjax):not([target='_blank']):no
 	liveSearchInit();
 	tableReflow();
 	runtimeInit();
+	/* Pjax 换入的新内容里，评论点赞态与编辑按钮占位需重新恢复；
+	   浏览量打点也需补一次（beacon 在 #primary 内，已随 Pjax 更新为新文章的）。
+	   主题色/圆角属全局偏好（挂在 :root 与 <html> 上），Pjax 不换 head，无需重复应用。 */
+	argonCommentPrivInit();
+	argonPostViewInit();
 });
 
 /*Reference 跳转*/
@@ -2837,7 +3049,7 @@ if ($("meta[name='argon-enable-custom-theme-color']").attr("content") == 'true')
 		themeColorPicker.hide();
 		themeColorPicker.setColor($("meta[name='theme-color-origin']").attr("content").toUpperCase());
 		updateThemeColor($("meta[name='theme-color-origin']").attr("content").toUpperCase(), false);
-		setCookie("argon_custom_theme_color", "", 0);
+		argonStore.set("theme_color", "");
 	});
 	// 修正 Pickr 浮动面板错位：vendor 的 Nanopop 用 document.body.getBoundingClientRect() 作定位容器，
 	// 页面滚动后 body.top 为负，导致 position:fixed 的面板整体偏移一个滚动量，update 失败后还会兜底居中到屏幕正中。
@@ -2871,7 +3083,7 @@ function pickrObjectToHEX(color){
 	let HEXA = color.toHEXA();
 	return ("#" + HEXA[0] + HEXA[1] + HEXA[2]).toUpperCase();
 }
-function updateThemeColor(color, setcookie){
+function updateThemeColor(color, persist){
 	let themecolor = color;
 	let themecolor_rgbstr = hex2str(themecolor);
 	let RGB = hex2rgb(themecolor);
@@ -2895,9 +3107,27 @@ function updateThemeColor(color, setcookie){
 	$("meta[name='theme-color']").attr("content", themecolor);
 	$("meta[name='theme-color-rgb']").attr("content", themecolor_rgbstr);
 
-	if (setcookie){
-		setCookie("argon_custom_theme_color", themecolor, 365);
+	if (persist){
+		argonStore.set("theme_color", themecolor);
 	}
+}
+
+/* 从 localStorage 恢复本访客的主题色偏好（服务端不再按 Cookie 渲染）。
+   须在 argonConfig 就绪后、Pjax 初始化链中调用一次。 */
+function argonThemeColorPrivInit(){
+	if ($("meta[name='argon-enable-custom-theme-color']").attr("content") != 'true'){
+		return;
+	}
+	var saved = argonStore.get("theme_color", "");
+	if (!saved){ return; }
+	if (!/^#[0-9a-fA-F]{6}$/.test(saved)){ return; }
+	/* pickr 控件若存在，同步其取值，避免滑块与实际颜色不一致 */
+	try{
+		if (typeof themeColorPicker != "undefined" && themeColorPicker && typeof themeColorPicker.setColor === "function"){
+			themeColorPicker.setColor(saved);
+		}
+	}catch(e){}
+	updateThemeColor(saved, false);
 }
 
 /*打字效果*/
@@ -3058,6 +3288,18 @@ function highlightJsRender(){
 $(document).ready(function(){
 	highlightJsRender();
 	waterflowInit();
+	/* 本访客私有 UI 状态（点赞态 / 编辑按钮 / 主题色）恢复 —— 首次加载 */
+	argonThemeColorPrivInit();
+	argonCommentPrivInit();
+	/* 浏览量异步打点 */
+	argonPostViewInit();
+});
+
+/* BFCache 前进/后退返回：DOM 未重建，需补打一次（sessionStorage 去重会拦住短时间重复） */
+$(window).on("pageshow", function(e){
+	if (e.originalEvent && e.originalEvent.persisted){
+		argonPostViewInit();
+	}
 });
 $(document).on("click" , ".hljs-control-fullscreen" , function(){
 	let block = $(this).parent().parent();

@@ -4,6 +4,33 @@ if (version_compare( $GLOBALS['wp_version'], '4.4-alpha', '<' )) {
 }
 
 /**
+ * —— 浏览量异步打点参数（如需调整改此处）——
+ *
+ * 浏览量计数已改为 JS 异步上报 admin-ajax，页面渲染期不再写 Cookie / 写库，
+ * 以便文章页 HTML 可被整页缓存。以下常量控制令牌有效期与动态限流阈值。
+ *
+ * ARGON_PV_TOKEN_TTL   令牌有效期（秒），需 ≥ CDN/页面缓存 TTL，否则打点会静默失效
+ * ARGON_PV_L3_CAPACITY 单 IP 突发容量
+ * ARGON_PV_L3_RATE     单 IP 补充速率（次/分钟），即长期平均上限
+ * ARGON_PV_L4_CAPACITY 单令牌突发容量
+ * ARGON_PV_L4_RATE     单令牌补充速率（次/分钟）
+ * ARGON_PV_L2_TTL      同令牌去重窗口（秒）
+ */
+define('ARGON_PV_TOKEN_TTL', 172800);
+define('ARGON_PV_L3_CAPACITY', 30);
+define('ARGON_PV_L3_RATE', 5);
+define('ARGON_PV_L4_CAPACITY', 10);
+define('ARGON_PV_L4_RATE', 2);
+define('ARGON_PV_L2_TTL', 60);
+
+/**
+ * 含悄悄话的文章是否禁止整页缓存。
+ * 悄悄话可见性依赖 argon_user_token Cookie，缓存会导致私密内容外泄，
+ * 故默认开启。紧急情况下可改为 false 临时关闭（代价：泄露风险）。
+ */
+define('ARGON_PRIVATE_COMMENT_CACHE', true);
+
+/**
  * 带请求内静态缓存的 get_option 封装，避免同一请求中重复读取同一选项造成的多次数据库查询。
  * 仅当选项确实存在（返回值不等于默认值）时才写入缓存，避免不同默认值的调用相互污染。
  */
@@ -463,11 +490,12 @@ function set_user_token_cookie(){
 		$_COOKIE["argon_user_token"] = $newToken;
 	}
 }
-// 访问者 Token 初始化（验证码已改为无状态，不再需要 PHP Session / 会话文件锁）
-function argon_visitor_init(){
-	set_user_token_cookie();
-}
-add_action('wp', 'argon_visitor_init');
+/* 访问者 Token：不再在 wp 钩子上无条件下发。
+   原因：add_action('wp') 对所有页面执行 setcookie()，使响应恒带 Set-Cookie，
+   导致页面缓存与 CDN 全部 bypass（实测文章页 100% MISS、首页 100% HIT）。
+   现改为「懒生成」——首次发表评论时由 post_comment_updatemetas() 调用
+   set_user_token_cookie() 补发，Token 生命周期与用途不变，仅触发时机收窄。
+   同时悄悄话可见性判定已加 ?? '' 兜底，匿名访客不再持有该 Cookie 亦不报错。 */
 //页面 Description Meta
 function get_seo_description(){
 	global $post;
@@ -713,11 +741,12 @@ add_action('wp_head', 'argon_scroll_blur_css_var');
 //页面浏览量
 function get_post_views($post_id){
 	$count_key = 'views';
+	/* 纯读：原实现在 meta 为空时执行 delete_post_meta + add_post_meta，
+	   属 GET 请求写库，会让部分缓存层判定页面「有副作用」而 bypass。
+	   首次计数由 argon_ajax_post_view() 经 update_post_meta 完成，此处只需兜底默认值。 */
 	$count = get_post_meta($post_id, $count_key, true);
-	if ($count==''){
-		delete_post_meta($post_id, $count_key);
-		add_post_meta($post_id, $count_key, '0');
-		$count = '0';
+	if ($count === '' || $count === false || $count === null){
+		$count = 0;
 	}
 	return number_format_i18n($count);
 }
@@ -744,6 +773,28 @@ function argon_is_bot_request(){
 	}
 	return false;
 }
+/* 浏览量自增：原 set_post_views() 内联逻辑抽出，供 AJAX 端点复用。
+   先累加进 Object Cache，再由 shutdown 钩子统一落库；
+   配合持久化对象缓存（Redis/Memcached）可将 DB 写频率降至每请求至多一次。 */
+function argon_increment_post_views($post_id){
+	$post_id = intval($post_id);
+	if ($post_id <= 0){
+		return 0;
+	}
+	$count_key = 'views';
+	$cache_key = 'argon_views_' . $post_id;
+	$count = wp_cache_get($cache_key, 'argon');
+	if ($count === false){
+		$count = (int) get_post_meta($post_id, $count_key, true);
+	}
+	$count++;
+	wp_cache_set($cache_key, $count, 'argon', 300);
+	$GLOBALS['argon_dirty_views'][$post_id] = $count;
+	return $count;
+}
+
+/* 渲染期计数入口：保留函数体以备应急回滚，但默认不再挂载（见 argon_ajax_post_view）。
+   回滚方式：恢复下方 add_action('get_header', 'set_post_views'); 一行即可。 */
 function set_post_views(){
 	// 简单防爬：已知爬虫/机器人 UA 与空 UA 不计入浏览量（降低爬虫虚高）
 	if (argon_is_bot_request()){
@@ -774,29 +825,14 @@ function set_post_views(){
 	if ($noPostView == 'true'){
 		return;
 	}
-	$post_id = $post -> ID;
 	if (is_single() || is_page()) {
-		// 节流：同一访客 60s 内重复刷新同一文章只计数一次，降低数据库写放大
-		$viewed = isset($_COOKIE['argon_viewed_posts']) ? array_map('intval', explode(',', $_COOKIE['argon_viewed_posts'])) : array();
-		if (in_array($post_id, $viewed)){
-			return;
-		}
-		$viewed[] = $post_id;
-		setcookie('argon_viewed_posts', implode(',', array_slice($viewed, -20)), time() + 60, '/');
-		// 先累加进 Object Cache，再由 shutdown 钩子统一落库；
-		// 配合持久化对象缓存（Redis/Memcached）可将 DB 写频率降至每请求至多一次
-		$count_key = 'views';
-		$cache_key = 'argon_views_' . $post_id;
-		$count = wp_cache_get($cache_key, 'argon');
-		if ($count === false){
-			$count = (int) get_post_meta($post_id, $count_key, true);
-		}
-		$count++;
-		wp_cache_set($cache_key, $count, 'argon', 300);
-		$GLOBALS['argon_dirty_views'][$post_id] = $count;
+		argon_increment_post_views($post_id);
 	}
 }
-add_action('get_header', 'set_post_views');
+// 默认不挂载：浏览量已改由 argon_ajax_post_view() 异步上报，页面渲染期不再写库、不再种 Cookie。
+// 应急回滚：取消下面一行的注释即可恢复旧的同步计数（代价：页面重新不可整页缓存）。
+// add_action('get_header', 'set_post_views');
+
 //请求结束前批量落库，减少数据库写操作
 function argon_flush_post_views(){
 	if (empty($GLOBALS['argon_dirty_views'])){
@@ -808,6 +844,180 @@ function argon_flush_post_views(){
 	$GLOBALS['argon_dirty_views'] = array();
 }
 add_action('shutdown', 'argon_flush_post_views');
+
+/* ============================================================
+   浏览量异步打点（JS → admin-ajax）
+   —— 页面渲染期不再计数、不再种 Cookie，文章页 HTML 可被整页缓存。
+   与 Post Views Counter 的关系：PVC 存自定义表、负责「展示值」；
+   本模块写入 views post_meta、负责「相关推荐按阅读量排序」（single.php:81-83）。
+   两者服务不同用途，各自独立，互不干预。
+   ============================================================ */
+
+/* 令牌：绑定 post_id 与过期时间，密钥不随 HTML 分发故无泄露面。
+   TTL 须 ≥ 页面/CDN 缓存 TTL，否则缓存页上的令牌过期后打点会静默失效。 */
+function argon_post_view_token($post_id){
+	$exp = time() + ARGON_PV_TOKEN_TTL;
+	return hash_hmac('sha256', intval($post_id) . '|' . $exp, wp_salt('nonce'));
+}
+function argon_post_view_token_valid($post_id, $token){
+	$post_id = intval($post_id);
+	$parts = explode('|', strval($token));
+	if (count($parts) !== 2){
+		return false;
+	}
+	$exp = intval($parts[1]);
+	if ($exp < time()){
+		return false;
+	}
+	$expected = hash_hmac('sha256', $post_id . '|' . $exp, wp_salt('nonce'));
+	return hash_equals($expected, strval($token));
+}
+
+/* 令牌桶限流：允许突发（容量 C）、限制长期平均（速率 R 次/分钟）。
+   相比固定窗口阈值，避免「整点前全放行、整点后全拒绝」的硬边界。
+   状态存 wp_cache（站点已启用 PhpRedis 持久化后端，无 DB 写放大）。
+   注意：单机 Redis 下 get+set 非原子，高并发时可能极少量超发；对 PV 统计可接受。 */
+function argon_rate_limit_take($key, $capacity, $rate_per_min){
+	$state = wp_cache_get($key, 'argon_rate');
+	$now = microtime(true);
+	if (!is_array($state) || !isset($state['tokens'], $state['ts'])){
+		$state = array('tokens' => (float) $capacity, 'ts' => $now);
+	}
+	$refill = max(0.0, $now - (float) $state['ts']) * ($rate_per_min / 60.0);
+	$state['tokens'] = min((float) $capacity, (float) $state['tokens'] + $refill);
+	$state['ts'] = $now;
+	if ($state['tokens'] < 1.0){
+		wp_cache_set($key, $state, 'argon_rate', 3600);
+		return false;
+	}
+	$state['tokens'] -= 1.0;
+	wp_cache_set($key, $state, 'argon_rate', 3600);
+	return true;
+}
+
+/* 访客指纹：仅用于限流分桶，不做持久化识别 */
+function argon_post_view_fingerprint(){
+	$ip = isset($_SERVER['REMOTE_ADDR']) ? $_SERVER['REMOTE_ADDR'] : '';
+	$ua = isset($_SERVER['HTTP_USER_AGENT']) ? $_SERVER['HTTP_USER_AGENT'] : '';
+	return md5($ip . '|' . $ua);
+}
+
+function argon_post_view_dedup_key($token){
+	return 'argon_pv_' . substr(hash('sha256', strval($token)), 0, 32);
+}
+
+/* 浏览量打点端点。写入 views post_meta —— 相关推荐排序依赖此字段。 */
+function argon_ajax_post_view(){
+	header('Content-Type: application/json; charset=utf-8');
+	header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+
+	$post_id = isset($_POST['post_id']) ? intval($_POST['post_id']) : 0;
+	$token = isset($_POST['token']) ? $_POST['token'] : '';
+
+	/* 1. 已知爬虫 / 空 UA 直接拒绝 */
+	if (argon_is_bot_request()){
+		argon_post_view_send(0);
+	}
+	/* 2. 令牌校验：拒绝未访问过页面的伪造打点、以及令牌换 post_id 的滥用 */
+	if (!$post_id || !argon_post_view_token_valid($post_id, $token)){
+		argon_post_view_send(0);
+	}
+	/* 3. 文章存在性与白名单 */
+	$post = get_post($post_id);
+	if (!$post || !in_array($post -> post_type, array('post', 'page', 'shuoshuo'), true)){
+		argon_post_view_send(0);
+	}
+	if ($post -> post_status !== 'publish'){
+		argon_post_view_send(0);
+	}
+	/* 4. 密码保护文章不计（与旧渲染期逻辑一致） */
+	if (post_password_required($post_id)){
+		argon_post_view_send(0);
+	}
+	/* 5. 评论分页等显式声明不计数的场景（沿用旧逻辑的 no_post_view 约定） */
+	if (isset($_POST['no_post_view']) && $_POST['no_post_view'] === 'true'){
+		argon_post_view_send(0);
+	}
+
+	$fp = argon_post_view_fingerprint();
+	$dedup_key = argon_post_view_dedup_key($token);
+
+	/* 6. L3 单 IP 频控。正常浏览器（UA/Referer 合法且已过令牌校验）放宽 3 倍，
+	      避免共享出口下的误杀；脚本特征明显时收紧。 */
+	$referer_ok = isset($_SERVER['HTTP_REFERER']) && $_SERVER['HTTP_REFERER'] !== '';
+	$l3_capacity = ($referer_ok ? ARGON_PV_L3_CAPACITY * 3 : ARGON_PV_L3_CAPACITY);
+	if (!argon_rate_limit_take('argon_pvrl_' . $fp, $l3_capacity, ARGON_PV_L3_RATE)){
+		argon_post_view_send(0);
+	}
+	/* 7. L4 单令牌频控：令牌与文章绑定，此处是防「单篇 PV 被持有者脚本刷高」的主力。
+	      同一令牌短期内请求多篇不同文章属脚本特征，收紧速率。 */
+	$l4_rate = ARGON_PV_L4_RATE;
+	$spread_key = 'argon_pvspread_' . substr(hash('sha256', strval($token)), 0, 16);
+	$seen = wp_cache_get($spread_key, 'argon_rate');
+	$token_post = 'p' . $post_id;
+	if (is_array($seen)){
+		if (!isset($seen[$token_post])){
+			if (count($seen) >= 3){
+				$l4_rate = ARGON_PV_L4_RATE / 4;
+			}
+			$seen[$token_post] = 1;
+			if (count($seen) > 10){
+				$seen = array_slice($seen, 0, 10, true);
+			}
+			wp_cache_set($spread_key, $seen, 'argon_rate', 300);
+		}
+	}else{
+		wp_cache_set($spread_key, array($token_post => 1), 'argon_rate', 300);
+	}
+	if (!argon_rate_limit_take('argon_pvtl_' . substr(hash('sha256', strval($token)), 0, 32), ARGON_PV_L4_CAPACITY, $l4_rate)){
+		argon_post_view_send(0);
+	}
+	/* 8. L2 同令牌去重窗口：承接旧 argon_viewed_posts Cookie 的 60s 语义。
+	      刻意不用 IP 分桶 —— NAT / 移动网络下同 IP 用户会互相去重。 */
+	if (get_transient($dedup_key)){
+		argon_post_view_send(0);
+	}
+	set_transient($dedup_key, 1, ARGON_PV_L2_TTL);
+
+	/* 9. 计数 + 落库（复用 argon_increment_post_views / argon_flush_post_views） */
+	$count = argon_increment_post_views($post_id);
+	argon_post_view_send($count);
+}
+function argon_post_view_send($count){
+	echo json_encode(array(
+		'status'     => 'success',
+		'views'      => intval($count),
+		'views_html' => number_format_i18n(intval($count))
+	));
+	exit;
+}
+add_action('wp_ajax_argon_post_view', 'argon_ajax_post_view');
+add_action('wp_ajax_nopriv_argon_post_view', 'argon_ajax_post_view');
+
+/* Beacon 标记：必须用 data-* 属性而非内联 <script>。
+   原因：#comments_more 会用 $(result) 解析整页 HTML，jQuery 会执行其中的内联脚本，
+   内联承载打点逻辑会在评论分页场景被误触发。
+   必须渲染在 #primary 内部 —— header/footer 不在 Pjax 容器内，Pjax 导航后不会更新。 */
+function argon_post_view_beacon(){
+	if (is_preview() || is_admin()){
+		return;
+	}
+	$post_id = get_the_ID();
+	if (!$post_id){
+		return;
+	}
+	if (!in_array(get_post_type(), array('post', 'page', 'shuoshuo'), true)){
+		return;
+	}
+	if (post_password_required($post_id)){
+		return;
+	}
+	$exp = time() + ARGON_PV_TOKEN_TTL;
+	echo '<span id="argon-pv-beacon" data-post-id="' . esc_attr($post_id) . '"'
+		. ' data-token="' . esc_attr(hash_hmac('sha256', $post_id . '|' . $exp, wp_salt('nonce'))) . '"'
+		. ' hidden></span>' . "\n";
+}
+
 //字数和预计阅读时间
 function get_article_words($str){
 	preg_match_all('/<pre(.*?)>[\S\s]*?<code(.*?)>([\S\s]*?)<\/code>[\S\s]*?<\/pre>/im', $str, $codeSegments, PREG_PATTERN_ORDER);
@@ -1292,7 +1502,9 @@ function check_email_address($email){
 }
 //检验评论 Token 和用户 Token 是否一致
 function check_comment_token($id){
-	if (strlen($_COOKIE['argon_user_token']) != 32){
+	/* argon_user_token 改为「首次发表评论时才下发」后，匿名访客首次访问不再持有该 Cookie，
+	   此处必须用 isset 兜底，否则 PHP 8 下会产生 undefined array key 警告 */
+	if (!isset($_COOKIE['argon_user_token']) || strlen($_COOKIE['argon_user_token']) != 32){
 		return false;
 	}
 	if ($_COOKIE['argon_user_token'] != get_comment_meta($id, "user_token", true)){
@@ -1334,7 +1546,9 @@ function user_can_view_comment($id){
 	if (current_user_can("manage_options")){
 		return true;
 	}
-	if ($_COOKIE['argon_user_token'] == get_comment_meta($id, "private_mode", true)){
+	/* argon_user_token 改为「首次发表评论时才下发」后，匿名访客首次访问不再持有该 Cookie，
+	   此处必须用 ?? '' 兜底，否则 PHP 8 下会产生 undefined array key 警告 */
+	if (($_COOKIE['argon_user_token'] ?? '') == get_comment_meta($id, "private_mode", true)){
 		return true;
 	}
 	return false;
@@ -1402,6 +1616,53 @@ function argon_verify_ajax_nonce(){
 		)));
 	}
 }
+
+/**
+ * 返回当前访客在各条评论上被允许的操作集合（目前仅「编辑」）。
+ *
+ * 为什么需要这个接口：编辑按钮的可见性依据 argon_user_token Cookie 判定，
+ * 若在服务端渲染进 HTML，整页缓存会把「谁能看到编辑入口」固化分发给所有访客。
+ * 因此页面只输出空占位（.comment-edit-slot），由浏览器端在渲染后拉取本访客的权限。
+ *
+ * 安全说明：
+ * 1) 校验沿用 argon_verify_ajax_nonce()，防止跨站伪造请求；
+ * 2) 接口为只读，不改变任何状态，响应 Cache-Control: no-store 不可被缓存复用；
+ * 3) 仅返回「可见性」而不返回任何私密内容；真正的写操作（编辑提交）仍走
+ *    user_edit_comment()，它内部再次调用 check_comment_token() 鉴权，
+ *    因此即便本接口被绕过也无法越权。
+ */
+function argon_comment_perms(){
+	argon_verify_ajax_nonce();
+	header('Content-Type: application/json; charset=utf-8');
+	if (function_exists('wp_send_json')){
+		if (!headers_sent()){
+			header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+		}
+	}
+	$ids = isset($_POST['ids']) ? array_slice(array_map('intval', (array) $_POST['ids']), 0, 300) : array();
+	$editable = array();
+	$history_visible = array();
+	$allow_editing = (get_option("argon_comment_allow_editing") != "false");
+	foreach ($ids as $cid){
+		if ($cid <= 0 || !get_comment($cid)){
+			continue;
+		}
+		if ($allow_editing && (check_comment_token($cid) || check_comment_userid($cid))){
+			$editable[] = $cid;
+		}
+		if (can_visit_comment_edit_history($cid)){
+			$history_visible[] = $cid;
+		}
+	}
+	exit(json_encode(array(
+		'status'          => 'success',
+		'editable'        => $editable,
+		'history_visible' => $history_visible,
+		'label'           => __('编辑', 'argon')
+	)));
+}
+add_action('wp_ajax_argon_comment_perms', 'argon_comment_perms');
+add_action('wp_ajax_nopriv_argon_comment_perms', 'argon_comment_perms');
 
 function get_comment_edit_history(){
 	argon_verify_ajax_nonce();
@@ -1653,7 +1914,7 @@ function argon_comment_format($comment, $args, $depth){
 				}?>
 			</div>
 			<?php if ($GLOBALS['argon_comment_options']['enable_upvote']){ ?>
-				<button class="comment-upvote btn btn-icon btn-outline-primary btn-sm <?php echo (is_comment_upvoted(get_comment_ID()) ? 'upvoted' : ''); ?>" type="button" data-id="<?php comment_ID(); ?>">
+				<button class="comment-upvote btn btn-icon btn-outline-primary btn-sm" type="button" data-id="<?php comment_ID(); ?>">
 					<span class="btn-inner--icon"><i class="fa fa-caret-up"></i></span>
 					<span class="btn-inner--text">
 						<span class="comment-upvote-num"><?php echo format_number_in_kilos(get_comment_upvotes(get_comment_ID())); ?></span>
@@ -1685,7 +1946,9 @@ function argon_comment_format($comment, $args, $depth){
 				</div>
 				<div class="comment-info">
 					<?php if (get_comment_meta(get_comment_ID(), "edited", true) == "true") { ?>
-						<div class="comment-edited<?php if (can_visit_comment_edit_history(get_comment_ID())){echo ' comment-edithistory-accessible';}?>">
+						<?php /* 「可查看编辑记录」同样按 argon_user_token 判定，改由 JS 依权限补类，
+						       否则整页缓存会把「谁能点开编辑记录」固化分发。数据属性供前端匹配。 */
+						<div class="comment-edited" data-editable-check="<?php comment_ID(); ?>">
 							<i class="fa fa-pencil" aria-hidden="true"></i><?php _e('已编辑', 'argon')?>
 						</div>
 					<?php } ?>
@@ -1708,8 +1971,11 @@ function argon_comment_format($comment, $args, $depth){
 						<button class="comment-pin btn btn-sm btn-outline-primary" data-id="<?php comment_ID(); ?>" type="button" style="margin-right: 2px;"><?php _ex('置顶', 'to pin', 'argon')?></button>
 				<?php }
 					} ?>
-				<?php if ((check_comment_token(get_comment_ID()) || check_login_user_same($comment -> user_id)) && (get_option("argon_comment_allow_editing") != "false")) { ?>
-					<button class="comment-edit btn btn-sm btn-outline-primary" data-id="<?php comment_ID(); ?>" type="button" style="margin-right: 2px;"><?php _e('编辑', 'argon')?></button>
+				<?php /* 编辑按钮改为由 JS 按当前访客权限填充（见 argon_comment_perms 接口）。
+				       原因：其可见性依据 argon_user_token Cookie 判定，写进 HTML 会让整页缓存
+				       把「是否显示编辑入口」固化分发。默认不渲染，交互逻辑见 argontheme.js。 */
+				if (get_option("argon_comment_allow_editing") != "false"){ ?>
+					<span class="comment-edit-slot" data-comment-id="<?php comment_ID(); ?>"></span>
 				<?php } ?>
 				<button class="comment-reply btn btn-sm btn-outline-primary" data-id="<?php comment_ID(); ?>" type="button"><?php _e('回复', 'argon')?></button>
 			</div>
@@ -2410,6 +2676,57 @@ function argon_comment_cmp($a, $b){
 		return ($a_pinned == "true") ? -1 : 1;
 	}
 }
+// —— 悄悄话文章禁止整页缓存（缓存兼容性前置闸门）——
+// 悄悄话的可见性由 user_can_view_comment() 依据 argon_user_token Cookie 决定，
+// 一旦响应被整页缓存，判定结果会被固化为 HTML 分发给所有访客，导致私密内容外泄。
+// 因此含悄悄话的文章一律不进入页面缓存与 CDN 缓存。
+// 判定走一条 commentmeta EXISTS 查询并加 transient 缓存，避免每请求重复查库。
+function argon_post_has_private_comments($post_id){
+	$post_id = intval($post_id);
+	if ($post_id <= 0){
+		return false;
+	}
+	$cache_key = 'argon_priv_cmt_' . $post_id;
+	$cached = get_transient($cache_key);
+	if ($cached !== false){
+		return $cached === '1';
+	}
+	global $wpdb;
+	$found = $wpdb -> get_var($wpdb -> prepare(
+		"SELECT 1 FROM {$wpdb -> commentmeta} cm
+		 INNER JOIN {$wpdb -> comments} c ON c.comment_ID = cm.comment_id
+		 WHERE cm.meta_key = 'private_mode'
+		   AND LENGTH(cm.meta_value) = 32
+		   AND c.comment_post_ID = %d
+		   AND c.comment_approved = '1'
+		 LIMIT 1",
+		$post_id
+	));
+	$has = !empty($found);
+	set_transient($cache_key, $has ? '1' : '0', HOUR_IN_SECONDS);
+	return $has;
+}
+function argon_gc_private_comment_cache(){
+	if (!defined('ARGON_PRIVATE_COMMENT_CACHE') || !ARGON_PRIVATE_COMMENT_CACHE){
+		return;
+	}
+	// 仅对单篇文章判定；归档/列表页不涉及单篇评论可见性
+	if (!is_singular()){
+		return;
+	}
+	$post_id = get_queried_object_id();
+	if (!$post_id || !argon_post_has_private_comments($post_id)){
+		return;
+	}
+	// 让页面缓存插件与 CDN 同时跳过本页
+	if (!defined('DONOTCACHEPAGE')){
+		define('DONOTCACHEPAGE', true);
+	}
+	if (!headers_sent()){
+		nocache_headers();
+	}
+}
+add_action('template_redirect', 'argon_gc_private_comment_cache', 1);
 function argon_get_comments(){
 	global $wp_query;
 	/*$cpage = get_query_var('cpage') ?? 1;
@@ -3982,7 +4299,9 @@ function argon_render_post_like($ID = 0, $compact = false){
 	if (!$ID){
 		$ID = get_the_ID();
 	}
-	$upvoted = is_post_upvoted($ID) ? ' upvoted' : '';
+	/* upvoted 态不再由服务端按 Cookie 判定（会导致整页缓存把点赞状态固化分发），
+	   改由 argontheme.js 从 localStorage 读取本访客的点赞记录后添加该类。 */
+	$upvoted = '';
 	$compact_class = $compact ? ' post-upvote-meta' : '';
 	$heart_outline = '<svg class="icon-heart-outline" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.27 2 8.5 2 5.41 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.08C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.41 22 8.5c0 3.77-3.4 6.86-8.55 11.53L12 21.35z"/></svg>';
 	$heart_filled = '<svg class="icon-heart-filled" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.27 2 8.5 2 5.41 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.08C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.41 22 8.5c0 3.77-3.4 6.86-8.55 11.53L12 21.35z"/></svg>';

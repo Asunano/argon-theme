@@ -18,6 +18,7 @@
 		<?php endif; ?>
 	</div>
 	<article class="card shuoshuo-main bg-white shadow-sm border-0" id="post-<?php the_ID(); ?>" <?php post_class(); ?>>
+		<?php /* 浏览量异步打点标记（说说详情页同为文章页，旧渲染期逻辑亦计数） */ argon_post_view_beacon(); ?>
 		<?php if ( get_the_title() != '' ) : ?>
 			<a class="shuoshuo-title" href="<?php the_permalink(); ?>"><?php the_title(); ?></a>
 		<?php endif; ?>

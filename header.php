@@ -49,13 +49,11 @@
 ?>
 <html <?php language_attributes(); ?> class="no-js <?php echo $htmlclasses;?>">
 <?php
+	/* 主题色 / 卡片圆角：服务端只输出站点默认值，不按 Cookie 分支。
+	   原因：读取访客偏好会让 HTML 随人而异，整页缓存会把首个访客的偏好固化分发。
+	   用户偏好改由 argontheme.js 从 localStorage 读取后在客户端覆盖 CSS 变量。 */
 	$themecolor = get_option("argon_theme_color", "#5e72e4");
 	$themecolor_origin = $themecolor;
-	if (isset($_COOKIE["argon_custom_theme_color"])){
-		if (checkHEX($_COOKIE["argon_custom_theme_color"]) && argon_get_option('argon_show_customize_theme_color_picker') != 'false'){
-			$themecolor = $_COOKIE["argon_custom_theme_color"];
-		}
-	}
 	if (hex2gray($themecolor) < 50){
 		echo '<script>document.getElementsByTagName("html")[0].classList.add("themecolor-toodark");</script>';
 	}
@@ -66,9 +64,6 @@
 		$cardradius = "4";
 	}
 	$cardradius_origin = $cardradius;
-	if (isset($_COOKIE["argon_card_radius"]) && $_COOKIE["argon_card_radius"] != ""){
-		$cardradius = $_COOKIE["argon_card_radius"];
-	}
 ?>
 <head>
 	<?php /* 编码/视口声明必须紧跟 <head>：HTML 规范的编码预扫描只读取文档最前 1024 字节，

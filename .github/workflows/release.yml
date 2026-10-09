@@ -144,22 +144,27 @@ jobs:
           unzip -l "$THEME.zip" | head -n 20
 
       - name: Mark as dev build
+        env:
+          # 经 env 传入而非在脚本里直接写 GitHub 表达式 ——
+          # 未加引号的 heredoc 中，GitHub 的表达式语法会被 bash
+          # 当作变量展开而报 "bad substitution"，在 set -e 下直接中断整个步骤。
+          # （首次触发时正是因此失败，改用 printf + env 后修复。）
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
         run: |
           # 在包内写入构建标记，便于测试时确认拿到的是 dev 版而非正式版。
-          # 只改包内副本，不碰仓库工作区（checkout 是干净的，无需再 checkout）。
-          SHA="${GITHUB_SHA::7}"
-          STAMP="$(date -u +'%Y-%m-%d %H:%M UTC')"
+          # 只改包内副本，不碰仓库工作区（checkout 是干净的）。
           unzip -q argon-theme.zip -d devpkg
-          cat > "devpkg/$THEME/DEV-BUILD.txt" <<EOF
-          开发测试版，请勿用于生产环境。
-
-          分支      : dev
-          提交      : $GITHUB_SHA (${SHA})
-          构建时间  : ${STAMP}
-          运行      : https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          EOF
+          {
+            printf '开发测试版，请勿用于生产环境。\n\n'
+            printf '分支      : dev\n'
+            printf '提交      : %s (%s)\n' "$GITHUB_SHA" "${GITHUB_SHA::7}"
+            printf '构建时间  : %s\n' "$(date -u +'%Y-%m-%d %H:%M UTC')"
+            printf '运行      : https://github.com/%s/actions/runs/%s\n' "$REPO" "$RUN_ID"
+          } > "devpkg/$THEME/DEV-BUILD.txt"
+          cat "devpkg/$THEME/DEV-BUILD.txt"
           rm -f argon-theme.zip
-          ( cd devpkg && zip -r "../argon-theme.zip" "$THEME" )
+          ( cd devpkg && zip -q -r "../argon-theme.zip" "$THEME" )
           rm -rf devpkg
 
       - name: Upload build artifact

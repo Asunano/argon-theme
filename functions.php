@@ -55,6 +55,86 @@ function theme_slug_setup() {
 }
 add_action('after_setup_theme','theme_slug_setup');
 
+/* ============================================================
+   Emoji 本地化：把 WP 的跨域 emoji 请求合并为 1 个本地 sprite 请求
+   ------------------------------------------------------------
+   WP 默认用 wp-emoji-loader 动态 import wp-emoji-release.min.js，
+   在**客户端**把正文 emoji 字符替换成 <img src="https://s.w.org/.../xxx.svg">。
+   后果（archives/873 实测）：每篇文章 70 个跨域请求 / 90.4 KB，全部打到 s.w.org。
+
+   本实现：
+   1) 移除 WP 的 emoji 脚本与样式（不生成 img，因此不产生任何跨域请求）
+   2) 输出本地 sprite（assets/emoji-sprite.svg）+ codepoint 映射表
+   3) 由 argon.js 在客户端用 Unicode 属性正则识别 emoji 并渲染 <svg><use></use></svg>
+
+   sprite 必须与页面**同源**：SVG <use> 不允许跨源引用，走 CDN 会静默失败。
+   故固定用 get_template_directory_uri()，不使用 $GLOBALS['assets_path']。
+   ============================================================ */
+
+/**
+ * 读取 emoji sprite 映射表（code => symbol id）。
+ * 请求内静态缓存；文件缺失或损坏时返回空数组，此时退化为「不替换」，不影响功能。
+ */
+function argon_emoji_sprite_map(){
+	static $map = null;
+	if ($map === null){
+		$file = get_template_directory() . '/assets/emoji-sprite-map.json';
+		$map = array();
+		if (is_readable($file)){
+			$decoded = json_decode(file_get_contents($file), true);
+			if (is_array($decoded)){
+				$map = $decoded;
+			}
+		}
+	}
+	return $map;
+}
+function argon_emoji_sprite_url(){
+	return get_template_directory_uri() . '/assets/emoji-sprite.svg';
+}
+function argon_emoji_sprite_enabled(){
+	return !empty(argon_emoji_sprite_map());
+}
+
+/**
+ * 移除 WP 的 emoji 渲染链路。
+ * 不移除的话 wp-emoji-loader 会先于我们的脚本生成 img 并发出跨域请求，
+ * 那样只是「事后补救」，请求已经发出去了 —— 必须彻底移除才能真正省掉。
+ */
+function argon_disable_wp_emoji(){
+	remove_action('wp_head', 'print_emoji_detection_script', 7);
+	remove_action('admin_print_scripts', 'print_emoji_detection_script');
+	remove_action('wp_print_styles', 'print_emoji_styles');
+	remove_action('admin_print_styles', 'print_emoji_styles');
+	remove_filter('the_content_feed', 'wp_staticize_emoji');
+	remove_filter('comment_text_rss', 'wp_staticize_emoji');
+	remove_filter('wp_mail', 'wp_staticize_emoji_for_email');
+}
+add_action('init', 'argon_disable_wp_emoji');
+
+/**
+ * 输出 emoji sprite 与映射数据。
+ * sprite 文件由浏览器按需请求（同源，可长缓存）；映射表内联为 JSON 交给前端脚本消费。
+ * 脚本固定用 get_template_directory_uri()（同源）：emoji-sprite.svg 必须与页面同源，
+ * 而本脚本本身不涉及跨域，稳妥起见同样走本地。
+ */
+function argon_emoji_sprite_assets(){
+	if (!argon_emoji_sprite_enabled() || is_admin()){
+		return;
+	}
+	$map = argon_emoji_sprite_map();
+	?>
+	<style id="argon-emoji-sprite-style">
+		.wp-emoji-argon{width:1.25em;height:1.25em;vertical-align:-0.2em;display:inline-block;}
+	</style>
+	<script id="argon-emoji-sprite-data" type="application/json">
+		{"url":<?php echo wp_json_encode(argon_emoji_sprite_url()); ?>,"map":<?php echo wp_json_encode($map); ?>,"targets":["#primary","#comments","#secondary"]}
+	</script>
+	<script src="<?php echo esc_url(get_template_directory_uri() . '/assets/js/argon-emoji-sprite.js'); ?>?ver=<?php echo esc_attr($GLOBALS['theme_version']); ?>"></script>
+	<?php
+}
+add_action('wp_print_footer_scripts', 'argon_emoji_sprite_assets', 5);
+
 // 条件加载的 vendor 脚本以 defer 加载，解除 <head> 渲染阻塞。
 // argon_js_merged 不在其中(见下方注释)：它同步于 <head> 输出，作为全局基础包。
 add_filter('script_loader_tag', function ($tag, $handle) {
@@ -69,13 +149,23 @@ add_filter('script_loader_tag', function ($tag, $handle) {
 	return $tag;
 }, 10, 2);
 
-// 仅 googlefont 异步加载（media=print + onload 切回 all），其余样式保持渲染阻塞，
+// 仅首屏不需要的样式异步加载（media=print + onload 切回 all），其余样式保持渲染阻塞，
 // 保证首屏必定已样式化、绝不出现整页无样式(空白/异常)。预加载遮罩的瞬时出现由
 // 内联样式 + 遮罩自身不依赖外部 CSS 来保证；关键 CSS 渲染阻塞可彻底避免无样式闪烁。
-// FA6 两个 CSS 同样异步：首屏主题图标由合并包内 FA4（同步）保证，FA6 仅覆盖/补充
-// 文章正文用到的更多图标，异步延迟渲染无感知，可省去 ~130KB 首屏阻塞 CSS。
 add_filter('style_loader_tag', function ($tag, $handle) {
+	// ① 字体与图标：首屏主题图标由合并包内 FA4（同步）保证，FA6 仅覆盖/补充
+	//    文章正文用到的更多图标，异步延迟渲染无感知，可省去 ~130KB 首屏阻塞 CSS。
 	if (in_array($handle, array('googlefont', 'font-awesome-full', 'font-awesome-shims'), true)) {
+		$deferred = str_replace("media='all'", "media='print' onload=\"this.media='all'\"", $tag);
+		return $deferred . '<noscript>' . $tag . '</noscript>';
+	}
+	// ② 交互态才用到的样式：首屏完全看不到它们负责的内容，同步加载只会白等一个往返。
+	//    实测（archives/873）这三个原本各阻塞 927~1153ms：
+	//      fancybox5       24.7KB 文章灯箱，点击图片时才用到
+	//      pickr-style      9.2KB 后台取色器，点主题色按钮时才用到（体积小但同样触发完整往返）
+	//      highlight-style  1.3KB 代码高亮主题，滚动到代码块时才用到
+	//    它们都只有几十 KB，异步后到达前的窗口极短（<200ms），视觉上无感知。
+	if (in_array($handle, array('fancybox5', 'pickr-style', 'highlight-style'), true)) {
 		$deferred = str_replace("media='all'", "media='print' onload=\"this.media='all'\"", $tag);
 		return $deferred . '<noscript>' . $tag . '</noscript>';
 	}

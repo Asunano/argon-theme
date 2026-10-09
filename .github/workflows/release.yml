@@ -4,12 +4,17 @@ on:
   push:
     tags:
       - 'v*'
+    branches:
+      - 'dev'
 
 permissions:
   contents: write
 
 jobs:
   release:
+    # 仅 tag 推送走发版：校验版本号一致性 + 写 version.json 回默认分支 + 创建 Release。
+    # 分支推送（dev）由下面的 dev-package 负责，不会走到这里。
+    if: startsWith(github.ref, 'refs/tags/')
     name: Build & publish release
     runs-on: ubuntu-latest
     steps:
@@ -81,3 +86,86 @@ jobs:
         with:
           files: argon-theme.zip
           generate_release_notes: true
+
+  dev-package:
+    # dev 分支推送：仅打包为构建产物供下载测试，
+    # 不校验版本号（dev 上 style.css 可能仍写着上一个已发布版本）、
+    # 不创建 Release、不回写 version.json —— 三者都会污染正式发版线。
+    name: Build dev package (preview)
+    if: github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build Gutenberg blocks
+        continue-on-error: true
+        working-directory: gutenberg
+        run: |
+          npm install
+          npm run build
+
+      - name: PHP syntax check
+        run: |
+          # 开发分支是试验场，语法错误必须拦在这里——不要等装到线上才发现整页 fatal。
+          # （v1.3.30 就因 functions.php 一处块注释含 */ 导致生产环境 E_PARSE。）
+          fail=0
+          while IFS= read -r f; do
+            out=$(php -l "$f" 2>&1) || { echo "::error::$out"; fail=1; }
+          done < <(find . -name '*.php' \
+                     -not -path './gutenberg/*' \
+                     -not -path './node_modules/*' \
+                     -not -path './theme-update-checker/*')
+          [ "$fail" -eq 0 ] || { echo "PHP 语法检查未通过，已中止打包"; exit 1; }
+          echo "全部 PHP 文件语法通过"
+
+      - name: Package theme zip
+        run: |
+          THEME=argon-theme
+          rm -rf dist-tmp "$THEME.zip"
+          mkdir -p "dist-tmp/$THEME"
+          for item in $(ls -A); do
+            case "$item" in
+              .git|.github|node_modules|.gitignore|CODE_REVIEW.md|CODEBUDDY.md|README.md|README_en.md|dist-tmp|$THEME.zip)
+                continue ;;
+            esac
+            cp -a "$item" "dist-tmp/$THEME/"
+          done
+          ( cd dist-tmp && zip -r "../$THEME.zip" "$THEME" )
+          rm -rf dist-tmp
+          echo "=== 打包内容（前 20 行）==="
+          unzip -l "$THEME.zip" | head -n 20
+
+      - name: Mark as dev build
+        run: |
+          # 在包内写入构建标记，便于测试时确认拿到的是 dev 版而非正式版。
+          # 只改包内副本，不碰仓库工作区（checkout 是干净的，无需再 checkout）。
+          SHA="${GITHUB_SHA::7}"
+          STAMP="$(date -u +'%Y-%m-%d %H:%M UTC')"
+          unzip -q argon-theme.zip -d devpkg
+          cat > "devpkg/$THEME/DEV-BUILD.txt" <<EOF
+          开发测试版，请勿用于生产环境。
+
+          分支      : dev
+          提交      : $GITHUB_SHA (${SHA})
+          构建时间  : ${STAMP}
+          运行      : https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          EOF
+          rm -f argon-theme.zip
+          ( cd devpkg && zip -r "../argon-theme.zip" "$THEME" )
+          rm -rf devpkg
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: argon-theme-dev-${{ github.sha }}
+          path: argon-theme.zip
+          retention-days: 14
+          if-no-files-found: error

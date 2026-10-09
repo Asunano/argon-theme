@@ -27,3 +27,5 @@ CODEBUDDY.md
 docs/
 # 本地翻译工具（含腾讯云 API 调用逻辑，仅本地使用，不提交防泄露）
 tools/
+# JS 构建基线（切分产物 + 中间产物，由 tools/split-merged.js 从线上产物生成，可复现）
+build/

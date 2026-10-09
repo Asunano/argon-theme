@@ -99,7 +99,15 @@
 							<div class="tab-pane fade<?php if ($nowActiveTab == 0) { echo ' active show'; }?>" id="leftbar_tab_catalog" role="tabpanel" aria-labelledby="leftbar_tab_catalog_btn">
 								<div id="leftbar_catalog"></div>
 								<script type="text/javascript">
-									$(function () {
+								/* 用原生 DOMContentLoaded 包裹，使 jQuery 可延后到 footer 加载。
+								   三态判定：脚本注入时若文档已就绪，只挂事件会永不触发。 */
+								(function(fn){
+									if (document.readyState === "loading"){
+										document.addEventListener("DOMContentLoaded", fn);
+									}else{
+										fn();
+									}
+								})(function () {
 										$(document).headIndex({
 											articleWrapSelector: '#post_content',
 											indexBoxSelector: '#leftbar_catalog',
@@ -108,7 +116,7 @@
 											linkClass: "index-link",
 											offset: 80,
 										});
-									})
+								});
 								</script>
 								<?php if (get_option('argon_show_headindex_number') == 'true') {?>
 									<style>

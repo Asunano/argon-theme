@@ -55,27 +55,123 @@ function theme_slug_setup() {
 }
 add_action('after_setup_theme','theme_slug_setup');
 
-// 条件加载的 vendor 脚本以 defer 加载，解除 <head> 渲染阻塞。
-// argon_js_merged 不在其中(见下方注释)：它同步于 <head> 输出，作为全局基础包。
+/* ============================================================
+   Emoji 本地化：把 WP 的跨域 emoji 请求合并为 1 个本地 sprite 请求
+   ------------------------------------------------------------
+   WP 默认用 wp-emoji-loader 动态 import wp-emoji-release.min.js，
+   在**客户端**把正文 emoji 字符替换成 <img src="https://s.w.org/.../xxx.svg">。
+   后果（archives/873 实测）：每篇文章 70 个跨域请求 / 90.4 KB，全部打到 s.w.org。
+
+   本实现：
+   1) 移除 WP 的 emoji 脚本与样式（不生成 img，因此不产生任何跨域请求）
+   2) 输出本地 sprite（assets/emoji-sprite.svg）+ codepoint 映射表
+   3) 由 argon.js 在客户端用 Unicode 属性正则识别 emoji 并渲染 <svg><use></use></svg>
+
+   sprite 必须与页面**同源**：SVG <use> 不允许跨源引用，走 CDN 会静默失败。
+   故固定用 get_template_directory_uri()，不使用 $GLOBALS['assets_path']。
+   ============================================================ */
+
+/**
+ * 读取 emoji sprite 映射表（code => symbol id）。
+ * 请求内静态缓存；文件缺失或损坏时返回空数组，此时退化为「不替换」，不影响功能。
+ */
+function argon_emoji_sprite_map(){
+	static $map = null;
+	if ($map === null){
+		$file = get_template_directory() . '/assets/emoji-sprite-map.json';
+		$map = array();
+		if (is_readable($file)){
+			$decoded = json_decode(file_get_contents($file), true);
+			if (is_array($decoded)){
+				$map = $decoded;
+			}
+		}
+	}
+	return $map;
+}
+function argon_emoji_sprite_url(){
+	return get_template_directory_uri() . '/assets/emoji-sprite.svg';
+}
+function argon_emoji_sprite_enabled(){
+	return !empty(argon_emoji_sprite_map());
+}
+
+/**
+ * 移除 WP 的 emoji 渲染链路。
+ * 不移除的话 wp-emoji-loader 会先于我们的脚本生成 img 并发出跨域请求，
+ * 那样只是「事后补救」，请求已经发出去了 —— 必须彻底移除才能真正省掉。
+ */
+function argon_disable_wp_emoji(){
+	remove_action('wp_head', 'print_emoji_detection_script', 7);
+	remove_action('admin_print_scripts', 'print_emoji_detection_script');
+	remove_action('wp_print_styles', 'print_emoji_styles');
+	remove_action('admin_print_styles', 'print_emoji_styles');
+	remove_filter('the_content_feed', 'wp_staticize_emoji');
+	remove_filter('comment_text_rss', 'wp_staticize_emoji');
+	remove_filter('wp_mail', 'wp_staticize_emoji_for_email');
+}
+add_action('init', 'argon_disable_wp_emoji');
+
+/**
+ * 输出 emoji sprite 与映射数据。
+ * sprite 文件由浏览器按需请求（同源，可长缓存）；映射表内联为 JSON 交给前端脚本消费。
+ * 脚本固定用 get_template_directory_uri()（同源）：emoji-sprite.svg 必须与页面同源，
+ * 而本脚本本身不涉及跨域，稳妥起见同样走本地。
+ */
+function argon_emoji_sprite_assets(){
+	if (!argon_emoji_sprite_enabled() || is_admin()){
+		return;
+	}
+	$map = argon_emoji_sprite_map();
+	?>
+	<style id="argon-emoji-sprite-style">
+		.wp-emoji-argon{width:1.25em;height:1.25em;vertical-align:-0.2em;display:inline-block;}
+	</style>
+	<script id="argon-emoji-sprite-data" type="application/json">
+		{"url":<?php echo wp_json_encode(argon_emoji_sprite_url()); ?>,"map":<?php echo wp_json_encode($map); ?>,"targets":["#primary","#comments","#secondary"]}
+	</script>
+	<script src="<?php echo esc_url(get_template_directory_uri() . '/assets/js/argon-emoji-sprite.js'); ?>?ver=<?php echo esc_attr($GLOBALS['theme_version']); ?>"></script>
+	<?php
+}
+add_action('wp_print_footer_scripts', 'argon_emoji_sprite_assets', 5);
+
+// 脚本以 defer 加载，解除 <head> 渲染阻塞。
 add_filter('script_loader_tag', function ($tag, $handle) {
-	// 条件加载的 vendor 脚本统一以 defer 加载，解除 <head> 渲染阻塞。
-	// 注意：argon_js_merged 不能 defer —— 它在全局定义 jQuery($) 与 socialShare，
-	// 而 footer 的 argonjs 与正文内联脚本(如 share.php 的 socialShare(...))在解析期同步执行，
-	// 早于 defer 脚本，defer 会导致 "$ is not defined" / "socialShare is not defined"。
-	// 其余脚本均在 argontheme.js(pjax:complete) 中按需调用，延迟至文档解析后执行无副作用。
+	// ① argon_js_merged：约 300KB，是全站最大的单个阻塞源。
+	//    原先必须同步，因为 <head> 内有解析期脚本直接调用 jQuery / socialShare。
+	//    现已把这些调用点全部改造完毕：
+	//      - 深色模式 / AMOLED / Safari 检测（header.php）→ 改用原生 classList + dispatchEvent
+	//      - 评论验证码（comments.php）、侧栏目录（sidebar.php）、分享按钮（share.php）
+	//        → 均包上 readyState 三态判定的 DOMContentLoaded 包装
+	//    因此 defer 安全：解析期不再有任何代码依赖 jQuery 或 socialShare。
+	if ($handle === 'argon_js_merged') {
+		return str_replace(' src=', ' defer src=', $tag);
+	}
+	// ② 条件加载的 vendor 脚本：均在 argontheme.js(pjax:complete) 中按需调用，
+	//    延迟至文档解析后执行无副作用。
 	if (in_array($handle, array('fancybox5', 'highlight', 'highlight-ln', 'nouislider', 'pickr'), true)) {
 		return str_replace(' src=', ' defer src=', $tag);
 	}
 	return $tag;
 }, 10, 2);
 
-// 仅 googlefont 异步加载（media=print + onload 切回 all），其余样式保持渲染阻塞，
+// 仅首屏不需要的样式异步加载（media=print + onload 切回 all），其余样式保持渲染阻塞，
 // 保证首屏必定已样式化、绝不出现整页无样式(空白/异常)。预加载遮罩的瞬时出现由
 // 内联样式 + 遮罩自身不依赖外部 CSS 来保证；关键 CSS 渲染阻塞可彻底避免无样式闪烁。
-// FA6 两个 CSS 同样异步：首屏主题图标由合并包内 FA4（同步）保证，FA6 仅覆盖/补充
-// 文章正文用到的更多图标，异步延迟渲染无感知，可省去 ~130KB 首屏阻塞 CSS。
 add_filter('style_loader_tag', function ($tag, $handle) {
+	// ① 字体与图标：首屏主题图标由合并包内 FA4（同步）保证，FA6 仅覆盖/补充
+	//    文章正文用到的更多图标，异步延迟渲染无感知，可省去 ~130KB 首屏阻塞 CSS。
 	if (in_array($handle, array('googlefont', 'font-awesome-full', 'font-awesome-shims'), true)) {
+		$deferred = str_replace("media='all'", "media='print' onload=\"this.media='all'\"", $tag);
+		return $deferred . '<noscript>' . $tag . '</noscript>';
+	}
+	// ② 交互态才用到的样式：首屏完全看不到它们负责的内容，同步加载只会白等一个往返。
+	//    实测（archives/873）这三个原本各阻塞 927~1153ms：
+	//      fancybox5       24.7KB 文章灯箱，点击图片时才用到
+	//      pickr-style      9.2KB 后台取色器，点主题色按钮时才用到（体积小但同样触发完整往返）
+	//      highlight-style  1.3KB 代码高亮主题，滚动到代码块时才用到
+	//    它们都只有几十 KB，异步后到达前的窗口极短（<200ms），视觉上无感知。
+	if (in_array($handle, array('fancybox5', 'pickr-style', 'highlight-style'), true)) {
 		$deferred = str_replace("media='all'", "media='print' onload=\"this.media='all'\"", $tag);
 		return $deferred . '<noscript>' . $tag . '</noscript>';
 	}
@@ -916,27 +1012,27 @@ function argon_ajax_post_view(){
 
 	/* 1. 已知爬虫 / 空 UA 直接拒绝 */
 	if (argon_is_bot_request()){
-		argon_post_view_send(0);
+		argon_post_view_reject('bot');
 	}
 	/* 2. 令牌校验：拒绝未访问过页面的伪造打点、以及令牌换 post_id 的滥用 */
 	if (!$post_id || !argon_post_view_token_valid($post_id, $token)){
-		argon_post_view_send(0);
+		argon_post_view_reject('token');
 	}
 	/* 3. 文章存在性与白名单 */
 	$post = get_post($post_id);
 	if (!$post || !in_array($post -> post_type, array('post', 'page', 'shuoshuo'), true)){
-		argon_post_view_send(0);
+		argon_post_view_reject('post_type');
 	}
 	if ($post -> post_status !== 'publish'){
-		argon_post_view_send(0);
+		argon_post_view_reject('post_status');
 	}
 	/* 4. 密码保护文章不计（与旧渲染期逻辑一致） */
 	if (post_password_required($post_id)){
-		argon_post_view_send(0);
+		argon_post_view_reject('password');
 	}
 	/* 5. 评论分页等显式声明不计数的场景（沿用旧逻辑的 no_post_view 约定） */
 	if (isset($_POST['no_post_view']) && $_POST['no_post_view'] === 'true'){
-		argon_post_view_send(0);
+		argon_post_view_reject('no_post_view');
 	}
 
 	$fp = argon_post_view_fingerprint();
@@ -947,7 +1043,7 @@ function argon_ajax_post_view(){
 	$referer_ok = isset($_SERVER['HTTP_REFERER']) && $_SERVER['HTTP_REFERER'] !== '';
 	$l3_capacity = ($referer_ok ? ARGON_PV_L3_CAPACITY * 3 : ARGON_PV_L3_CAPACITY);
 	if (!argon_rate_limit_take('argon_pvrl_' . $fp, $l3_capacity, ARGON_PV_L3_RATE)){
-		argon_post_view_send(0);
+		argon_post_view_reject('rate_ip');
 	}
 	/* 7. L4 单令牌频控：令牌与文章绑定，此处是防「单篇 PV 被持有者脚本刷高」的主力。
 	      同一令牌短期内请求多篇不同文章属脚本特征，收紧速率。 */
@@ -970,18 +1066,29 @@ function argon_ajax_post_view(){
 		wp_cache_set($spread_key, array($token_post => 1), 'argon_rate', 300);
 	}
 	if (!argon_rate_limit_take('argon_pvtl_' . substr(hash('sha256', strval($token)), 0, 32), ARGON_PV_L4_CAPACITY, $l4_rate)){
-		argon_post_view_send(0);
+		argon_post_view_reject('rate_token');
 	}
 	/* 8. L2 同令牌去重窗口：承接旧 argon_viewed_posts Cookie 的 60s 语义。
 	      刻意不用 IP 分桶 —— NAT / 移动网络下同 IP 用户会互相去重。 */
 	if (get_transient($dedup_key)){
-		argon_post_view_send(0);
+		argon_post_view_reject('dedup');
 	}
 	set_transient($dedup_key, 1, ARGON_PV_L2_TTL);
 
 	/* 9. 计数 + 落库（复用 argon_increment_post_views / argon_flush_post_views） */
 	$count = argon_increment_post_views($post_id);
 	argon_post_view_send($count);
+}
+/* 打点被拒：返回明确原因，便于前端区分「静默跳过」与「异常」，
+   也便于线上排查（此前统一返回 views=0，无法判断是拒绝还是计数为 0）。 */
+function argon_post_view_reject($reason){
+	echo json_encode(array(
+		'status'  => 'skipped',
+		'reason'  => strval($reason),
+		'views'   => 0,
+		'views_html' => '0'
+	));
+	exit;
 }
 function argon_post_view_send($count){
 	echo json_encode(array(

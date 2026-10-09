@@ -152,6 +152,15 @@
 							</style>
 							<?php if (get_option('argon_get_captcha_by_ajax', 'false') == 'true') {?>
 								<script>
+								/* 验证码按需拉取：包一层 ready 判定，使 jQuery 可延后加载（defer 到 footer）。
+								   三态判定不可省略 —— 若脚本注入时文档已就绪，只挂 DOMContentLoaded 会永不触发。 */
+								(function(fn){
+									if (document.readyState === "loading"){
+										document.addEventListener("DOMContentLoaded", fn);
+									}else{
+										fn();
+									}
+								})(function(){
 									$(".post-comment-captcha-container").attr("captcha", "Loading...");
 									$.ajax({
 										url : argonConfig.wp_path + "wp-admin/admin-ajax.php",
@@ -167,6 +176,7 @@
 											$(".post-comment-captcha-container").attr("captcha", "<?php _e('获取验证码失败', 'argon');?>");
 										}
 									});
+								});
 								</script>
 							<?php } ?>
 						</div>

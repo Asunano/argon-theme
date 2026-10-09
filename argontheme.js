@@ -1842,6 +1842,13 @@ $(document).on("submit" , ".post-password-form" , function(){
 				$(".comment-item-text .comment-sticker.lazyload").lazyload(argonConfig.lazyload).removeClass("lazyload");
 				/* 追加的评论需恢复点赞态与编辑按钮占位（服务端不再按 Cookie 渲染） */
 				argonCommentPrivInit();
+				/* 新评论正文里的 emoji 也要转 sprite（评论异步追加，不在首屏扫描范围） */
+				if (typeof window.argonEmojiSprite !== "undefined"){
+					try{
+						var $newTexts = $("#comments .comment-item-text");
+						if ($newTexts.length){ window.argonEmojiSprite.replaceIn($newTexts.get(0)); }
+					}catch(e){}
+				}
 			},
 			error : function(){
 				window.location.href = url;
@@ -1879,6 +1886,13 @@ $(document).on("submit" , ".post-password-form" , function(){
 				$(".comment-item-text .comment-sticker.lazyload").lazyload(argonConfig.lazyload).removeClass("lazyload");
 				/* 追加的评论需恢复点赞态与编辑按钮占位（服务端不再按 Cookie 渲染） */
 				argonCommentPrivInit();
+				/* 新评论正文里的 emoji 也要转 sprite（评论异步追加，不在首屏扫描范围） */
+				if (typeof window.argonEmojiSprite !== "undefined"){
+					try{
+						var $newTexts = $("#comments .comment-item-text");
+						if ($newTexts.length){ window.argonEmojiSprite.replaceIn($newTexts.get(0)); }
+					}catch(e){}
+				}
 			},
 			error : function(){
 				window.location.href = url;
@@ -2665,9 +2679,17 @@ $(document).pjax("a[href]:not([no-pjax]):not(.no-pjax):not([target='_blank']):no
 	runtimeInit();
 	/* Pjax 换入的新内容里，评论点赞态与编辑按钮占位需重新恢复；
 	   浏览量打点也需补一次（beacon 在 #primary 内，已随 Pjax 更新为新文章的）。
-	   主题色/圆角属全局偏好（挂在 :root 与 <html> 上），Pjax 不换 head，无需重复应用。 */
+	   主题色/圆角属全局偏好（挂在 :root 与 <html> 上），Pjax 不换 head，无需重复应用。
+	   Emoji sprite 同样需对新内容重新渲染：配置 JSON 在 head 里未变，但 #primary 已换内容。 */
 	argonCommentPrivInit();
 	argonPostViewInit();
+	if (typeof window.argonEmojiSprite !== "undefined"){
+		try{
+			window.argonEmojiSprite.replaceIn(document.getElementById("primary") || document.body);
+		}catch(e){
+			if (window.console){ console.warn("emoji sprite re-render failed:", e); }
+		}
+	}
 });
 
 /*Reference 跳转*/

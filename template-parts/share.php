@@ -55,6 +55,18 @@ $_SERVER['HTTP_HOST']);?>&text=<?php echo urlencode(html_entity_decode(get_the_t
 	</button>
 </div>
 <script type="text/javascript">
+/* 本段依赖 socialShare 与 jQuery（均在合并包内）。
+   包一层 ready 判定，是为了能把 socialShare 挪出 head 同步包时此处仍能正常工作 ——
+   否则 defer 脚本在 HTML 解析完成后才执行，而本段位于 body 中段、解析期就同步执行，
+   会直接报 socialShare is not defined。
+   三态判定不可省略：若脚本注入时 document 已就绪，只挂 DOMContentLoaded 会永不触发。 */
+(function(fn){
+	if (document.readyState === "loading"){
+		document.addEventListener("DOMContentLoaded", fn);
+	}else{
+		fn();
+	}
+})(function(){
 	socialShare("#share", {
 	    title : <?php echo wp_json_encode( get_the_title() ); ?>,
 	    description : <?php echo wp_json_encode( wp_trim_words( get_the_content(), 50 ) ); ?>,
@@ -103,4 +115,5 @@ $_SERVER['HTTP_HOST']);?>&text=<?php echo urlencode(html_entity_decode(get_the_t
 		}
 		document.body.removeChild(input);
 	};
+});
 </script>

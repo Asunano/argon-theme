@@ -284,24 +284,37 @@
 		}
 	</script>
 	<script>
+	/* 深色模式：本段位于 <head> 且必须同步执行（否则首屏会先按浅色绘制再切深色，视觉上闪一下），
+	   因此**不能**延后到 DOMContentLoaded，更不能依赖 head 里的 jQuery。
+	   故全部改用原生 classList / dispatchEvent，与 jQuery 解耦，
+	   使 head 内唯一必须同步加载的脚本（jQuery + Bootstrap）可以进一步 defer。
+	   对外仍暴露 setDarkmode / toggleDarkmode 等同名全局函数，
+	   供 defer 后的 argontheme.js（:617-673）调用，接口未变。 */
+	(function(){
+		var html = document.documentElement;
 		var darkmodeAutoSwitch = "<?php echo (get_option("argon_darkmode_autoswitch") == '' ? 'false' : get_option("argon_darkmode_autoswitch"));?>";
-		function setDarkmode(enable){
-			if (enable == true){
-				$("html").addClass("darkmode");
-			}else{
-				$("html").removeClass("darkmode");
-			}
-			$(window).trigger("scroll");
+		function triggerScroll(){
+			try{ window.dispatchEvent(new Event("scroll")); }catch(e){}
 		}
-		function toggleDarkmode(){
-			if ($("html").hasClass("darkmode")){
-				setDarkmode(false);
+		window.setDarkmode = function(enable){
+			if (enable == true){
+				html.classList.add("darkmode");
+			}else{
+				html.classList.remove("darkmode");
+			}
+			triggerScroll();
+		};
+		window.toggleDarkmode = function(){
+			if (html.classList.contains("darkmode")){
+				window.setDarkmode(false);
 				sessionStorage.setItem("Argon_Enable_Dark_Mode", "false");
 			}else{
-				setDarkmode(true);
+				window.setDarkmode(true);
 				sessionStorage.setItem("Argon_Enable_Dark_Mode", "true");
 			}
-		}
+		};
+		var setDarkmode = window.setDarkmode;
+		var toggleDarkmode = window.toggleDarkmode;
 		if (sessionStorage.getItem("Argon_Enable_Dark_Mode") == "true"){
 			setDarkmode(true);
 		}
@@ -338,23 +351,25 @@
 			setDarkmode(true);
 		}
 
-		function toggleAmoledDarkMode(){
-			$("html").toggleClass("amoled-dark");
-			if ($("html").hasClass("amoled-dark")){
+		window.toggleAmoledDarkMode = function(){
+			html.classList.toggle("amoled-dark");
+			if (html.classList.contains("amoled-dark")){
 				localStorage.setItem("Argon_Enable_Amoled_Dark_Mode", "true");
 			}else{
 				localStorage.setItem("Argon_Enable_Amoled_Dark_Mode", "false");
 			}
-		}
+		};
 		if (localStorage.getItem("Argon_Enable_Amoled_Dark_Mode") == "true"){
-			$("html").addClass("amoled-dark");
+			html.classList.add("amoled-dark");
 		}else if (localStorage.getItem("Argon_Enable_Amoled_Dark_Mode") == "false"){
-			$("html").removeClass("amoled-dark");
+			html.classList.remove("amoled-dark");
 		}
+	})();
 	</script>
 	<script>
+		/* Safari 检测：同理改为原生 classList，避免 head 内出现任何 jQuery 依赖 */
 		if (navigator.userAgent.indexOf("Safari") !== -1 && navigator.userAgent.indexOf("Chrome") === -1){
-			$("html").addClass("using-safari");
+			document.documentElement.classList.add("using-safari");
 		}
 	</script>
 

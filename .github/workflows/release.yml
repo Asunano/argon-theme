@@ -126,10 +126,27 @@ jobs:
           [ "$fail" -eq 0 ] || { echo "PHP 语法检查未通过，已中止打包"; exit 1; }
           echo "全部 PHP 文件语法通过"
 
-      - name: Package theme zip
+      - name: Package theme zip (with dev marker)
+        env:
+          # GitHub 表达式经 env 传入，不写进 shell 正文。
+          # 早期版本把表达式直接写在未加引号的 heredoc 内，
+          # 会被 bash 当作变量展开而报bad substitution，set -e 下整步失败。
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
         run: |
+          # 打包与注入构建标记合并为一步。
+          # 每个 step 是独立进程、变量不跨 step 共享，
+          # 因此 THEME 必须在同一步内定义并使用。
           THEME=argon-theme
           rm -rf dist-tmp "$THEME.zip"
+          {
+            printf 'DEV BUILD - DO NOT USE IN PRODUCTION\n\n'
+            printf 'branch    : dev\n'
+            printf 'commit    : %s\n' "$GITHUB_SHA"
+            printf 'short     : %s\n' "$(echo "$GITHUB_SHA" | cut -c1-7)"
+            printf 'built at  : %s\n' "$(date -u +'%Y-%m-%d %H:%M UTC')"
+            printf 'run       : https://github.com/%s/actions/runs/%s\n' "$REPO" "$RUN_ID"
+          } > DEV-BUILD.txt
           mkdir -p "dist-tmp/$THEME"
           for item in $(ls -A); do
             case "$item" in
@@ -138,34 +155,16 @@ jobs:
             esac
             cp -a "$item" "dist-tmp/$THEME/"
           done
-          ( cd dist-tmp && zip -r "../$THEME.zip" "$THEME" )
+          cp DEV-BUILD.txt "dist-tmp/$THEME/DEV-BUILD.txt"
+          rm -f DEV-BUILD.txt
+          ( cd dist-tmp && zip -q -r "../$THEME.zip" "$THEME" )
           rm -rf dist-tmp
-          echo "=== 打包内容（前 20 行）==="
-          unzip -l "$THEME.zip" | head -n 20
-
-      - name: Mark as dev build
-        env:
-          # 经 env 传入而非在脚本里直接写 GitHub 表达式 ——
-          # 未加引号的 heredoc 中，GitHub 的表达式语法会被 bash
-          # 当作变量展开而报 "bad substitution"，在 set -e 下直接中断整个步骤。
-          # （首次触发时正是因此失败，改用 printf + env 后修复。）
-          REPO: ${{ github.repository }}
-          RUN_ID: ${{ github.run_id }}
-        run: |
-          # 在包内写入构建标记，便于测试时确认拿到的是 dev 版而非正式版。
-          # 只改包内副本，不碰仓库工作区（checkout 是干净的）。
-          unzip -q argon-theme.zip -d devpkg
-          {
-            printf '开发测试版，请勿用于生产环境。\n\n'
-            printf '分支      : dev\n'
-            printf '提交      : %s (%s)\n' "$GITHUB_SHA" "${GITHUB_SHA::7}"
-            printf '构建时间  : %s\n' "$(date -u +'%Y-%m-%d %H:%M UTC')"
-            printf '运行      : https://github.com/%s/actions/runs/%s\n' "$REPO" "$RUN_ID"
-          } > "devpkg/$THEME/DEV-BUILD.txt"
-          cat "devpkg/$THEME/DEV-BUILD.txt"
-          rm -f argon-theme.zip
-          ( cd devpkg && zip -q -r "../argon-theme.zip" "$THEME" )
-          rm -rf devpkg
+          echo "=== artifact ==="
+          ls -la "$THEME.zip"
+          echo "=== DEV-BUILD marker inside zip ==="
+          unzip -l "$THEME.zip" | grep DEV-BUILD
+          echo "=== zip listing (head) ==="
+          unzip -l "$THEME.zip" | head -n 15
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4

@@ -216,6 +216,11 @@
 	<?php endif; ?>
 	<?php
 		wp_enqueue_style("argon_css_merged", $GLOBALS['assets_path'] . "/assets/argon_css_merged.css", null, $GLOBALS['theme_version']);
+		// iziToast 弹窗样式（约 56KB）：已从合并包拆出（原占合并包 18.8%）。
+		// 该组件只在用户交互后触发（点赞、评论提交、复制等 AJAX 回调，共 35 处调用），
+		// 首屏渲染时不会有任何提示气泡出现，故随其他交互态样式一并异步加载。
+		// 下方 style_loader_tag 中以 media=print + onload 方式放行阻塞。
+		wp_enqueue_style("argon-izitoast", $GLOBALS['assets_path'] . "/assets/css/argon-izitoast.css", null, $GLOBALS['theme_version']);
 		// Font Awesome 6（免费版）：all.min.css 提供 solid/regular/brands + 内置 FA4 别名；
 		// v4-shims.min.css 是 FA6 官方 FA4 兼容层（fa-clock-o / fa-send 等旧类名映射），
 		// 后加载覆盖合并包内的 FA4 裁剪版，保证 `fa fa-xxx` 类名全部可用

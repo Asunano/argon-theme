@@ -147,7 +147,15 @@ add_filter('script_loader_tag', function ($tag, $handle) {
 	if ($handle === 'argon_js_merged') {
 		return str_replace(' src=', ' defer src=', $tag);
 	}
-	// ② 条件加载的 vendor 脚本：均在 argontheme.js(pjax:complete) 中按需调用，
+	// ② argonjs（Argon Design System）：虽在 footer 输出，但原本是同步执行 ——
+	//    合并包改为 defer 后执行时点后移，若 argonjs 仍保持同步，会先于
+	//    jQuery 就绪的时刻执行，其顶层的 $(document).ready(...) 直接抛
+	//    「$ is not defined」（实测于测试站，pageerror 指向 argon.min.js:18）。
+	//    两者的执行顺序由 defer 在文档中的先后决定，故必须同为 defer。
+	if ($handle === 'argonjs') {
+		return str_replace(' src=', ' defer src=', $tag);
+	}
+	// ③ 条件加载的 vendor 脚本：均在 argontheme.js(pjax:complete) 中按需调用，
 	//    延迟至文档解析后执行无副作用。
 	if (in_array($handle, array('fancybox5', 'highlight', 'highlight-ln', 'nouislider', 'pickr'), true)) {
 		return str_replace(' src=', ' defer src=', $tag);
@@ -172,6 +180,13 @@ add_filter('style_loader_tag', function ($tag, $handle) {
 	//      highlight-style  1.3KB 代码高亮主题，滚动到代码块时才用到
 	//    它们都只有几十 KB，异步后到达前的窗口极短（<200ms），视觉上无感知。
 	if (in_array($handle, array('fancybox5', 'pickr-style', 'highlight-style'), true)) {
+		$deferred = str_replace("media='all'", "media='print' onload=\"this.media='all'\"", $tag);
+		return $deferred . '<noscript>' . $tag . '</noscript>';
+	}
+	// ③ iziToast 弹窗样式（56KB）：原被打包进 argon_css_merged，现已拆为独立文件。
+	//    它只在交互回调里触发（argontheme.js 35 处调用），首屏无任何提示气泡出现。
+	//    实测拆出后合并包 297.3KB -> 241.2KB，首屏渲染阻塞减少 18.8%。
+	if ($handle === 'argon-izitoast') {
 		$deferred = str_replace("media='all'", "media='print' onload=\"this.media='all'\"", $tag);
 		return $deferred . '<noscript>' . $tag . '</noscript>';
 	}

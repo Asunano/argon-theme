@@ -147,7 +147,15 @@ add_filter('script_loader_tag', function ($tag, $handle) {
 	if ($handle === 'argon_js_merged') {
 		return str_replace(' src=', ' defer src=', $tag);
 	}
-	// ② 条件加载的 vendor 脚本：均在 argontheme.js(pjax:complete) 中按需调用，
+	// ② argonjs（Argon Design System）：虽在 footer 输出，但原本是同步执行 ——
+	//    合并包改为 defer 后执行时点后移，若 argonjs 仍保持同步，会先于
+	//    jQuery 就绪的时刻执行，其顶层的 $(document).ready(...) 直接抛
+	//    「$ is not defined」（实测于测试站，pageerror 指向 argon.min.js:18）。
+	//    两者的执行顺序由 defer 在文档中的先后决定，故必须同为 defer。
+	if ($handle === 'argonjs') {
+		return str_replace(' src=', ' defer src=', $tag);
+	}
+	// ③ 条件加载的 vendor 脚本：均在 argontheme.js(pjax:complete) 中按需调用，
 	//    延迟至文档解析后执行无副作用。
 	if (in_array($handle, array('fancybox5', 'highlight', 'highlight-ln', 'nouislider', 'pickr'), true)) {
 		return str_replace(' src=', ' defer src=', $tag);

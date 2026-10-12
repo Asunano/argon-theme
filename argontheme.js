@@ -2255,15 +2255,18 @@ function argonLightboxReload(){
 	function ready(){
 		return typeof(Fancybox) != "undefined" && argonLightboxBound;
 	}
+	function spec(){
+		return argonConfig.lazy_assets && argonConfig.lazy_assets.fancybox;
+	}
 	var pending = null;
 	function ensure(){
 		if (ready()){ return Promise.resolve(); }
 		if (pending){ return pending; }
-		var spec = argonConfig.lazy_assets && argonConfig.lazy_assets.fancybox;
-		if (!spec){
+		var s = spec();
+		if (!s){
 			return Promise.reject(new Error('fancybox assets not configured'));
 		}
-		pending = argonLoadAssets(spec).then(function(){
+		pending = argonLoadAssets(s).then(function(){
 			/* argonLightboxInit 内部有 typeof 与幂等守卫，可安全重复调用 */
 			argonLightboxInit();
 		})['catch'](function(err){
@@ -2281,6 +2284,10 @@ function argonLightboxReload(){
 		if (e.__argonLazyReplay){ return; }        /* 自己重放的事件，放行 */
 		if (ready()){ return; }                    /* 已就绪，交给 Fancybox */
 		if (e.defaultPrevented){ return; }
+		/* 清单里没有 fancybox（例如开了 zoomify 选项）时【不拦截】：
+		   此时锚点是普通链接，保持与改动前一致的默认行为（浏览器自行跳转）。
+		   否则会变成「点了没反应」，比原来更糟。 */
+		if (!spec()){ return; }
 		/* 修饰键 / 中键 / 右键：尊重浏览器默认行为（新标签打开等），不拦 */
 		if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey){ return; }
 		e.preventDefault();

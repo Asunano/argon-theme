@@ -3,7 +3,9 @@
 <div class="page-information-card-container">
 	<div class="page-information-card card bg-gradient-secondary shadow-lg border-0">
 		<div class="card-body">
-			<h3 class="text-black">	<?php the_archive_title();?> </h3>
+			<?php /* 归档页主标题用 h1（原为 h3）：这是该页唯一的主标题。
+			         此处不在 <article> 内，不受 style.css 的 article h1..h6 外边距规则影响。 */ ?>
+			<h1 class="text-black">	<?php the_archive_title();?> </h1>
 			<?php $argon_archive_description = get_the_archive_description(); if ($argon_archive_description != ''){ ?>
 				<p class="text-black mt-3">
 					<?php echo $argon_archive_description; ?>

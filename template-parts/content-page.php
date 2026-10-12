@@ -17,7 +17,9 @@
 				</style>";
 			}
 		?>
-		<a class="post-title" href="<?php the_permalink(); ?>"><?php the_title(); ?></a>
+		<?php /* 页面主标题用 h1。去掉原来的 <a>：href 是自链接，对用户无意义。
+		         连带影响已配套改 CSS（style.css 的 .post-title），与 content-single.php 一致。 */ ?>
+		<h1 class="post-title"><?php the_title(); ?></h1>
 		<div class="post-meta">
 			<?php
 				$metaList = explode('|', get_option('argon_article_meta', 'time|views|comments|categories'));

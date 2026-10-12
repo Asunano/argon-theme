@@ -13,7 +13,9 @@
 	</header>
 
 	<div class="post-content-container">
-		<a class="post-title" href="<?php the_permalink(); ?>"><?php the_title(); ?></a>
+		<?php /* 列表标题用 h2 包裹：<a> 必须保留（它是整条列表的可点链接），
+		         且列表页不能出现多个 h1。 */ ?>
+		<h2 class="post-title"><a href="<?php the_permalink(); ?>"><?php the_title(); ?></a></h2>
 		<?php
 			$trim_words_count = get_option('argon_trim_words_count', 175);
 		?>

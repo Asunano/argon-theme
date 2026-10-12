@@ -32,18 +32,25 @@ define('ARGON_PRIVATE_COMMENT_CACHE', true);
 
 /**
  * 带请求内静态缓存的 get_option 封装，避免同一请求中重复读取同一选项造成的多次数据库查询。
- * 仅当选项确实存在（返回值不等于默认值）时才写入缓存，避免不同默认值的调用相互污染。
+ *
+ * 缓存 key 必须【同时包含选项名与默认值】：
+ *   get_option($option, $default) 的返回值在「选项不存在」时就是 $default，
+ *   即结果依赖调用方传的默认值。若只按选项名缓存，就会出现
+ *   「用 A 默认值填出来的值被喂给用 B 默认值的调用方」。
+ *
+ * 原实现靠「值 ≠ 默认值才写缓存」来规避（值来自数据库时才与默认值无关），
+ * 代价是【未设置的选项永远不缓存】。而代码里确实存在同一选项用不同默认值调用的地方：
+ *   functions.php 的 gravatar_cdn()：argon_get_option('argon_gravatar_cdn', 'gravatar.pho.ink/avatar/')
+ *   functions.php 的过滤器注册处：  argon_get_option('argon_gravatar_cdn', '')
+ * 把默认值编进 key 后，既能真正 memoize，又保留那层保护。
  */
 function argon_get_option($option, $default = false) {
 	static $argon_option_cache = array();
-	if (!array_key_exists($option, $argon_option_cache)) {
-		$value = get_option($option, $default);
-		if ($value !== $default) {
-			$argon_option_cache[$option] = $value;
-		}
-		return $value;
+	$key = $option . "\0" . var_export($default, true);
+	if (!array_key_exists($key, $argon_option_cache)) {
+		$argon_option_cache[$key] = get_option($option, $default);
 	}
-	return $argon_option_cache[$option];
+	return $argon_option_cache[$key];
 }
 function theme_slug_setup() {
 	add_theme_support('title-tag');
@@ -612,14 +619,22 @@ function set_user_token_cookie(){
    set_user_token_cookie() 补发，Token 生命周期与用途不变，仅触发时机收窄。
    同时悄悄话可见性判定已加 ?? '' 兜底，匿名访客不再持有该 Cookie 亦不报错。 */
 //页面 Description Meta
+/* 职责分离：本函数只负责【取内容】，一律【不做 HTML 转义】——
+   转义统一由输出端用 esc_attr() 完成（header.php 的 description / og:description /
+   twitter:description 三处）。
+   原先两支行为不一致：摘要那支不转义、正文截取那支转了 htmlspecialchars，
+   而输出端又完全没有转义 —— 摘要里出现一个 " 就能把 content="…" 属性截断。
+   注意不要在这里转义：否则 esc_attr() 会二次转义（& 变 &amp;amp;）。 */
 function get_seo_description(){
 	global $post;
 	if (is_single() || is_page()){
 		if (get_the_excerpt() != ""){
-			return preg_replace('/ \[&hellip;]$/', '&hellip;', get_the_excerpt());
+			/* 用真正的省略号字符而不是 &hellip; 实体 —— 输出端会 esc_attr()，
+			   实体里的 & 会被二次转义成 &amp;hellip; 显示为字面量。 */
+			return preg_replace('/ \[…\]$/', '…', get_the_excerpt());
 		}
 		if (!post_password_required()){
-			return htmlspecialchars(mb_substr(str_replace("\n", '', strip_tags($post -> post_content)), 0, 50)) . "...";
+			return mb_substr(str_replace("\n", '', strip_tags($post -> post_content)), 0, 50) . "...";
 		}else{
 			return __("这是一个加密页面，需要密码来查看", 'argon');
 		}
@@ -631,59 +646,17 @@ function get_seo_description(){
 		return $desc;
 	}
 }
-//结构化数据 (JSON-LD)
-function argon_output_structured_data(){
-	if (argon_get_option('argon_enable_structured_data') == 'false'){
-		return;
-	}
-	if (!is_singular('post')){
-		return;
-	}
-	global $post;
-	$schema = array(
-		'@context' => 'https://schema.org',
-		'@type' => 'Article',
-		'@id' => get_permalink($post -> ID) . '#article',
-		'headline' => get_the_title($post -> ID),
-		'datePublished' => get_the_date('c', $post -> ID),
-		'dateModified' => get_the_modified_date('c', $post -> ID),
-		'author' => array(
-			'@type' => 'Person',
-			'name' => get_the_author_meta('display_name', $post -> post_author),
-			'url' => get_author_posts_url($post -> post_author),
-		),
-		'publisher' => array(
-			'@type' => 'Organization',
-			'name' => get_bloginfo('name'),
-		),
-		'mainEntityOfPage' => array(
-			'@type' => 'WebPage',
-			'@id' => get_permalink($post -> ID),
-		),
-	);
-	$thumbnail_id = get_post_thumbnail_id($post -> ID);
-	if ($thumbnail_id){
-		$thumbnail_url = wp_get_attachment_image_url($thumbnail_id, 'full');
-		if ($thumbnail_url){
-			$schema['image'] = array(
-				'@type' => 'ImageObject',
-				'url' => $thumbnail_url,
-				'width' => 1200,
-				'height' => 800,
-			);
-			$schema['publisher']['logo'] = array(
-				'@type' => 'ImageObject',
-				'url' => $thumbnail_url,
-			);
-		}
-	}
-	$excerpt = get_the_excerpt($post -> ID);
-	if ($excerpt){
-		$schema['description'] = wp_strip_all_tags($excerpt);
-	}
-	echo '<script type="application/ld+json">' . wp_json_encode($schema, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . '</script>' . "\n";
-}
-add_action('wp_head', 'argon_output_structured_data');
+//结构化数据 (JSON-LD) —— 已移除
+/* 原先这里输出一个扁平的 Article，与 SEO 插件（Rank Math 等）的 @graph 重复，
+   而且有两处硬错误：
+     1) image 的 width/height 硬编码 1200x800，实测特色图是 4000x2333（声明与事实不符）；
+     2) publisher.logo.url 用的是【文章特色图】，而 Rank Math 用的是【站点 logo】——
+        同一页面出现两个互相冲突的 publisher.logo。
+   实测（/archives/1535）：两个 ld+json 块，Rank Math 的 @graph 3519B（含 BlogPosting）
+   + 本段 797B。Rank Math 的 @graph 已覆盖 BlogPosting / WebPage / WebSite / Person /
+   Organization，内容完整且正确，故本段整体删除。
+   注意：本改动依赖站点装有 SEO 插件。若停用 Rank Math，需另装插件或恢复本段。
+   背景见 docs/SEO与语义标签修复方案.md §1 */
 //页面 Keywords
 function get_seo_keywords(){
 	if (is_single()){
@@ -787,7 +760,23 @@ function argon_get_image_size($url){
 			$size = @getimagesize($path);
 		}
 	}
-	return $size ? $size : false;
+	if ($size){
+		return $size;
+	}
+	/* 上面两个分支都要求 URL 在本站域名下；启用「资源 CDN」或图片走外链时都进不去，
+	   于是 og:image:width/height 拿不到值，社交平台的大图卡片可能渲染不稳。
+	   这里补一条【零 HTTP 请求】的兜底：按 URL 反查附件，直接读附件元数据。
+	   刻意不做远程 getimagesize() —— 那会在每次页面渲染时发一个 HTTP 请求。 */
+	if (function_exists('attachment_url_to_postid')){
+		$attachment_id = attachment_url_to_postid($url);
+		if ($attachment_id){
+			$meta = wp_get_attachment_metadata($attachment_id);
+			if (!empty($meta['width']) && !empty($meta['height'])){
+				return array((int) $meta['width'], (int) $meta['height']);
+			}
+		}
+	}
+	return false;
 }
 
 //动态输出 Web App Manifest（复用站点名称、Description Meta 与主题色、站点图标）

@@ -597,6 +597,8 @@ function themeoptions_page(){
 						<td>
 							<textarea type="text" rows="5" cols="100" name="argon_seo_description"><?php echo htmlspecialchars(get_option('argon_seo_description')); ?></textarea>
 							<p class="description"><?php _e('设置针对搜索引擎的 Description Meta 标签内容。', 'argon');?><br/><?php _e('在文章中，Argon 会自动根据文章内容生成描述。在其他页面中，Argon 将使用这里设置的内容。如不填，Argon 将不会在其他页面输出 Description Meta 标签。', 'argon');?></p>
+							<label style="margin-top:8px;display:inline-block;"><input type="checkbox" name="argon_enable_seo_description" value="true" <?php $argon_enable_seo_description = get_option('argon_enable_seo_description', 'true'); if ($argon_enable_seo_description!='false'){echo 'checked';}?>/> <?php _e('输出 Description Meta 标签', 'argon');?></label>
+							<p class="description"><?php _e('关闭后不再输出 &lt;meta name="description"&gt;。注意：og:description / twitter:description 属社交元标签，由下方「SEO / OG / Twitter 社交元标签」开关控制，不受此项影响。', 'argon');?></p>
 						</td>
 					</tr>
 					<tr>
@@ -604,6 +606,8 @@ function themeoptions_page(){
 						<td>
 							<input type="text" class="regular-text" name="argon_seo_keywords" value="<?php echo get_option('argon_seo_keywords'); ?>"/>
 							<p class="description"><?php _e('设置针对搜索引擎使用的关键词（Keywords Meta 标签内容）。用英文逗号隔开。不设置则不输出该 Meta 标签。', 'argon');?></p>
+							<label style="margin-top:8px;display:inline-block;"><input type="checkbox" name="argon_enable_seo_keywords" value="true" <?php $argon_enable_seo_keywords = get_option('argon_enable_seo_keywords', 'true'); if ($argon_enable_seo_keywords!='false'){echo 'checked';}?>/> <?php _e('输出 Keywords Meta 标签', 'argon');?></label>
+							<p class="description"><?php _e('关闭后不再输出 &lt;meta name="keywords"&gt;（关键词内容仍保留，重新开启即可恢复）。', 'argon');?></p>
 						</td>
 					</tr>
 					<tr><th class="subtitle"><h2><?php _e('文章', 'argon');?></h2></th></tr>
@@ -1828,12 +1832,11 @@ window.pjaxLoaded = function(){
 						<input type="checkbox" name="argon_enable_preloader" value="true" <?php $argon_enable_preloader = get_option('argon_enable_preloader'); if ($argon_enable_preloader != 'false'){echo 'checked';}?>/> <?php _e('访问时先显示全屏加载遮罩，待 CSS/JS/字体就绪后再展示内容（消除首屏样式抖动）', 'argon');?>
 					</td>
 				</tr>
-					<tr>
-						<th><label><?php _e('结构化数据 JSON-LD', 'argon');?></label></th>
-						<td>
-							<input type="checkbox" name="argon_enable_structured_data" value="true" <?php $argon_enable_structured_data = get_option('argon_enable_structured_data'); if ($argon_enable_structured_data!='false'){echo 'checked';}?>/> <?php _e('输出 schema.org 结构化数据（Article），利于搜索引擎理解与收录', 'argon');?>
-						</td>
-					</tr>
+					<?php /* 「结构化数据 JSON-LD」开关已移除：主题原先输出的扁平 Article 与
+					        SEO 插件的 @graph 重复，且有两处硬错误（尺寸硬编码、
+					        publisher.logo 误用文章特色图），已整体删除。
+					        结构化数据现由 Rank Math 等 SEO 插件负责。
+					        见 docs/SEO与语义标签修复方案.md §1 */ ?>
 <?php // 实时搜索已改为悬浮窗模式，旧设置已废弃 ?>
 					<tr>
 						<th><label><?php _e('文章级点赞', 'argon');?></label></th>
@@ -2290,8 +2293,10 @@ function argon_update_themeoptions(){
 		argon_update_option('argon_theme_color');
 		argon_update_option_checkbox('argon_show_customize_theme_color_picker');
 		argon_update_option_allow_tags('argon_seo_description');
+		argon_update_option_checkbox('argon_enable_seo_description');
 		argon_update_option('argon_seo_keywords');
-		argon_update_option_checkbox('argon_enable_structured_data');
+		argon_update_option_checkbox('argon_enable_seo_keywords');
+		/* argon_enable_structured_data 已废弃（结构化数据交由 SEO 插件），不再保存 */
 		argon_update_option('argon_enable_mobile_scale');
 		argon_update_option('argon_page_background_url');
 		argon_update_option('argon_page_background_dark_url');

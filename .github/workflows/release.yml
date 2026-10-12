@@ -176,10 +176,23 @@ jobs:
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: argon-theme-dev-${{ github.sha }}
-          # 上传【解包后的主题目录】而不是 argon-theme.zip。
-          # upload-artifact 会再包一层 zip，上传目录才能让下载得到的 zip
-          # 顶层就是 argon-theme/，从而被 WordPress 直接安装。
+          # 必须叫 argon-theme，【不要】把 commit sha 拼进来。
+          #
+          # 原因：artifact 名字会成为下载得到的 zip 的文件名，而 WordPress 装主题时
+          # 目录名取自这个文件名 —— wp-admin 上传走 File_Upload_Upgrader，它保留
+          # 上传文件的原始文件名，随后 WP_Upgrader::unpack_package() 用
+          # basename($package, '.zip') 决定解包目录，install_package() 再拿它作为
+          # 目标目录名。所以 artifact 叫 argon-theme-dev-<sha>，装出来的主题目录
+          # 就是 wp-content/themes/argon-theme-dev-<sha>（实测确实如此）。
+          #
+          # 上传【解包后的主题目录】而不是 argon-theme.zip：
+          # upload-artifact 对目录参数会把目录内容放在 artifact 根下（不再多包一层），
+          # 配合上面的名字，下载得到的 argon-theme.zip 解压后顶层就是 argon-theme/，
+          # WordPress 可直接安装。
+          #
+          # 构建信息（commit / 时间 / run 链接）写在包内的 DEV-BUILD.txt 里，
+          # 不靠文件名区分，所以去掉 sha 不丢信息。
+          name: argon-theme
           path: dist-tmp/argon-theme
           retention-days: 14
           if-no-files-found: error

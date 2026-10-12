@@ -161,13 +161,19 @@
 		/* og:url 应与 canonical 一致。
 		   原先用 home_url(add_query_arg(array(), $wp->request)) —— 在【朴素固定链接】下
 		   $wp->request 为空，会退化成首页地址（实测测试站文章页 og:url = 首页，
-		   而 canonical = /?p=1，两者不一致），分享出去的链接会指向首页。 */
+		   而 canonical = /?p=1，两者不一致），分享出去的链接会指向首页。
+
+		   注意分页：博客首页/归档的第 2 页起必须带上页码，否则 og:url 会退回第 1 页
+		   （实测过：?paged=2 时 og:url 变成 "/"）。所以除【静态首页且不分页】外，
+		   博客首页与各类归档统一走 get_pagenum_link() —— 它对第 1 页会自动省略页码。 */
+		$argon_og_paged = max(1, (int) get_query_var('paged'));
 		if (is_singular()){
 			$argon_og_url = get_permalink();
-		}elseif (is_front_page() || is_home()){
+		}elseif (is_front_page() && !is_paged()){
+			/* 静态首页（未分页）：get_pagenum_link() 在这里可能取到文章页的 URL，故单独处理 */
 			$argon_og_url = home_url('/');
-		}elseif (is_category() || is_tag() || is_tax() || is_author() || is_post_type_archive()){
-			$argon_og_url = get_pagenum_link(max(1, (int) get_query_var('paged')));
+		}elseif (is_home() || is_front_page() || is_category() || is_tag() || is_tax() || is_author() || is_post_type_archive()){
+			$argon_og_url = get_pagenum_link($argon_og_paged);
 		}elseif (is_search()){
 			$argon_og_url = get_search_link();
 		}else{

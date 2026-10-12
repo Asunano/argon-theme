@@ -59,6 +59,7 @@ function argon_get_image_size($u) { return false; }
 function is_singular($t = '') { return !empty($GLOBALS['__ctx']['singular']); }
 function is_front_page() { return !empty($GLOBALS['__ctx']['front']); }
 function is_home() { return !empty($GLOBALS['__ctx']['home']); }
+function is_paged() { return !empty($GLOBALS['__ctx']['paged']); }
 function is_category() { return !empty($GLOBALS['__ctx']['category']); }
 function is_tag() { return false; }
 function is_tax() { return false; }
@@ -66,9 +67,15 @@ function is_author() { return false; }
 function is_post_type_archive() { return false; }
 function is_search() { return !empty($GLOBALS['__ctx']['search']); }
 function get_permalink() { return 'https://example.com/archives/123'; }
-function get_pagenum_link($n = 1) { return 'https://example.com/category/foo' . ($n > 1 ? '/page/' . $n : ''); }
+/* 模拟 WP 的 get_pagenum_link：第 1 页省略页码 */
+function get_pagenum_link($n = 1) {
+	$base = !empty($GLOBALS['__ctx']['category'])
+		? 'https://example.com/category/foo'
+		: 'https://example.com/';
+	return $n > 1 ? rtrim($base, '/') . '/page/' . $n . '/' : $base;
+}
 function get_search_link() { return 'https://example.com/?s=hello'; }
-function get_query_var($k) { return $k === 'paged' ? 1 : ''; }
+function get_query_var($k) { return $k === 'paged' ? (int) ($GLOBALS['__ctx']['paged_num'] ?? 1) : ''; }
 /* 区块后半段（article:section / article:tag / theme-color）用到的桩 */
 function get_author_posts_url($id = 0) { return 'https://example.com/author/admin'; }
 function get_the_category($id = 0) { return array((object) array('name' => 'CAT')); }
@@ -118,8 +125,11 @@ chk('开关关：og:title 不输出', strpos($off, 'og:title') === false);
 echo "\n=== P3-b og:url 与 canonical 一致 ===\n";
 $cases = array(
 	array('文章页', array('singular' => true), 'https://example.com/archives/123'),
-	array('首页', array('front' => true), 'https://example.com/'),
-	array('分类页', array('category' => true), 'https://example.com/category/foo'),
+	array('静态首页（不分页）', array('front' => true), 'https://example.com/'),
+	array('博客首页 第1页', array('home' => true, 'front' => true), 'https://example.com/'),
+	array('博客首页 第2页', array('home' => true, 'front' => true, 'paged' => true, 'paged_num' => 2), 'https://example.com/page/2/'),
+	array('分类页 第1页', array('category' => true), 'https://example.com/category/foo'),
+	array('分类页 第2页', array('category' => true, 'paged' => true, 'paged_num' => 2), 'https://example.com/category/foo/page/2/'),
 	array('搜索页', array('search' => true), 'https://example.com/?s=hello'),
 );
 foreach ($cases as $c) {

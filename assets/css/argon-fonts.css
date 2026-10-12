@@ -1,0 +1,26 @@
+/*!
+ * Open Sans —— 自托管 Latin 子集（可变字体，wght 轴 300-800）
+ *
+ * 取代原先向 fonts.googleapis.com 请求的 Open Sans。
+ * Google 的 CSS 会声明 10 个子集的 @font-face，浏览器按 unicode-range 实际下载 6 个
+ * （latin / latin-ext / cyrillic / cyrillic-ext / greek / vietnamese），合计 201.4 KB；
+ * 其中非拉丁子集基本只由评论区的颜文字触发。
+ *
+ * 这里只带 latin 子集：单个文件 47.2 KB 即覆盖 300/400/600/700 全部字重
+ * （Open Sans v44 是可变字体，Google 对四个字重返回的是同一个文件）。
+ * 实测生产站 57 万字符内容中，只有 4 个希腊字符（φ ο ω）落在 latin 之外，
+ * 它们会回退到系统字体 —— 这是可接受的代价，换来 154.2 KB 的下载节省。
+ *
+ * 由 header.php 按「禁用 Google 字体」开关条件加载；未加载时 style.css 里的
+ * `--font: "Open Sans", -apple-system, system-ui, ...` 会自然回退到系统字体栈。
+ * 许可：SIL Open Font License 1.1，全文见 assets/vendor/open-sans/OFL.txt
+ */
+@font-face {
+	font-family: "Open Sans";
+	font-style: normal;
+	font-weight: 300 800;
+	font-stretch: 100%;
+	font-display: swap;
+	src: url("../vendor/open-sans/open-sans-latin.woff2") format("woff2");
+	unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}

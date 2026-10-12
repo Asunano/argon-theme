@@ -42,6 +42,36 @@ const ALLOW = new Set([
   'card-body', 'card-header', 'card-footer',
 ]);
 
+/**
+ * 已核实的历史基线：这些类名在【master 的 CSS 里同样没有规则】，
+ * 即它们本来就没样式（JS 钩子、纯语义标记、WP 核心/后台类），
+ * 不是被 strip-dead-css.js 误删的。
+ *
+ * 核对方法：git archive master 取全量 CSS + 内联 <style>，
+ *           对每个类名做 \.name(?![\w-]) 匹配。
+ *
+ * 固化它的意义：--strict 才不会因为这一堆历史遗留永远失败，
+ * 从而让「新出现一个无 CSS 的类名」这个信号真正有效。
+ * 若将来某个基线类名被补上了样式，删掉对应行即可。
+ */
+const BASELINE = new Set([
+  'argon-ip-custom-row', 'argon-runtime', 'argon-search-filters-type', 'argon-search-trigger',
+  'article-list', 'article-list-home', 'btn-comfirm', 'btn-dismiss',
+  'col-xs-12', 'comment-divider', 'comment-edit-history-content', 'comment-item-source',
+  'comment-pin', 'comment-reply', 'comment-unpin', 'comment-upvote-num',
+  'components-button', 'content-area', 'custom-assets-path-desctiption', 'dashicons',
+  'dashicons-arrow-right-alt', 'fl-preview-defaults', 'float-action-buttons', 'header-global',
+  'headroom--not-bottom', 'human-time', 'is-dismissible', 'is-primary',
+  'menu-item-icon', 'no-pjax', 'page-information-card-container', 'post-meta-detail-catagory-link',
+  'post-meta-detail-catagory-space', 'post-meta-detail-comments', 'post-meta-detail-edittime', 'post-meta-detail-needpassword',
+  'post-meta-detail-stickey', 'post-meta-detail-time', 'post-meta-detail-views', 'regular-text',
+  'search-result', 'shuoshuo-comment-item-text', 'shuoshuo-date-time', 'shuoshuo-date-year',
+  'shuoshuo-foldable', 'shuoshuo-upvote-num', 'site-content', 'site-footer',
+  'site-main', 'site-state-categories', 'site-state-posts', 'site-state-tags',
+  'small-text', 'style-default', 'text-black', 'widget',
+  'widget_search', 'widget-area',
+]);
+
 function walk(dir, out = []) {
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
     const p = path.join(dir, e.name);
@@ -151,12 +181,14 @@ function hasRule(cssList, cls) {
   // 剥离 <?php ?> 后只剩 "fa-thumbs"，而真正生效的 fa-thumbs-up / fa-thumbs-o-up
   // 是有规则的。凡「本身无规则、但存在有规则的记号以它为前缀」者，判为截断产物。
   const truncated = [];
+  const baseline = [];
   const genuinely = [];
   for (const [cls, locs] of noRule) {
     if (ALLOW.has(cls)) { truncated.push([cls, locs, '白名单']); continue; }
     const longer = [...all.keys()].filter((k) => k !== cls && k.startsWith(cls) && withRule.has(k));
-    if (longer.length) truncated.push([cls, locs, '拼接截断 -> ' + longer.slice(0, 3).join(' / ')]);
-    else genuinely.push([cls, locs]);
+    if (longer.length) { truncated.push([cls, locs, '拼接截断 -> ' + longer.slice(0, 3).join(' / ')]); continue; }
+    if (BASELINE.has(cls)) { baseline.push([cls, locs]); continue; }
+    genuinely.push([cls, locs]);
   }
 
   console.log('有对应 CSS 规则: ' + okCount.n + ' / ' + all.size);
@@ -170,17 +202,23 @@ function hasRule(cssList, cls) {
     console.log('');
   }
 
+  if (baseline.length) {
+    console.log('=== 历史基线（master 里同样无规则，已核实不是误删）: ' + baseline.length + ' 个 ===');
+    console.log('  ' + baseline.map(([c]) => c).join(', '));
+    console.log('  （若某个已补上样式，请从 BASELINE 里删掉对应项）');
+    console.log('');
+  }
+
   if (genuinely.length === 0) {
-    console.log('=== PASS：PHP 输出的类名全部有对应 CSS、或可解释 ===');
+    console.log('=== PASS：没有新增「输出类名却无对应 CSS」的情况 ===');
   } else {
-    console.log('=== 需要人工确认：' + genuinely.length + ' 个类名没有任何 CSS 规则 ===');
+    console.log('=== 需要确认：' + genuinely.length + ' 个【新增】类名没有任何 CSS 规则 ===');
     for (const [cls, locs] of genuinely) {
       console.log('  ' + cls.padEnd(34) + ' 出现于 ' + locs.slice(0, 3).join(', '));
     }
     console.log('');
-    console.log('（这些未必是错的：可能只是 JS 钩子、WP 核心类、或纯语义标记。');
-    console.log('  判断依据：拿 master 的 CSS 比对 —— 若 master 里也没有规则，');
-    console.log('  说明它本来就没样式，不是被 strip-dead-css.js 误删的。）');
+    console.log('  这些不在历史基线里，也就是本次改动新引入的。');
+    console.log('  若确认是误删，补回 CSS；若本来就该无样式，加进 BASELINE 并说明理由。');
   }
 
   // 报告写到 build/（已 gitignore），避免每次跑都脏了工作区

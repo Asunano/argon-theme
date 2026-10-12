@@ -72,6 +72,57 @@ var argonStore = {
 	}
 };
 
+/* ——— 按需加载 JS / CSS ———
+   用途：把「只在交互时才需要」的 vendor 从首屏移出去。
+   被 fancybox（点击图片灯箱）与 pickr/nouislider（打开设置面板）使用，
+   清单由 header.php 按当前选项下发到 argonConfig.lazy_assets，
+   URL 一律走 $GLOBALS['assets_path']（可能是 CDN 基址），不可在 JS 里硬编码主题路径。
+
+   约定：
+   - 同一 URL 只加载一次（argonAssetCache 缓存 Promise）
+   - 加载失败时【清掉缓存项】并 reject，调用方可重试
+   - argonLoadAssets 会等 JS 与 CSS 【全部】就绪才 resolve —— 避免
+     「JS 先到、CSS 后到」造成的样式闪动（灯箱/取色器都会明显可见） */
+var argonAssetCache = {};
+function argonLoadScript(url){
+	if (argonAssetCache[url]){ return argonAssetCache[url]; }
+	argonAssetCache[url] = new Promise(function(resolve, reject){
+		var s = document.createElement('script');
+		s.src = url;
+		s.async = true;
+		s.onload = function(){ resolve(); };
+		s.onerror = function(){
+			delete argonAssetCache[url];
+			reject(new Error('argonLoadScript failed: ' + url));
+		};
+		document.head.appendChild(s);
+	});
+	return argonAssetCache[url];
+}
+function argonLoadStyle(url){
+	if (argonAssetCache[url]){ return argonAssetCache[url]; }
+	argonAssetCache[url] = new Promise(function(resolve, reject){
+		var l = document.createElement('link');
+		l.rel = 'stylesheet';
+		l.href = url;
+		l.onload = function(){ resolve(); };
+		l.onerror = function(){
+			delete argonAssetCache[url];
+			reject(new Error('argonLoadStyle failed: ' + url));
+		};
+		document.head.appendChild(l);
+	});
+	return argonAssetCache[url];
+}
+/* spec: { js: [url...], css: [url...] }；两者都缺省时立即 resolve */
+function argonLoadAssets(spec){
+	spec = spec || {};
+	var jobs = [];
+	(spec.js || []).forEach(function(u){ jobs.push(argonLoadScript(u)); });
+	(spec.css || []).forEach(function(u){ jobs.push(argonLoadStyle(u)); });
+	return Promise.all(jobs);
+}
+
 /* HTML 转义：供搜索、表情面板等全局调用。
    原先仅定义于实时搜索闭包内，导致外层 argonRenderRecentEmotions 调用时
    报 ReferenceError: escapeHtml is not defined。提升为顶层函数声明后全局可用。 */
@@ -665,6 +716,7 @@ if (argonConfig.waterflow_columns != "1") {
 	//博客设置
 	$toggleBlogSettings.on("click" , function(){
 		$("#float_action_buttons").toggleClass("blog_settings_opened");
+		argonEnsureSettingsAssets();   /* 按需加载 pickr / nouislider */
 	});
 	$("#close_blog_settings").on("click" , function(){
 		$("#float_action_buttons").removeClass("blog_settings_opened");
@@ -766,7 +818,13 @@ if (argonConfig.waterflow_columns != "1") {
 	$fabtns.removeClass("fabtns-unloaded");
 }();
 
-/*卡片圆角大小调整*/
+/*卡片圆角大小调整
+  拆成两段：CSS 变量的写入【即时】执行（不依赖 noUiSlider），
+  控件本身延迟到打开设置面板时才创建。
+  原因：localStorage 恢复里除了设置滑块位置，还调 setCardRadius() 写 --card-radius ——
+  那才是访客看到的视觉效果。若整块延后，保存过圆角的访客在页面加载时会看到默认圆角。
+  另外原实现【无守卫】直接调 noUiSlider.create()，nouislider 未加载时会抛
+  ReferenceError 并中断整个 argontheme.js 的后续执行，故这里也补上守卫。 */
 !function(){
 	function setCardRadius(radius, persist){
 		document.documentElement.style.setProperty('--card-radius', radius + "px");
@@ -774,35 +832,45 @@ if (argonConfig.waterflow_columns != "1") {
 			argonStore.set("card_radius", radius);
 		}
 	}
-	let slider = document.getElementById('blog_setting_card_radius');
-	noUiSlider.create(slider, {
-		start: [$("meta[name='theme-card-radius']").attr("content")],
-		step: 0.5,
-		connect: [true, false],
-		range: {
-			'min': [0],
-			'max': [30]
-		}
-	});
-	slider.noUiSlider.on('update', function (values){
-		let value = values[0];
-		setCardRadius(value, false);
-	});
-	slider.noUiSlider.on('set', function (values){
-		let value = values[0];
-		setCardRadius(value, true);
-	});
-	$(document).on("click" , "#blog_setting_card_radius_to_default" , function(){
-		slider.noUiSlider.set($("meta[name='theme-card-radius-origin']").attr("content"));
-		setCardRadius($("meta[name='theme-card-radius-origin']").attr("content"), false);
-		argonStore.set("card_radius", "");
-	});
-	/* 从 localStorage 恢复本访客的圆角偏好（服务端不再按 Cookie 渲染） */
-	let savedRadius = argonStore.get("card_radius", "");
-	if (savedRadius !== "" && !isNaN(parseFloat(savedRadius))){
-		try{ slider.noUiSlider.set(parseFloat(savedRadius)); }catch(e){}
+	/* —— 第一段：即时生效（不依赖 noUiSlider） —— */
+	var savedRadius = argonStore.get("card_radius", "");
+	var hasSavedRadius = (savedRadius !== "" && !isNaN(parseFloat(savedRadius)));
+	var initialRadius = hasSavedRadius
+		? savedRadius
+		: $("meta[name='theme-card-radius']").attr("content");
+	if (hasSavedRadius){
 		setCardRadius(savedRadius, false);
 	}
+	/* —— 第二段：控件按需创建（由设置面板打开时调用） —— */
+	var sliderReady = false;
+	function argonInitCardRadiusSlider(){
+		if (sliderReady){ return; }
+		if (typeof(noUiSlider) == "undefined"){ return; }
+		var slider = document.getElementById('blog_setting_card_radius');
+		if (!slider){ return; }
+		sliderReady = true;
+		noUiSlider.create(slider, {
+			start: [initialRadius],
+			step: 0.5,
+			connect: [true, false],
+			range: {
+				'min': [0],
+				'max': [30]
+			}
+		});
+		slider.noUiSlider.on('update', function (values){
+			setCardRadius(values[0], false);
+		});
+		slider.noUiSlider.on('set', function (values){
+			setCardRadius(values[0], true);
+		});
+		$(document).on("click" , "#blog_setting_card_radius_to_default" , function(){
+			slider.noUiSlider.set($("meta[name='theme-card-radius-origin']").attr("content"));
+			setCardRadius($("meta[name='theme-card-radius-origin']").attr("content"), false);
+			argonStore.set("card_radius", "");
+		});
+	}
+	window.argonInitCardRadiusSlider = argonInitCardRadiusSlider;
 }();
 
 /*评论区 & 发送评论*/
@@ -2174,6 +2242,67 @@ function argonLightboxReload(){
 	argonLightboxInit();
 }
 
+/* —— fancybox 按需加载 ——
+   fancybox（gzip 47.9KB）原先每页都用 defer 加载，只是不阻塞、仍要下载一遍。
+   现改为首次需要时才注入 JS/CSS：
+     · 指针移入 / 触摸开始 / 键盘聚焦 [data-fancybox] → 预热，通常早于 click 数百毫秒
+     · 真的点了但还没就绪 → 拦住默认行为，加载完成后重放这次点击
+
+   为什么 click 必须拦：未绑定时 [data-fancybox] 就是一个普通的
+   <a href="图片URL">，浏览器会【直接跳转到图片】把用户带离文章。
+   已就绪后本段完全不再介入，全部交给 Fancybox 自己的委托绑定。 */
+!function(){
+	function ready(){
+		return typeof(Fancybox) != "undefined" && argonLightboxBound;
+	}
+	function spec(){
+		return argonConfig.lazy_assets && argonConfig.lazy_assets.fancybox;
+	}
+	var pending = null;
+	function ensure(){
+		if (ready()){ return Promise.resolve(); }
+		if (pending){ return pending; }
+		var s = spec();
+		if (!s){
+			return Promise.reject(new Error('fancybox assets not configured'));
+		}
+		pending = argonLoadAssets(s).then(function(){
+			/* argonLightboxInit 内部有 typeof 与幂等守卫，可安全重复调用 */
+			argonLightboxInit();
+		})['catch'](function(err){
+			pending = null;   /* 失败清缓存，允许下次点击重试 */
+			if (window.console){ console.warn('fancybox lazy load failed:', err); }
+		});
+		return pending;
+	}
+	$(document).on('pointerover touchstart focusin', '[data-fancybox]', function(){
+		ensure();
+	});
+	document.addEventListener('click', function(e){
+		var a = e.target && e.target.closest && e.target.closest('[data-fancybox]');
+		if (!a){ return; }
+		if (e.__argonLazyReplay){ return; }        /* 自己重放的事件，放行 */
+		if (ready()){ return; }                    /* 已就绪，交给 Fancybox */
+		if (e.defaultPrevented){ return; }
+		/* 清单里没有 fancybox（例如开了 zoomify 选项）时【不拦截】：
+		   此时锚点是普通链接，保持与改动前一致的默认行为（浏览器自行跳转）。
+		   否则会变成「点了没反应」，比原来更糟。 */
+		if (!spec()){ return; }
+		/* 修饰键 / 中键 / 右键：尊重浏览器默认行为（新标签打开等），不拦 */
+		if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey){ return; }
+		e.preventDefault();
+		e.stopPropagation();
+		ensure().then(function(){
+			if (typeof(Fancybox) == "undefined"){ return; }   /* 加载失败，放弃 */
+			var ev = new MouseEvent('click', {
+				bubbles: true, cancelable: true, view: window, button: 0
+			});
+			ev.__argonLazyReplay = true;
+			a.dispatchEvent(ev);
+		});
+	}, true);   /* 捕获阶段：必须早于 Fancybox 的 document 冒泡委托 */
+}();
+
 /* —— 浏览量异步打点 ——
    页面渲染期已不再计数（无 Set-Cookie、无写库），改为浏览器端上报 admin-ajax。
    Beacon 标记以 data-* 属性渲染在 #primary 内，因此 Pjax 换页后需重新取 post_id 打点。 */
@@ -3014,8 +3143,21 @@ function hex2str(hex){
 	return rgb2str(hex2rgb(hex));
 }
 //颜色选择器 & 切换主题色
-if ($("meta[name='argon-enable-custom-theme-color']").attr("content") == 'true'){
-	let themeColorPicker = new Pickr({
+/* pickr（gzip 27KB 含 CSS）已改为【按需加载】：打开设置面板时才创建控件。
+   注意两点：
+   1) themeColorPicker 提升为模块级变量。原先是 let 声明在这个 if 块【内部】，
+      而 argonThemeColorPrivInit() 在块外引用它 —— 标识符不在作用域，typeof 得
+      "undefined"，导致「把控件同步成访客保存的颜色」那段从未生效（还被 try/catch 吞掉）。
+      表现为：保存过主题色后重开面板，取色器显示的是默认色。
+   2) 控件创建后要主动 setColor 同步当前生效色，否则面板里的取色器与实际颜色不一致。 */
+var themeColorPicker = null;
+function argonInitThemeColorPicker(){
+	if (themeColorPicker){ return; }
+	if (typeof(Pickr) == "undefined"){ return; }
+	if ($("meta[name='argon-enable-custom-theme-color']").attr("content") != 'true'){ return; }
+	if (!document.getElementById('theme-color-picker')){ return; }
+
+	themeColorPicker = new Pickr({
 		el: '#theme-color-picker',
 		container: 'body',
 		theme: 'monolith',
@@ -3100,7 +3242,43 @@ if ($("meta[name='argon-enable-custom-theme-color']").attr("content") == 'true')
 		_argonOrigReposition();
 		argonFixPickrPosition(themeColorPicker);
 	};
+
+	/* 同步成访客【当前生效】的颜色：有 localStorage 偏好用偏好，否则用站点默认色。
+	   原实现想做的正是这件事，但因作用域问题从未生效。 */
+	var saved = argonStore.get("theme_color", "");
+	var cur = (saved && /^#[0-9a-fA-F]{6}$/.test(saved))
+		? saved
+		: ($("meta[name='theme-color-origin']").attr("content") || "").toUpperCase();
+	if (cur){
+		try{ themeColorPicker.setColor(cur); }catch(e){}
+	}
 }
+
+/* —— 设置面板依赖的 vendor 按需加载 ——
+   面板里的「主题色」取色器（pickr）与「圆角」滑块（nouislider）都只在打开面板时才需要，
+   合计 gzip 35.3KB，原先每页都加载。现改为首次打开面板（或指针移入设置按钮时预热）才注入。
+   pending 缓存保证并发/快速开合时只加载一次；失败时清缓存允许重试。
+   argonInitThemeColorPicker / argonInitCardRadiusSlider 各自幂等，可安全重复调用。 */
+var argonSettingsAssetsPending = null;
+function argonEnsureSettingsAssets(){
+	if (argonSettingsAssetsPending){ return argonSettingsAssetsPending; }
+	var la = argonConfig.lazy_assets || {};
+	argonSettingsAssetsPending = Promise.all([
+		la.pickr      ? argonLoadAssets(la.pickr)      : Promise.resolve(),
+		la.nouislider ? argonLoadAssets(la.nouislider) : Promise.resolve()
+	]).then(function(){
+		argonInitThemeColorPicker();
+		if (window.argonInitCardRadiusSlider){ window.argonInitCardRadiusSlider(); }
+	})['catch'](function(err){
+		argonSettingsAssetsPending = null;
+		if (window.console){ console.warn('settings assets lazy load failed:', err); }
+	});
+	return argonSettingsAssetsPending;
+}
+/* 预热：指针移入 / 键盘聚焦设置按钮时就先把资源取回来，掩盖加载延迟 */
+$(document).on('pointerover focusin', '#fabtn_toggle_blog_settings_popup', function(){
+	argonEnsureSettingsAssets();
+});
 function pickrObjectToHEX(color){
 	let HEXA = color.toHEXA();
 	return ("#" + HEXA[0] + HEXA[1] + HEXA[2]).toUpperCase();

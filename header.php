@@ -235,7 +235,10 @@
 		// Open Sans 已改为自托管 Latin 子集：单个 47.2KB 可变字体文件覆盖 300/400/600/700 全部字重，
 		// 取代原先向 Google 请求的 6 个子集共 201.4KB，且不再依赖第三方域名。
 		// 放在 style.css 之前，让字体下载尽早开始（@font-face 的可用性与顺序无关，这里只为提前发现）。
-		if (argon_get_option('argon_disable_googlefont') != 'true') {
+		// 衬线模式下不必加载：style.css 里 "Open Sans" 只出现在 :root 的 --font，
+		// 而 html.use-serif body 会用 --font:"Noto Serif SC",... 覆盖掉它。
+		// 实测（821 个元素）：非衬线 780 个在用；衬线 0 个在用、字体根本不加载 —— 纯浪费 47.2KB。
+		if (argon_get_option('argon_disable_googlefont') != 'true' && get_option('argon_font') != 'serif') {
 			wp_enqueue_style("argon-fonts", $GLOBALS['assets_path'] . "/assets/css/argon-fonts.css", null, $GLOBALS['theme_version']);
 		}
 		wp_enqueue_style("style", $GLOBALS['assets_path'] . "/style.css", null, $GLOBALS['theme_version']);

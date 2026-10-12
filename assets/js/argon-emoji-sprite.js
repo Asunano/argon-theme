@@ -97,7 +97,13 @@
         if (p.closest && p.closest("svg, code, pre")) {
           return NodeFilter.FILTER_REJECT;   /* 代码块内保留原字符，不转 sprite */
         }
-        return node.nodeValue && EMOJI_RE.test(node.nodeValue)
+        if (!node.nodeValue) return NodeFilter.FILTER_REJECT;
+        /* 必须先把 lastIndex 归零：EMOJI_RE 带 g 标志，
+           RegExp.prototype.test 在 g/y 下会推进 lastIndex，
+           导致下一个文本节点从上次的位置开始匹配而漏掉开头的 emoji。
+           实测表现：表情面板 37 个 emoji 只替换了 19 个。 */
+        EMOJI_RE.lastIndex = 0;
+        return EMOJI_RE.test(node.nodeValue)
           ? NodeFilter.FILTER_ACCEPT
           : NodeFilter.FILTER_REJECT;
       }

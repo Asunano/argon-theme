@@ -128,7 +128,7 @@ jobs:
           [ "$fail" -eq 0 ] || { echo "PHP 语法检查未通过，已中止打包"; exit 1; }
           echo "全部 PHP 文件语法通过"
 
-      - name: Package theme zip (with dev marker)
+      - name: Package theme tree (with dev marker)
         env:
           # GitHub 表达式经 env 传入，不写进 shell 正文。
           # 早期版本把表达式直接写在未加引号的 heredoc 内，
@@ -161,19 +161,25 @@ jobs:
           done
           cp DEV-BUILD.txt "dist-tmp/$THEME/DEV-BUILD.txt"
           rm -f DEV-BUILD.txt
-          ( cd dist-tmp && zip -q -r "../$THEME.zip" "$THEME" )
-          rm -rf dist-tmp
-          echo "=== artifact ==="
-          ls -la "$THEME.zip"
-          echo "=== DEV-BUILD marker inside zip ==="
-          unzip -l "$THEME.zip" | grep DEV-BUILD
-          echo "=== zip listing (head) ==="
-          unzip -l "$THEME.zip" | head -n 15
+          # 这里【不】再删 dist-tmp，也【不】生成 zip —— 下一步直接上传解包后的主题目录。
+          # actions/upload-artifact 一定会把上传内容再包一层 zip：
+          # 上传 argon-theme.zip，下载得到的就是「装着 zip 的 zip」，
+          # 直接交给 WordPress 安装会报 incompatible_archive_theme_no_style
+          #（表现为「主题缺少 style.css 样式表」）；
+          # 上传目录本身，下载得到的 zip 顶层就是 argon-theme/，可直接安装。
+          echo "=== 打包内容 ==="
+          ls -la "dist-tmp/$THEME/style.css" "dist-tmp/$THEME/DEV-BUILD.txt"
+          echo "文件数: $(find "dist-tmp/$THEME" -type f | wc -l)"
+          echo "=== 顶层条目 ==="
+          ls "dist-tmp/$THEME"
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
           name: argon-theme-dev-${{ github.sha }}
-          path: argon-theme.zip
+          # 上传【解包后的主题目录】而不是 argon-theme.zip。
+          # upload-artifact 会再包一层 zip，上传目录才能让下载得到的 zip
+          # 顶层就是 argon-theme/，从而被 WordPress 直接安装。
+          path: dist-tmp/argon-theme
           retention-days: 14
           if-no-files-found: error

@@ -155,9 +155,10 @@ add_filter('script_loader_tag', function ($tag, $handle) {
 	if ($handle === 'argonjs') {
 		return str_replace(' src=', ' defer src=', $tag);
 	}
-	// ③ 条件加载的 vendor 脚本：均在 argontheme.js(pjax:complete) 中按需调用，
-	//    延迟至文档解析后执行无副作用。
-	if (in_array($handle, array('fancybox5', 'highlight', 'highlight-ln', 'nouislider', 'pickr'), true)) {
+	// ③ 条件加载的 vendor 脚本：均在 argontheme.js 中按需调用，延迟至文档解析后执行无副作用。
+	//    注意：fancybox5 / nouislider / pickr 已进一步改为【JS 按需加载】（首次交互时才注入），
+	//    不再出现在 enqueue 列表里，故已从下面数组中移除。详见 docs/fancybox与pickr懒加载方案.md
+	if (in_array($handle, array('highlight', 'highlight-ln'), true)) {
 		return str_replace(' src=', ' defer src=', $tag);
 	}
 	return $tag;
@@ -178,11 +179,11 @@ add_filter('style_loader_tag', function ($tag, $handle) {
 	//     而 FA6 子集裁剪后只有 22.5KB（gzip 3.8KB），同步的代价远小于首屏图标闪烁的风险。
 	// ② 交互态才用到的样式：首屏完全看不到它们负责的内容，同步加载只会白等一个往返。
 	//    实测（archives/873）这三个原本各阻塞 927~1153ms：
-	//      fancybox5       24.7KB 文章灯箱，点击图片时才用到
-	//      pickr-style      9.2KB 后台取色器，点主题色按钮时才用到（体积小但同样触发完整往返）
 	//      highlight-style  1.3KB 代码高亮主题，滚动到代码块时才用到
 	//    它们都只有几十 KB，异步后到达前的窗口极短（<200ms），视觉上无感知。
-	if (in_array($handle, array('fancybox5', 'pickr-style', 'highlight-style'), true)) {
+	//    注意：fancybox5 与 pickr-style 已进一步改为【JS 按需加载】（首次交互时才注入 link），
+	//    不再出现在 enqueue 列表里，故已从下面数组中移除。见 docs/fancybox与pickr懒加载方案.md
+	if (in_array($handle, array('highlight-style'), true)) {
 		$deferred = str_replace("media='all'", "media='print' onload=\"this.media='all'\"", $tag);
 		return $deferred . '<noscript>' . $tag . '</noscript>';
 	}

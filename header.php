@@ -250,25 +250,53 @@
 		}
 		wp_enqueue_script("argon_js_merged", $GLOBALS['assets_path'] . "/assets/argon_js_merged.js", null, $GLOBALS['theme_version']);
 		/* 条件加载：仅在使用到的功能开启时才请求对应 vendor，降低首屏 JS 体积 */
-		if (argon_get_option('argon_enable_fancybox') != 'false' && argon_get_option('argon_enable_zoomify') == 'false'){
-			wp_enqueue_style("fancybox5", $GLOBALS['assets_path'] . "/assets/vendor/fancybox5/fancybox.css", null, $GLOBALS['theme_version']);
-			wp_enqueue_script("fancybox5", $GLOBALS['assets_path'] . "/assets/vendor/fancybox5/fancybox.umd.js", null, $GLOBALS['theme_version']);
-		}
+		/* fancybox5（灯箱，gzip 47.9KB）已改为【按需加载】：
+		   首次点击 [data-fancybox]（或指针移入时预热）才注入 JS/CSS，
+		   清单在上面的 $argon_lazy_assets['fancybox']。
+		   原先用 defer 只是不阻塞，每次访问仍要下载一遍 —— 现在是根本不下载。
+		   见 docs/fancybox与pickr懒加载方案.md */
 		if (argon_get_option('argon_enable_code_highlight') == 'true'){
 			wp_enqueue_script("highlight", $GLOBALS['assets_path'] . "/assets/vendor/highlight/highlight.pack.js", null, $GLOBALS['theme_version']);
 			wp_enqueue_script("highlight-ln", $GLOBALS['assets_path'] . "/assets/vendor/highlight/highlightjs-line-numbers.min.js", null, $GLOBALS['theme_version']);
 			wp_enqueue_style("highlight-style", $GLOBALS['assets_path'] . "/assets/vendor/highlight/styles/" . (argon_get_option('argon_code_theme') == '' ? 'vs2015' : argon_get_option('argon_code_theme')) . ".css", null, $GLOBALS['theme_version']);
 		}
 		if (argon_get_option('argon_show_customize_theme_color_picker') != 'false'){
-			/* pickr JS 已为 1.8.2，而 vendor 的 monolith.min.css 仍是 1.5.0(取色变量/面板结构不匹配，
-			   导致色块变黑、面板错位)。此处改用主题自有的、与 JS 同版本的 1.8.2 主题 CSS，避免改动 vendor 文件 */
-			wp_enqueue_style("pickr-style", $GLOBALS['assets_path'] . "/assets/css/pickr-monolith-1.8.2.css", null, $GLOBALS['theme_version']);
-			wp_enqueue_script("nouislider", $GLOBALS['assets_path'] . "/assets/vendor/nouislider/js/nouislider.min.js", null, $GLOBALS['theme_version']);
-			wp_enqueue_script("pickr", $GLOBALS['assets_path'] . "/assets/vendor/pickr/pickr.es5.min.js", null, $GLOBALS['theme_version']);
+			/* pickr（取色器）与 nouislider（圆角滑块）已改为【按需加载】：
+			   两者都只在打开设置面板时才需要，合计 gzip 35.3KB，原先每页都下载一遍。
+			   清单在上面的 $argon_lazy_assets['pickr'] / ['nouislider']，由 argontheme.js 的
+			   argonEnsureSettingsAssets() 在首次打开面板（或指针移入按钮预热）时注入。
+			   注意 pickr JS 是 1.8.2，而 vendor 的 monolith.min.css 仍是 1.5.0（取色变量/面板结构
+			   不匹配，会导致色块变黑、面板错位），故 CSS 用主题自有的、与 JS 同版本的
+			   assets/css/pickr-monolith-1.8.2.css。
+			   见 docs/fancybox与pickr懒加载方案.md */
 		}
 	?>
 	<?php wp_head(); ?>
 	<?php $GLOBALS['wp_path'] = get_option('argon_wp_path') == '' ? '/' : get_option('argon_wp_path'); ?>
+	<?php
+	/* 按需加载的资源清单 —— 交给 argontheme.js 的 argonLoadAssets 使用。
+	   只下发【本次真的会用到】的那些，条件与原先的 wp_enqueue 保持一致，
+	   避免配置关掉后还占 config 体积。
+	   URL 必须走 $GLOBALS['assets_path']（可能是 CDN 基址）并在 PHP 侧拼好，
+	   否则开了「资源 CDN」选项的站点会 404。
+	   ?ver= 与 wp_enqueue_* 生成的 URL 一致，命中同一份 CDN/浏览器缓存。 */
+	$argon_lazy_assets = array();
+	if (argon_get_option('argon_enable_fancybox') != 'false' && argon_get_option('argon_enable_zoomify') == 'false'){
+		$argon_lazy_assets['fancybox'] = array(
+			'js'  => array($GLOBALS['assets_path'] . '/assets/vendor/fancybox5/fancybox.umd.js?ver=' . $GLOBALS['theme_version']),
+			'css' => array($GLOBALS['assets_path'] . '/assets/vendor/fancybox5/fancybox.css?ver=' . $GLOBALS['theme_version']),
+		);
+	}
+	if (argon_get_option('argon_show_customize_theme_color_picker') != 'false'){
+		$argon_lazy_assets['pickr'] = array(
+			'js'  => array($GLOBALS['assets_path'] . '/assets/vendor/pickr/pickr.es5.min.js?ver=' . $GLOBALS['theme_version']),
+			'css' => array($GLOBALS['assets_path'] . '/assets/css/pickr-monolith-1.8.2.css?ver=' . $GLOBALS['theme_version']),
+		);
+		$argon_lazy_assets['nouislider'] = array(
+			'js'  => array($GLOBALS['assets_path'] . '/assets/vendor/nouislider/js/nouislider.min.js?ver=' . $GLOBALS['theme_version']),
+		);
+	}
+	?>
 	<script>
 		document.documentElement.classList.remove("no-js");
 		var argonConfig = {
@@ -305,7 +333,9 @@
 				hide_linenumber: <?php echo get_option('argon_code_highlight_hide_linenumber', 'false'); ?>,
 				transparent_linenumber: <?php echo get_option('argon_code_highlight_transparent_linenumber', 'false'); ?>,
 				break_line: <?php echo get_option('argon_code_highlight_break_line', 'false'); ?>
-			}
+			},
+			/* 按需加载清单（fancybox / pickr / nouislider），见文件上方 $argon_lazy_assets */
+			lazy_assets: <?php echo wp_json_encode($argon_lazy_assets); ?>
 		}
 	</script>
 	<script>

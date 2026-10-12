@@ -2964,8 +2964,26 @@ function argon_lazyload($content){
 		if ($use_dom){
 			$dom = new DOMDocument();
 			$prev = libxml_use_internal_errors(true);
-			// 以 HTML 片段方式解析，避免回溯爆炸（ReDoS），并保留 UTF-8
-			@$dom->loadHTML(mb_convert_encoding($content, 'HTML-ENTITIES', 'UTF-8'), LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
+			/* 用 DOM 解析而非纯正则，是为了避免回溯爆炸（ReDoS）。
+			   但必须注意两点，否则会引入比 ReDoS 更大的问题：
+
+			   ① 【只给 libxml 一个根节点】
+			      LIBXML_HTML_NOIMPLIED 不让 libxml 自动补 <html>/<body>，
+			      而 libxml 需要一个唯一文档根 —— 于是它把【第一个元素】当成根，
+			      后面所有顶层节点全部挂成它的子节点，saveHTML() 再把这个错误结构
+			      原样吐出来。实测：正文以 <h2> 开头时，整篇正文都变成了那一个标题的
+			      子节点（5 个 <h2> / 5 个 </h2> 但配对整体错位一格，
+			      最后一个 </h2> 跑到正文最末尾）。以 <div>/<figure> 开头的文章同理。
+			      正文以 <p> 开头时浏览器会容错修好，所以以前没被发现。
+			      这里显式包一层临时根 div，解析完再逐个子节点输出、拆掉外层。
+
+			   ② 【不要用 mb_convert_encoding(…, 'HTML-ENTITIES', 'UTF-8')】
+			      那会把每个中日韩字符变成 &#NNNNN;（3 字节 UTF-8 → 7~8 字节），
+			      实测正文体积涨到 1.30~1.75 倍（整页 raw +4.1%，gzip 后 +2.1%）。
+			      改用 <?xml encoding="UTF-8"> 声明即可让 libxml 按 UTF-8 处理，
+			      中文原样保留。 */
+			@$dom->loadHTML('<?xml encoding="UTF-8"><div id="argon-lazyload-root">' . $content . '</div>',
+				LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
 			libxml_clear_errors();
 			libxml_use_internal_errors($prev);
 			$imgs = $dom->getElementsByTagName('img');
@@ -2984,8 +3002,16 @@ function argon_lazyload($content){
 				$img->setAttribute('class', trim('lazyload ' . $lazyload_loading_style . ' ' . $existing_class));
 				$img->setAttribute('src', 'data:image/svg+xml;base64,PCEtLUFyZ29uTG9hZGluZy0tPgo8c3ZnIHdpZHRoPSIxIiBoZWlnaHQ9IjEiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIgc3Ryb2tlPSIjZmZmZmZmMDAiPjxnPjwvZz4KPC9zdmc+');
 			}
-			$content = $dom->saveHTML();
-			if ($content == ''){
+			/* 逐个子节点输出，拆掉临时根 —— 不留任何包裹层 */
+			$out = '';
+			if ($dom->documentElement){
+				foreach ($dom->documentElement->childNodes as $child){
+					$out .= $dom->saveHTML($child);
+				}
+			}
+			if ($out != ''){
+				$content = $out;
+			}else{
 				$use_dom = false; // 解析失败则回退正则
 			}
 		}

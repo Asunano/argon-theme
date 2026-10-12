@@ -157,14 +157,20 @@
 	<?php
 		$seo_description = get_seo_description();
 		if ($seo_description != ''){ ?>
+			<?php if (get_option('argon_enable_seo_description', 'true') != 'false'){ ?>
 			<meta name="description" content="<?php echo $seo_description?>">
+			<?php } ?>
 			<meta property="og:description" content="<?php echo $seo_description?>">
 			<meta name="twitter:description" content="<?php echo $seo_description?>">
 	<?php } ?>
 
 	<?php
+		/* 关键词开关只控制 <meta name="keywords"> 本身。
+		   Description 开关同理：只控制 <meta name="description">，
+		   不影响上面的 og:description / twitter:description（那两个属社交元标签，
+		   由 argon_enable_social_meta 管）。 */
 		$seo_keywords = get_seo_keywords();
-		if ($seo_keywords != ''){ ?>
+		if ($seo_keywords != '' && get_option('argon_enable_seo_keywords', 'true') != 'false'){ ?>
 			<meta name="keywords" content="<?php echo $seo_keywords;?>">
 	<?php } ?>
 

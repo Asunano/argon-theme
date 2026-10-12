@@ -597,6 +597,8 @@ function themeoptions_page(){
 						<td>
 							<textarea type="text" rows="5" cols="100" name="argon_seo_description"><?php echo htmlspecialchars(get_option('argon_seo_description')); ?></textarea>
 							<p class="description"><?php _e('设置针对搜索引擎的 Description Meta 标签内容。', 'argon');?><br/><?php _e('在文章中，Argon 会自动根据文章内容生成描述。在其他页面中，Argon 将使用这里设置的内容。如不填，Argon 将不会在其他页面输出 Description Meta 标签。', 'argon');?></p>
+							<label style="margin-top:8px;display:inline-block;"><input type="checkbox" name="argon_enable_seo_description" value="true" <?php $argon_enable_seo_description = get_option('argon_enable_seo_description', 'true'); if ($argon_enable_seo_description!='false'){echo 'checked';}?>/> <?php _e('输出 Description Meta 标签', 'argon');?></label>
+							<p class="description"><?php _e('关闭后不再输出 &lt;meta name="description"&gt;。注意：og:description / twitter:description 属社交元标签，由下方「SEO / OG / Twitter 社交元标签」开关控制，不受此项影响。', 'argon');?></p>
 						</td>
 					</tr>
 					<tr>
@@ -604,6 +606,8 @@ function themeoptions_page(){
 						<td>
 							<input type="text" class="regular-text" name="argon_seo_keywords" value="<?php echo get_option('argon_seo_keywords'); ?>"/>
 							<p class="description"><?php _e('设置针对搜索引擎使用的关键词（Keywords Meta 标签内容）。用英文逗号隔开。不设置则不输出该 Meta 标签。', 'argon');?></p>
+							<label style="margin-top:8px;display:inline-block;"><input type="checkbox" name="argon_enable_seo_keywords" value="true" <?php $argon_enable_seo_keywords = get_option('argon_enable_seo_keywords', 'true'); if ($argon_enable_seo_keywords!='false'){echo 'checked';}?>/> <?php _e('输出 Keywords Meta 标签', 'argon');?></label>
+							<p class="description"><?php _e('关闭后不再输出 &lt;meta name="keywords"&gt;（关键词内容仍保留，重新开启即可恢复）。', 'argon');?></p>
 						</td>
 					</tr>
 					<tr><th class="subtitle"><h2><?php _e('文章', 'argon');?></h2></th></tr>
@@ -2290,7 +2294,9 @@ function argon_update_themeoptions(){
 		argon_update_option('argon_theme_color');
 		argon_update_option_checkbox('argon_show_customize_theme_color_picker');
 		argon_update_option_allow_tags('argon_seo_description');
+		argon_update_option_checkbox('argon_enable_seo_description');
 		argon_update_option('argon_seo_keywords');
+		argon_update_option_checkbox('argon_enable_seo_keywords');
 		argon_update_option_checkbox('argon_enable_structured_data');
 		argon_update_option('argon_enable_mobile_scale');
 		argon_update_option('argon_page_background_url');

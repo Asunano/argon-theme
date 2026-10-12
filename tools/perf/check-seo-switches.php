@@ -53,6 +53,10 @@ function get_option($k, $d = '') {
 }
 function get_seo_description() { return 'DESC-SENTINEL'; }
 function get_seo_keywords() { return 'KW-SENTINEL'; }
+/* 输出端现在统一走 esc_attr / esc_url（转义已从函数内移到输出端），
+   这里给最小实现即可 —— 本测试关心的是「标签是否输出」，不是转义细节。 */
+function esc_attr($s) { return htmlspecialchars((string) $s, ENT_QUOTES, 'UTF-8'); }
+function esc_url($s) { return htmlspecialchars((string) $s, ENT_QUOTES, 'UTF-8'); }
 
 function run_case($opts) {
 	$GLOBALS['__opts'] = $opts;

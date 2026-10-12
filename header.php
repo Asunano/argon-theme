@@ -141,27 +141,52 @@
 	</script>
 	<?php } ?>
 	<!-- SEO / OG / Twitter -->
-	<?php if (get_option('argon_enable_social_meta', 'true') != 'false'){ ?>
 	<?php
+		/* 站点图标与 PWA manifest 与「社交元标签」无关，独立于 argon_enable_social_meta 输出。
+		   原先这两行被包在下面那个 if 里，导致关掉社交元标签会【连带丢掉 PWA manifest】
+		   （实测：关闭后全站 rel="manifest" = 0；favicon 只是被 WP core 自己的输出兜住了，
+		   并非没受影响）。见 docs/SEO与语义标签修复方案.md §3 */
 		$argon_site_icon = get_site_icon_url();
 		if ($argon_site_icon != ''){
 	?>
 	<link rel="icon" href="<?php echo esc_url($argon_site_icon); ?>">
 	<?php } ?>
 	<link rel="manifest" href="<?php echo esc_url(home_url('?argon_manifest=1')); ?>">
-	<meta property="og:site_name" content="<?php echo get_bloginfo('name');?>">
-	<meta property="og:title" content="<?php echo wp_get_document_title();?>">
+
+	<?php if (get_option('argon_enable_social_meta', 'true') != 'false'){ ?>
+	<meta property="og:site_name" content="<?php echo esc_attr(get_bloginfo('name'));?>">
+	<meta property="og:title" content="<?php echo esc_attr(wp_get_document_title());?>">
 	<meta property="og:type" content="<?php echo is_singular() ? 'article' : 'website'; ?>">
-	<meta property="og:url" content="<?php echo home_url(add_query_arg(array(),$wp->request));?>">
-	<meta property="og:locale" content="<?php echo get_locale(); ?>">
 	<?php
+		/* og:url 应与 canonical 一致。
+		   原先用 home_url(add_query_arg(array(), $wp->request)) —— 在【朴素固定链接】下
+		   $wp->request 为空，会退化成首页地址（实测测试站文章页 og:url = 首页，
+		   而 canonical = /?p=1，两者不一致），分享出去的链接会指向首页。 */
+		if (is_singular()){
+			$argon_og_url = get_permalink();
+		}elseif (is_front_page() || is_home()){
+			$argon_og_url = home_url('/');
+		}elseif (is_category() || is_tag() || is_tax() || is_author() || is_post_type_archive()){
+			$argon_og_url = get_pagenum_link(max(1, (int) get_query_var('paged')));
+		}elseif (is_search()){
+			$argon_og_url = get_search_link();
+		}else{
+			$argon_og_url = home_url(add_query_arg(array(), $wp->request));
+		}
+	?>
+	<meta property="og:url" content="<?php echo esc_url($argon_og_url);?>">
+	<meta property="og:locale" content="<?php echo esc_attr(get_locale()); ?>">
+	<?php
+		/* 注意：$seo_description 由 get_seo_description() 返回，那里【不做】转义，
+		   统一在这里 esc_attr()。摘要里若含 " 而未转义，会截断 content="…" 属性。
+		   下面三个标签共用同一个变量，必须一起转义。 */
 		$seo_description = get_seo_description();
 		if ($seo_description != ''){ ?>
 			<?php if (get_option('argon_enable_seo_description', 'true') != 'false'){ ?>
-			<meta name="description" content="<?php echo $seo_description?>">
+			<meta name="description" content="<?php echo esc_attr($seo_description)?>">
 			<?php } ?>
-			<meta property="og:description" content="<?php echo $seo_description?>">
-			<meta name="twitter:description" content="<?php echo $seo_description?>">
+			<meta property="og:description" content="<?php echo esc_attr($seo_description)?>">
+			<meta name="twitter:description" content="<?php echo esc_attr($seo_description)?>">
 	<?php } ?>
 
 	<?php
@@ -171,7 +196,7 @@
 		   由 argon_enable_social_meta 管）。 */
 		$seo_keywords = get_seo_keywords();
 		if ($seo_keywords != '' && get_option('argon_enable_seo_keywords', 'true') != 'false'){ ?>
-			<meta name="keywords" content="<?php echo $seo_keywords;?>">
+			<meta name="keywords" content="<?php echo esc_attr($seo_keywords);?>">
 	<?php } ?>
 
 	<?php
@@ -662,14 +687,20 @@
 	<?php
 		$banner_title = get_option('argon_banner_title') == '' ? get_bloginfo('name') : get_option('argon_banner_title');
 		$enable_banner_title_typing_effect = get_option('argon_enable_banner_title_typing_effect') != 'true' ? "false" : get_option('argon_enable_banner_title_typing_effect');
+		/* 首页（含静态首页）的 banner 站名用 <h1>，其余页面保持 <div>：
+		   首页此前完全没有 h1（banner 站名是 div、#content 里也没有标题），
+		   而文章页的 h1 是文章标题，banner 再出 h1 就会有两个。
+		   注意 banner_size 设为 hide 时本区块【仍然渲染】（只是 <html> 多了 no-banner 类，
+		   由 CSS 隐藏），所以首页在任何配置下都恰好有一个 h1。 */
+		$argon_banner_tag = (is_home() || is_front_page()) ? 'h1' : 'div';
 	?>
 	<div id="banner_container" class="banner-container container text-center">
 		<?php if ($enable_banner_title_typing_effect != "true"){?>
-			<div class="banner-title text-white"><span class="banner-title-inner"><?php echo apply_filters('argon_banner_title_html', $banner_title); ?></span>
-			<?php echo get_option('argon_banner_subtitle') == '' ? '' : '<span class="banner-subtitle d-block">' . get_option('argon_banner_subtitle') . '</span>'; ?></div>
+			<<?php echo $argon_banner_tag; ?> class="banner-title text-white"><span class="banner-title-inner"><?php echo apply_filters('argon_banner_title_html', $banner_title); ?></span>
+			<?php echo get_option('argon_banner_subtitle') == '' ? '' : '<span class="banner-subtitle d-block">' . get_option('argon_banner_subtitle') . '</span>'; ?></<?php echo $argon_banner_tag; ?>>
 		<?php } else {?>
-			<div class="banner-title text-white" data-interval="<?php echo get_option('argon_banner_typing_effect_interval', 100); ?>"><span data-text="<?php echo $banner_title; ?>" class="banner-title-inner">&nbsp;</span>
-			<?php echo get_option('argon_banner_subtitle') == '' ? '' : '<span data-text="' . get_option('argon_banner_subtitle') . '" class="banner-subtitle d-block">&nbsp;</span>'; ?></div>
+			<<?php echo $argon_banner_tag; ?> class="banner-title text-white" data-interval="<?php echo get_option('argon_banner_typing_effect_interval', 100); ?>"><span data-text="<?php echo $banner_title; ?>" class="banner-title-inner">&nbsp;</span>
+			<?php echo get_option('argon_banner_subtitle') == '' ? '' : '<span data-text="' . get_option('argon_banner_subtitle') . '" class="banner-subtitle d-block">&nbsp;</span>'; ?></<?php echo $argon_banner_tag; ?>>
 		<?php }?>
 	</div>
 	<?php if (get_option('argon_banner_background_url') != '') { ?>

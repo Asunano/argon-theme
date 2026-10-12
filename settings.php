@@ -1832,12 +1832,11 @@ window.pjaxLoaded = function(){
 						<input type="checkbox" name="argon_enable_preloader" value="true" <?php $argon_enable_preloader = get_option('argon_enable_preloader'); if ($argon_enable_preloader != 'false'){echo 'checked';}?>/> <?php _e('访问时先显示全屏加载遮罩，待 CSS/JS/字体就绪后再展示内容（消除首屏样式抖动）', 'argon');?>
 					</td>
 				</tr>
-					<tr>
-						<th><label><?php _e('结构化数据 JSON-LD', 'argon');?></label></th>
-						<td>
-							<input type="checkbox" name="argon_enable_structured_data" value="true" <?php $argon_enable_structured_data = get_option('argon_enable_structured_data'); if ($argon_enable_structured_data!='false'){echo 'checked';}?>/> <?php _e('输出 schema.org 结构化数据（Article），利于搜索引擎理解与收录', 'argon');?>
-						</td>
-					</tr>
+					<?php /* 「结构化数据 JSON-LD」开关已移除：主题原先输出的扁平 Article 与
+					        SEO 插件的 @graph 重复，且有两处硬错误（尺寸硬编码、
+					        publisher.logo 误用文章特色图），已整体删除。
+					        结构化数据现由 Rank Math 等 SEO 插件负责。
+					        见 docs/SEO与语义标签修复方案.md §1 */ ?>
 <?php // 实时搜索已改为悬浮窗模式，旧设置已废弃 ?>
 					<tr>
 						<th><label><?php _e('文章级点赞', 'argon');?></label></th>
@@ -2297,7 +2296,7 @@ function argon_update_themeoptions(){
 		argon_update_option_checkbox('argon_enable_seo_description');
 		argon_update_option('argon_seo_keywords');
 		argon_update_option_checkbox('argon_enable_seo_keywords');
-		argon_update_option_checkbox('argon_enable_structured_data');
+		/* argon_enable_structured_data 已废弃（结构化数据交由 SEO 插件），不再保存 */
 		argon_update_option('argon_enable_mobile_scale');
 		argon_update_option('argon_page_background_url');
 		argon_update_option('argon_page_background_dark_url');

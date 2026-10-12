@@ -232,12 +232,17 @@ article h6,
 article strong {
 	font-weight: 600;
 }
-article h1,
-article h2,
-article h3,
-article h4,
-article h5,
-article h6 {
+/* 文章正文内的标题间距。
+   排除 .post-title：它现在可能落在 h1/h2 上（文章主标题 / 列表标题），
+   而这条带 !important 的 18/15px 会盖掉布局专用的间距规则
+   （如 article.post-preview-layout-1 … > .post-title 的 margin-top:15px），
+   造成标题与缩略图/正文之间多出边距。 */
+article h1:not(.post-title),
+article h2:not(.post-title),
+article h3:not(.post-title),
+article h4:not(.post-title),
+article h5:not(.post-title),
+article h6:not(.post-title) {
 	margin-top: 18px !important;
 	margin-bottom: 15px;
 }
@@ -1962,10 +1967,25 @@ html.filter-grayscale {
 	opacity: 0;
 	pointer-events: none;
 }
+/* 文章/页面/列表的标题。
+   标题标签已语义化（文章主标题 → <h1>、列表标题 → <h2> 包裹原来的 <a>），
+   由此带来两处必须在此补回的东西：
+     1) 颜色：原先由 a 规则提供（a{color:var(--themecolor)} /
+        html.darkmode a{color:var(--themecolor-light)}），去掉 <a> 后必须显式补上，
+        否则浅色与暗色模式都会变色（不只是暗色）。
+     2) 外边距：抵消浏览器对 h1/h2 的默认外边距。
+        这里【不加 !important】—— 布局专用规则（如
+        article.post-preview-layout-1 … > .post-title 的 margin-top:15px，
+        特异性 0,4,1）必须仍能生效。
+   注意：有特色图时标题仍是白色，由下面那条带 !important 的
+   .post-header.post-header-with-thumbnail … .post-title 规则负责，不受此处影响。 */
 .post-title {
 	font-size: 26px;
 	letter-spacing: 0.5px;
 	transition: all 0.35s ease;
+	color: var(--themecolor);
+	margin-top: 0;
+	margin-bottom: 0;
 }
 .post-title:hover {
 	letter-spacing: 1px;
@@ -5678,6 +5698,13 @@ html.darkmode a {
 }
 html.darkmode a:hover {
 	color: var(--themecolor);
+}
+/* 标题语义化后，文章主标题不再是 <a>，拿不到上面那条 html.darkmode a 的颜色。
+   特异性 (0,2,1) 高于 html.darkmode h1..h6 的 (0,1,1)，故能盖过 #eee，
+   与原 <a> 时期的 --themecolor-light 保持一致。
+   有特色图时仍由 .post-header…with-thumbnail… .post-title 的 !important 规则接管（白色）。 */
+html.darkmode .post-title {
+	color: var(--themecolor-light);
 }
 
 html.darkmode ::-webkit-scrollbar {

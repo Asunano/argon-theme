@@ -52,7 +52,7 @@ function get_locale() { return 'zh_CN'; }
 function home_url($p = '/') { return 'https://example.com' . ($p === '/' ? '/' : $p); }
 function esc_url($s) { return htmlspecialchars((string) $s, ENT_QUOTES, 'UTF-8'); }
 function esc_attr($s) { return htmlspecialchars((string) $s, ENT_QUOTES, 'UTF-8'); }
-function get_seo_description() { return 'DESC'; }
+function get_seo_description() { return $GLOBALS['__desc'] ?? 'DESC'; }
 function get_seo_keywords() { return 'KW'; }
 function argon_get_social_image() { return ''; }   // 简化：不测 og:image 分支
 function argon_get_image_size($u) { return false; }
@@ -145,6 +145,22 @@ $out = run_case(array(), array('singular' => true));
 chk('name="description" 已转义', strpos($out, 'name="description" content="DESC"') !== false);
 chk('og:description 已转义', strpos($out, 'og:description" content="DESC"') !== false);
 chk('twitter:description 已转义', strpos($out, 'twitter:description" content="DESC"') !== false);
+
+echo "\n=== 转义（P1-2）正向证明：摘要含引号时不得截断属性 ===\n";
+/* 这是本次修复的核心场景：摘要里一个 " 就能把 content="…" 截断。
+   让桩返回含引号与 & 的摘要，断言输出里出现 &quot; / &amp; 且不出现裸引号。 */
+$GLOBALS['__desc'] = '他说"你好" & 再见';
+$out = run_case(array(), array('singular' => true));
+$hasQuot = strpos($out, '&quot;') !== false;
+$hasAmp  = strpos($out, '&amp;') !== false;
+$dblEsc  = strpos($out, '&amp;quot;') !== false || strpos($out, '&amp;amp;') !== false;
+chk('引号被转义为 &quot;', $hasQuot);
+chk('& 被转义为 &amp;', $hasAmp);
+chk('没有二次转义', !$dblEsc);
+/* 关键：属性值里不能出现裸引号（否则会被截断） */
+preg_match_all('/<meta (?:name|property)="(?:description|og:description|twitter:description)" content="([^"]*)"/', $out, $m);
+chk('三个标签都被完整解析出属性值', count($m[1]) === 3, '解析到 ' . count($m[1]) . ' 个');
+$GLOBALS['__desc'] = 'DESC';   // 还原，避免影响后续
 
 echo "\n";
 if ($fail === 0) {

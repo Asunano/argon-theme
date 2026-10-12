@@ -76,10 +76,13 @@
 	<?php }else{ ?>
 	<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5">
 	<?php } ?>
-	<?php /* 字体域名资源提示：加速异步 googlefont 的 DNS/连接建立，减少 FOUT 时长（不影响渲染阻塞） */ ?>
+	<?php /* 字体域名资源提示：仅衬线模式仍会请求 Google（Noto Serif SC）时才需要。
+	         Open Sans 已改为自托管，非衬线模式下这些 preconnect/dns-prefetch 只会白白多开连接。 */ ?>
+	<?php if (argon_get_option('argon_disable_googlefont') != 'true' && get_option('argon_font') == 'serif') { ?>
 	<link rel="preconnect" href="https://fonts.googleapis.com">
 	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 	<link rel="dns-prefetch" href="https://fonts.googleapis.com">
+	<?php } ?>
 	<?php /* 预加载遮罩：关键样式内联，确保首屏瞬时出现、不依赖异步 CSS，避免遮罩自身闪烁 */ ?>
 	<?php if (get_option('argon_enable_preloader') != 'false') { ?>
 	<style>
@@ -221,13 +224,27 @@
 		// 首屏渲染时不会有任何提示气泡出现，故随其他交互态样式一并异步加载。
 		// 下方 style_loader_tag 中以 media=print + onload 方式放行阻塞。
 		wp_enqueue_style("argon-izitoast", $GLOBALS['assets_path'] . "/assets/css/argon-izitoast.css", null, $GLOBALS['theme_version']);
-		// Font Awesome 6（免费版）：all.min.css 提供 solid/regular/brands + 内置 FA4 别名；
-		// v4-shims.min.css 是 FA6 官方 FA4 兼容层（fa-clock-o / fa-send 等旧类名映射），
-		// 后加载覆盖合并包内的 FA4 裁剪版，保证 `fa fa-xxx` 类名全部可用
-		wp_enqueue_style("font-awesome-full", $GLOBALS['assets_path'] . "/assets/vendor/font-awesome6/css/all.min.css", null, $GLOBALS['theme_version']);
-		wp_enqueue_style("font-awesome-shims", $GLOBALS['assets_path'] . "/assets/vendor/font-awesome6/css/v4-shims.min.css", null, $GLOBALS['theme_version']);
+		// Font Awesome 6 子集（同步）：由 tools/font-subset/ 按「全站实际用到的图标类名」生成，
+		// 含 @font-face + 基类/工具类 + FA6 官方 v4 兼容层（fa-clock-o / fa-send 等旧类名）。
+		// 字体同步子集化到同一份码点清单（FA6 三字体 292.6KB -> 13.5KB）。
+		// 原 FA6 全量 CSS（all.min.css 100.6KB + v4-shims 27KB）已裁为 22.5KB，故改为同步加载，
+		// 不再依赖合并包内 FA4 兜底首屏图标（FA4 已整体移除）。
+		// 新增图标后需重跑：gen-codepoints.js -> subset.py -> trim-css.js -> verify.js
+		wp_enqueue_style("font-awesome-subset", $GLOBALS['assets_path'] . "/assets/css/argon-fontawesome.css", null, $GLOBALS['theme_version']);
+		// 网页字体：按「禁用 Google 字体」开关条件加载（关闭 = 完全不下任何网页字体，回退系统字体栈）。
+		// Open Sans 已改为自托管 Latin 子集：单个 47.2KB 可变字体文件覆盖 300/400/600/700 全部字重，
+		// 取代原先向 Google 请求的 6 个子集共 201.4KB，且不再依赖第三方域名。
+		// 放在 style.css 之前，让字体下载尽早开始（@font-face 的可用性与顺序无关，这里只为提前发现）。
+		if (argon_get_option('argon_disable_googlefont') != 'true') {
+			wp_enqueue_style("argon-fonts", $GLOBALS['assets_path'] . "/assets/css/argon-fonts.css", null, $GLOBALS['theme_version']);
+		}
 		wp_enqueue_style("style", $GLOBALS['assets_path'] . "/style.css", null, $GLOBALS['theme_version']);
-		if (argon_get_option('argon_disable_googlefont') != 'true') {wp_enqueue_style("googlefont", "//fonts.googleapis.com/css?family=Open+Sans:300,400,600,700|Noto+Serif+SC:300,600&display=swap");}
+		// 衬线模式仍需要 Noto Serif SC（CJK 字体，体积过大不适合打包进主题）。
+		// 它的 @font-face 占 Google CSS 的绝大部分（raw 220KB / gzip 60.6KB，202 个 face），
+		// 非衬线模式下 use-serif 类不存在、这些字体永远不会被用到 —— 故只在衬线模式请求。
+		if (argon_get_option('argon_disable_googlefont') != 'true' && get_option('argon_font') == 'serif') {
+			wp_enqueue_style("googlefont", "//fonts.googleapis.com/css?family=Noto+Serif+SC:300,600&display=swap");
+		}
 		wp_enqueue_script("argon_js_merged", $GLOBALS['assets_path'] . "/assets/argon_js_merged.js", null, $GLOBALS['theme_version']);
 		/* 条件加载：仅在使用到的功能开启时才请求对应 vendor，降低首屏 JS 体积 */
 		if (argon_get_option('argon_enable_fancybox') != 'false' && argon_get_option('argon_enable_zoomify') == 'false'){

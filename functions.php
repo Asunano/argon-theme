@@ -167,12 +167,15 @@ add_filter('script_loader_tag', function ($tag, $handle) {
 // 保证首屏必定已样式化、绝不出现整页无样式(空白/异常)。预加载遮罩的瞬时出现由
 // 内联样式 + 遮罩自身不依赖外部 CSS 来保证；关键 CSS 渲染阻塞可彻底避免无样式闪烁。
 add_filter('style_loader_tag', function ($tag, $handle) {
-	// ① 字体与图标：首屏主题图标由合并包内 FA4（同步）保证，FA6 仅覆盖/补充
-	//    文章正文用到的更多图标，异步延迟渲染无感知，可省去 ~130KB 首屏阻塞 CSS。
-	if (in_array($handle, array('googlefont', 'font-awesome-full', 'font-awesome-shims'), true)) {
+	// ① 字体：仅 Google Fonts 异步（图标字体已改同步，见下）
+	if (in_array($handle, array('googlefont'), true)) {
 		$deferred = str_replace("media='all'", "media='print' onload=\"this.media='all'\"", $tag);
 		return $deferred . '<noscript>' . $tag . '</noscript>';
 	}
+	// ①b Font Awesome 6 子集（font-awesome-subset）保持【同步】：
+	//     原先 FA6 全量 CSS（all.min.css 100.6KB + v4-shims 27KB）异步，靠合并包内嵌的
+	//     FA4 同步兜底首屏图标。FA4 已整体移除，该兜底不复存在；
+	//     而 FA6 子集裁剪后只有 22.5KB（gzip 3.8KB），同步的代价远小于首屏图标闪烁的风险。
 	// ② 交互态才用到的样式：首屏完全看不到它们负责的内容，同步加载只会白等一个往返。
 	//    实测（archives/873）这三个原本各阻塞 927~1153ms：
 	//      fancybox5       24.7KB 文章灯箱，点击图片时才用到

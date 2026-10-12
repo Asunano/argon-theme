@@ -5626,6 +5626,17 @@ pre.hljs-codeblock.hljs-codeblock-fullscreen .hljs-control-fullscreen > i:before
 	content: "\f066";
 }
 
+/*==========FontAwesome-4-Compat==========*/
+/* 主题已移除 Font Awesome 4（其 CSS 与字体整体删除，FA6 覆盖其余全部类名）。
+   FA6 把 fa-exclamation 重新定义为 ASCII "!"（.fa-exclamation:before{content:"\21"}），
+   而主题的 [alert icon=exclamation] 短代码历史上用的是 FA4 的粗体感叹号字形 \f12a。
+   FA6 的字体文件为 v4 兼容仍保留了 U+F12A 字形，故这里显式覆盖回原码点，
+   保证删除 FA4 后这些 alert 图标的外观与改动前完全一致。
+   本规则须在 argon-fontawesome.css 之后加载（style.css 确实在其后），同特异性后者胜出。 */
+.fa-exclamation::before {
+	content: "\f12a";
+}
+
 /*==========Style-Dark==========*/
 
 html.darkmode body {

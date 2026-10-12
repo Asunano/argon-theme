@@ -49,9 +49,11 @@ jobs:
           THEME=argon-theme
           rm -rf dist-tmp "$THEME.zip"
           mkdir -p "dist-tmp/$THEME"
+          # tools/ 是构建工具链（字体子集化、CSS 裁剪、图标码点生成），仅开发期需要，
+          # 含 FA6 原始字体与全量 CSS 作为构建输入，不进发布包。
           for item in $(ls -A); do
             case "$item" in
-              .git|.github|node_modules|.gitignore|CODE_REVIEW.md|CODEBUDDY.md|README.md|README_en.md|dist-tmp|$THEME.zip)
+              .git|.github|node_modules|.gitignore|tools|CODE_REVIEW.md|CODEBUDDY.md|README.md|README_en.md|dist-tmp|$THEME.zip)
                 continue ;;
             esac
             cp -a "$item" "dist-tmp/$THEME/"
@@ -148,9 +150,11 @@ jobs:
             printf 'run       : https://github.com/%s/actions/runs/%s\n' "$REPO" "$RUN_ID"
           } > DEV-BUILD.txt
           mkdir -p "dist-tmp/$THEME"
+          # tools/ 是构建工具链（字体子集化、CSS 裁剪、图标码点生成），仅开发期需要，
+          # 含 FA6 原始字体与全量 CSS 作为构建输入，不进发布包。
           for item in $(ls -A); do
             case "$item" in
-              .git|.github|node_modules|.gitignore|CODE_REVIEW.md|CODEBUDDY.md|README.md|README_en.md|dist-tmp|$THEME.zip)
+              .git|.github|node_modules|.gitignore|tools|CODE_REVIEW.md|CODEBUDDY.md|README.md|README_en.md|dist-tmp|$THEME.zip)
                 continue ;;
             esac
             cp -a "$item" "dist-tmp/$THEME/"

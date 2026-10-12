@@ -198,7 +198,8 @@ async function fetchWpContent(site) {
   }
 
   // ── 解析 FA6 CSS ────────────────────────────────────────────────────────
-  const fa6Dir = path.join(THEME, 'assets', 'vendor', 'font-awesome6', 'css');
+  // 构建输入：FA6 官方 all.min.css + v4-shims.min.css（不随主题发布，见 trim-css.js）
+  const fa6Dir = path.join(__dirname, 'original');
   const allMap = classMap(path.join(fa6Dir, 'all.min.css'));
   const shimMap = classMap(path.join(fa6Dir, 'v4-shims.min.css'));
 

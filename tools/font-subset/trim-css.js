@@ -26,7 +26,10 @@ const arg = (n, d) => { const i = argv.indexOf('--' + n); return i >= 0 && argv[
 
 const HERE = __dirname;
 const THEME = path.resolve(HERE, '..', '..');
-const VENDOR = path.join(THEME, 'assets', 'vendor', 'font-awesome6', 'css');
+// 输入：FA6 官方的 all.min.css + v4-shims.min.css。
+// 这两个文件已不随主题发布（主题只加载裁剪产物 argon-fontawesome.css），
+// 故移入 original/ 作为构建输入，避免 127.6KB 死重量打进发布包。
+const VENDOR = path.resolve(arg('vendor', path.join(HERE, 'original')));
 const CLASSES = path.resolve(arg('classes', path.join(HERE, 'classes.txt')));
 const OUT = path.resolve(arg('out', path.join(THEME, 'assets', 'css', 'argon-fontawesome.css')));
 

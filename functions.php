@@ -496,13 +496,44 @@ function argon_has_post_thumbnail($postID = 0){
 	}
 	return false;
 }
+//不再生成 srcset 专用的三档尺寸
+/* 主题在 argon_lazyload() 里会【移除正文图片的 srcset】（懒加载需要，避免浏览器提前拉图），
+   而 WordPress 5.3 起额外生成的 768 / 1536 / 2048 三档，基本只为 srcset 服务 ——
+   在「永远不带 srcset」的本主题下它们从设计上就不会被请求，纯属白占磁盘。
+   这里把它们从待生成的尺寸里摘掉。
+   注意：
+     · 只影响【之后上传】的图片，已存在的文件不会被删除，也不会被回填；
+       想清理历史文件需要另外跑一次缩略图重建（或手动清理）。
+     · medium_large(768) 虽然本主题不用，但编辑器与部分插件可能按名字取用；
+       若站上有这类依赖，把 'medium_large' 从下面的数组里去掉即可。
+     · 这里只做减法，不新增任何尺寸；也不动 thumbnail(150) ——
+       argon_ajax_live_search 正在用它。 */
+add_filter('intermediate_image_sizes_advanced', function($sizes){
+	foreach (array('medium_large', '1536x1536', '2048x2048') as $unused){
+		unset($sizes[$unused]);
+	}
+	return $sizes;
+});
+
 function argon_get_post_thumbnail($postID = 0){
 	if ($postID == 0){
 		global $post;
 		$postID = $post -> ID;
 	}
 	if (has_post_thumbnail()){
-		return apply_filters("argon_post_thumbnail", wp_get_attachment_image_src(get_post_thumbnail_id($postID), "full")[0]);
+		/* 用 large（1024 宽）而不是 full。
+		   这个函数服务于卡片、时间线、文章头图、页面头图与相关文章 ——
+		   它们最宽也只显示到约 941px，取 full 等于让浏览器下载原始大图：
+		   实测首页 11 张卡片头图合计 6.27 MiB，其中 #1535 那张
+		   149087630_p0.webp 是 4000×2333 / 6.01 MiB，而卡片只显示 941px 宽。
+		   改 large 后单张降到 1024 宽，首页头图体积降到 1~2 MiB 量级。
+		   wp_get_attachment_image_src 在 large 不存在时会自动回退到 full，
+		   所以小图不受影响；这里再兜一层，避免附件无图时 false[0] 报警。 */
+		$src = wp_get_attachment_image_src(get_post_thumbnail_id($postID), "large");
+		if (!$src){
+			$src = wp_get_attachment_image_src(get_post_thumbnail_id($postID), "full");
+		}
+		return apply_filters("argon_post_thumbnail", $src ? $src[0] : "");
 	}
 	return apply_filters("argon_post_thumbnail", argon_get_first_image_of_article());
 }

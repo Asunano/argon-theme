@@ -341,15 +341,15 @@ function __(text){
 	let maxOpacity = 0.85;
 
 	/* —— 毛玻璃参数 ——
-	   原来只有两档：进度 < 0.3 时 blur(0px)，>= 0.3 时直接跳到 blur(16px)，
-	   中间没有任何过渡，所以观感很突兀。现在按滚动进度【连续插值】：
-	     · 模糊半径 0 → maxBlur
-	     · 饱和度   100% → maxSaturate（顺带提饱和度能让玻璃后的颜色不发灰，
-	       这是毛玻璃质感的关键；只加 blur 会显得糊而脏）
-	   半径量化到整像素：既让变化足够细，又不至于每个滚动事件都重绘一遍模糊。 */
-	const maxBlur = 14;
-	const MIN_SATURATE = 100;
-	const MAX_SATURATE = 180;
+	   设计要点（上一版是 0 → 14px 连续插值，仍然偏「从无到有」，割裂感明显）：
+	     · 起点就有 BLUR_STEPS[0] 的底噪模糊，而不是从 0 起 ——
+	       「无模糊 → 有模糊」那一下最刺眼，起始带一点模糊后，后面的变化只是「加深」；
+	     · 模糊分 5 / 10 / 15 三档步进，而不是连续 1px 爬升 ——
+	       档位少、单次变化大，但每档之间由 CSS transition 补间（见 style.css），
+	       观感上是平滑推进，同时把重绘次数压到最低；
+	     · 饱和度随档位一起抬升，避免玻璃后的画面发灰。 */
+	const BLUR_STEPS = [5, 10, 15];
+	const SATURATE_STEPS = [120, 150, 180];
 	/* 没有 banner 时没有「banner→内容」的区间可用，用一个固定滚动距离做过渡 */
 	const NO_BANNER_RANGE = 120;
 	let lastBlurKey = "";
@@ -364,16 +364,18 @@ function __(text){
 		}else if (progress > 1){
 			progress = 1;
 		}
-		let blur = Math.round(maxBlur * progress);
-		let saturate = Math.round(MIN_SATURATE + (MAX_SATURATE - MIN_SATURATE) * progress);
-		let key = blur + "/" + saturate;
+		/* 把 0~1 的进度映射到 0~N-1 的档位 */
+		let level = Math.min(BLUR_STEPS.length - 1, Math.floor(progress * BLUR_STEPS.length));
+		let key = String(level);
 		if (key === lastBlurKey){
-			return;   /* 值没变就不碰样式，省掉无谓的重绘 */
+			return;   /* 档位没变就不碰样式，省掉无谓的重绘 */
 		}
 		lastBlurKey = key;
-		let value = "blur(" + blur + "px) saturate(" + saturate + "%)";
+		let value = "blur(" + BLUR_STEPS[level] + "px) saturate(" + SATURATE_STEPS[level] + "%)";
 		toolbar.style.setProperty("backdrop-filter", value);
 		toolbar.style.setProperty("-webkit-backdrop-filter", value);
+		/* 下沿的渐变过渡带跟着同一进度淡入，把顶栏与正文的硬边界化开 */
+		toolbar.style.setProperty("--argon-navbar-scrim", String(level / (BLUR_STEPS.length - 1)));
 	}
 
 	/* 先判定是否开启毛玻璃 —— 必须放在 no-banner 分支之前，

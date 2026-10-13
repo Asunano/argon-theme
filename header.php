@@ -521,9 +521,19 @@
 		setTimeout(function(){ if (el && el.parentNode) el.parentNode.removeChild(el); }, 2100);
 	}
 	var start = Date.now();
-	var fontsReady = (document.fonts && document.fonts.ready) ? document.fonts.ready : Promise.resolve();
-	// 最短可见时长(正常 600ms)；主结束时机仍是资源(JS/CSS)加载完毕
-	var minVisible = 600;
+	/* 字体就绪 —— 但必须【加超时】。
+	   document.fonts.ready 在字体慢或 CDN 抖动时会一直挂着，
+	   那样遮罩会把整页（包括已经就位的骨架屏）一直盖住，
+	   最坏要等下面那个 10s 兜底才消失。 */
+	var FONT_TIMEOUT = 1500;
+	var fontsReady = (document.fonts && document.fonts.ready)
+		? Promise.race([document.fonts.ready, new Promise(function(res){ setTimeout(res, FONT_TIMEOUT); })])
+		: Promise.resolve();
+	/* 最短可见时长：只留一点点，避免样式刚应用就闪一下。
+	   关闭的主条件已经变成「骨架屏已就位（DOMContentLoaded + 样式表就绪） + 字体就绪」，
+	   不再固定等 600ms —— 快网下那 600ms 会把骨架屏 / LQIP 白白压住，
+	   而它们正是用来填补「遮罩退场之后、图片还没下完」那段时间的。 */
+	var minVisible = 150;
 	function minDelay(){ return new Promise(function(res){ setTimeout(res, Math.max(0, minVisible - (Date.now() - start))); }); }
 	// 等待所有样式表加载完成（合并 JS 为解析阻塞脚本，已在 DOMContentLoaded 前执行完毕）
 	function stylesheetsReady(){
@@ -537,7 +547,9 @@
 		}
 		return Promise.all(pending);
 	}
-	// 结束时机：DOMContentLoaded(JS+CSS 已就绪) + 样式表加载 + 字体就绪 + 最短可见时长，随后带模糊淡出
+	/* 关闭时机：DOMContentLoaded（骨架屏的 HTML 已解析）+ 样式表就绪（骨架屏样式已生效）
+	   + 字体就绪（或超时）+ 极短的最短可见时长，随后带模糊淡出。
+	   刻意【不等图片】—— 遮罩退场之后正是骨架屏 / LQIP 接手的那段时间。 */
 	function ready(){ Promise.all([stylesheetsReady(), fontsReady, minDelay()]).then(hide); }
 	if (document.readyState === 'loading') {
 		document.addEventListener('DOMContentLoaded', ready);

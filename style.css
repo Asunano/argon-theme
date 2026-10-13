@@ -2140,26 +2140,60 @@ html.darkmode .post-thumbnail.no-lqip {
 }
 /* —— 正文图片的 LQIP 占位 ——
    与缩略图同一套机制：argon_lazyload() 把 32px 小图挂到元素自身的 background-image 上
-   （见 functions.php），这里只负责「加载中模糊、到位后清晰」。
-   正文图尺寸不一、又常与文字混排，所以 blur 用得更轻 ——
-   32px 小图放大后本身就偏软，不需要太重的模糊。 */
+   （见 functions.php），这里负责「加载中 → 到位后」的过渡。
+
+   过渡用 filter: blur() —— 加载中整个元素是模糊的（此时显示的是 LQIP 背景），
+   清晰图到位后归零，观感是「从模糊变清晰」而不是硬切。
+   代价可控：模糊只在加载期间存在，且 blur 值取得小（正文图尺寸大）。
+   注意不能改用 opacity —— LQIP 是元素【自己的背景】，淡出会把背景一起淡掉。
+
+   尺寸稳定性靠两件事（都在 functions.php 里写进内联样式）：
+   · aspect-ratio 锁定真实比例（占位图是 1×1 的 SVG，其固有比例会盖掉 width/height 属性）；
+   · width: min(100%, 自然宽) 让占位阶段的宽度精确等于最终宽度。 */
 article img.lazyload.has-lqip,
 .wp-block-image img.lazyload.has-lqip {
 	background-size: cover;
 	background-position: center center;
 	background-repeat: no-repeat;
-	transition: filter 0.45s ease, opacity 0.35s ease;
+	transition: filter 0.45s ease;
 }
 article img.lazyload.has-lqip:not(.lazyload-loaded),
 .wp-block-image img.lazyload.has-lqip:not(.lazyload-loaded) {
-	filter: blur(6px);
+	filter: blur(8px);
 }
 @media (prefers-reduced-motion: reduce) {
 	article img.lazyload.has-lqip,
 	.wp-block-image img.lazyload.has-lqip {
-		transition: opacity 0.2s linear;
+		transition: none;
 		filter: none;
 	}
+}
+/* 宽高比预留：只在没写死高度时生效，不干扰作者自定义尺寸 */
+article img.lazyload,
+.wp-block-image img.lazyload {
+	height: auto;
+}
+/* —— 关键：覆盖主题给懒加载图写死的 height: 500px ——
+   主题上面那段「LazyLoad 加载样式」是
+     article img.lazyload[src^="data:image/svg+xml;base64,PCEtLUFyZ29u…"]:not([srcset]) { height: 500px }
+   （特异性 0,4,1）—— 它把【所有】加载中的正文图都压成 500px 高，
+   不管真实宽高比是多少。图片一到就整段重排，观感就是「正文抽搐」；
+   占位背景（cover）也被裁进一个 100%×500 的框里，看起来「尺寸取错了」。
+
+   那是给「不知道尺寸」的图用的兜底。现在 argon_lazyload() 已经从附件元数据
+   补上了 width/height，所以【只要有宽高属性】就按真实比例预留，
+   固定 500px 只在拿不到宽高时才生效。
+
+   注意特异性必须压过上面那条：article(1) + img(1) + .lazyload(1)
+   + [width](1) + [height](1) + [src^](1) + :not([srcset])(1) = 0,6,1 > 0,4,1。 */
+article img.lazyload[width][height][src^="data:image/svg+xml;base64,PCEtLUFyZ29uTG9hZGluZy0tPg"]:not([srcset]),
+.wp-block-image img.lazyload[width][height][src^="data:image/svg+xml;base64,PCEtLUFyZ29uTG9hZGluZy0tPg"]:not([srcset]) {
+	height: auto;
+	/* max-height 也要放开：主题那条把它压到 60vh，
+	   而图片加载完之后该规则就不再匹配（src 变了），高度会跳一次。
+	   预留阶段就和最终一致，才真的不跳。
+	   （图片本身的尺寸限制由 .post-content img 的 max-width:100% 负责。） */
+	max-height: none;
 }
 /* 正文图没有 LQIP 时用一块中性底色兜底（同样不扫光） */
 article img.lazyload.no-lqip:not(.lazyload-loaded),

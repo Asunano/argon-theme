@@ -2648,18 +2648,24 @@ function lazyloadInit(){
 	if (lazyBaseOptions.effect == "none"){
 		delete lazyBaseOptions.effect;
 	}
-	$("article img.lazyload:not(.lazyload-loaded) , .related-post-thumbnail.lazyload:not(.lazyload-loaded) , .shuoshuo-preview-container img.lazyload:not(.lazyload-loaded)").lazyload(
-		Object.assign({}, lazyBaseOptions, {
-			load: function () {
-				$(this).addClass("lazyload-loaded");
-				$(this).parent().removeClass("lazyload-container-unload");
-				/*表格内懒加载图片加载后会使 border-collapse 重排变细，强制修复*/
-				if ($(this).closest("table, .wp-block-table").length){
-					tableReflow();
-				}
+	/* 正文图片也【不用 fadeIn】——
+	   jQuery 的 fadeIn 会把元素 display:none → block 并从 opacity:0 动画到 1，
+	   那段时间元素【连同它自己的 LQIP 背景】完全不可见 ——
+	   正文里就会露一下底色再淡入，观感是「抽搐/抖一下」。
+	   （只给缩略图关掉是不够的，正文图走的是同一个 lazyBaseOptions。）
+	   过渡交给 CSS：加载中 filter: blur()，到位后归零，从模糊变清晰。 */
+	var contentOptions = Object.assign({}, lazyBaseOptions, {
+		load: function () {
+			$(this).addClass("lazyload-loaded");
+			$(this).parent().removeClass("lazyload-container-unload");
+			/*表格内懒加载图片加载后会使 border-collapse 重排变细，强制修复*/
+			if ($(this).closest("table, .wp-block-table").length){
+				tableReflow();
 			}
-		})
-	);
+		}
+	});
+	delete contentOptions.effect;
+	$("article img.lazyload:not(.lazyload-loaded) , .related-post-thumbnail.lazyload:not(.lazyload-loaded) , .shuoshuo-preview-container img.lazyload:not(.lazyload-loaded)").lazyload(contentOptions);
 	/* 缩略图【不用 fadeIn】——
 	   jQuery 的 fadeIn 会把元素 display:none → block 并从 opacity:0 动画到 1，
 	   那段时间元素完全不可见：既看不到 LQIP 背景，也看不到清晰图，
@@ -2766,6 +2772,7 @@ if ($("html").hasClass("banner-as-cover")){
 
 /*Pjax*/
 var pjaxScrollTop = 0, pjaxLoading = false;
+/* FLIP 飞入用：换页前记下被点卡片的 id 与位置，换页后在新 DOM 里找到它再飞。
 /*Pjax 换页后表格 border-collapse 重排：懒加载图片加载或 Web 字体(FOUT)就绪都会使
   折叠边框按子像素重绘，偶发变细/缺失；强制一次同步重排可修复（纯 CSS 无法自愈）*/
 function tableReflow(){
@@ -2804,7 +2811,13 @@ $(document).pjax("a[href]:not([no-pjax]):not(.no-pjax):not([target='_blank']):no
 	NProgress.start();
 	pjaxLoading = true;
 }).on('pjax:afterGetContainers', function(e, f, g) {
-	if (g.is("#main article.post-preview a.post-title")){
+	/* 选择器必须同时匹配两种标记：
+	     · 现在的：<h2 class="post-title"><a href>…</a></h2>   —— 类在 h2 上，a 是后代
+	     · 上游的：<a class="post-title">…</a>                 —— 类在 a 上
+	   标题语义化（列表标题包进 <h2>，见 SEO 那批改动）把类从 <a> 移到了 <h2>，
+	   而这里原来只判 `a.post-title`，于是【进入动画从此完全不触发】。
+	   其余逻辑保持与上游一致 —— 不要在这里自己发明新的动画。 */
+	if (g.is("#main article.post-preview .post-title a") || g.is("#main article.post-preview a.post-title")){
 		let $card = $(g.parents("article.post-preview")[0]);
 		let waterflowOn = false;
 		if ($("#main").hasClass("waterflow")){
@@ -2818,6 +2831,12 @@ $(document).pjax("a[href]:not([no-pjax]):not(.no-pjax):not([target='_blank']):no
 		if ($("html").hasClass("is-home") && $("html").hasClass("banner-as-cover")){
 			offsetTop = $($card).offset().top - window.outerHeight * 0.418;
 		}
+		/* 这里的位移是【给旧卡片看的】：请求期间把被点的卡片挪到列表顶部，
+		   .post-list-pjax-loading 再把其余卡片压成透明 ——
+		   给用户的即时反馈就是「列表收拢 + 点动画」。
+		   新内容到位时整片 DOM 会被替换，所以不需要在这里收尾。
+		   注意：.card 上有 animation: card-show，CSS 动画会覆盖普通内联声明，
+		   所以这条 transform 实际上不会生效 —— 上游也是这个行为，保持不动。 */
 		$card.css("transform" , "translateY(-" + offsetTop + "px)");
 		if (waterflowOn){
 			$card.css("left", "10px");
@@ -2849,6 +2868,13 @@ $(document).pjax("a[href]:not([no-pjax]):not(.no-pjax):not([target='_blank']):no
 }).on('pjax:complete', function() {
 	pjaxLoading = false;
 	NProgress.inc();
+	/* 兜底清理：请求期间加在列表上的类。
+	   .post-list-pjax-loading .post-preview 是 opacity:0 + pointer-events:none，
+	   正常随 DOM 替换一起消失；但若某次替换没发生（请求失败、被中断等），
+	   留着会让整个列表永久隐身且点不动。上游没有这一步，属于防御性补充。 */
+	$("#main").removeClass("post-list-pjax-loading");
+	$("#main article.post-preview").removeClass("post-pjax-loading");
+	$("#main .loading-css-animation").remove();
 	try{
 		if (MathJax != undefined){
 			if (MathJax.Hub != undefined){

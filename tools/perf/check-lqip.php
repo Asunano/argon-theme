@@ -87,10 +87,10 @@ function extract_fn($src, $name) {
 	return $j === null ? '' : substr($src, $i, $j - $i + 1);
 }
 $fns = '';
-foreach (array('argon_generate_lqip', 'argon_get_lqip_data_uri', 'argon_render_post_thumbnail', 'argon_get_post_lqip', 'argon_get_lqip_for_img_src') as $n) {
+foreach (array('argon_generate_lqip', 'argon_get_lqip_data_uri', 'argon_render_post_thumbnail', 'argon_get_post_lqip', 'argon_get_img_meta_for_src', 'argon_get_lqip_for_img_src') as $n) {
 	$fns .= extract_fn($src, $n) . "\n";
 }
-chk('五个函数都抽到了', substr_count($fns, 'function ') === 5, '抽到 ' . substr_count($fns, 'function '));
+chk('六个函数都抽到了', substr_count($fns, 'function ') === 6, '抽到 ' . substr_count($fns, 'function '));
 eval($fns);
 
 echo "\n  场景 A：附件不在本地（get_attached_file 返回空）→ 应返回空串\n";
@@ -210,11 +210,14 @@ $tmp3 = sys_get_temp_dir() . '/argon-lqip-test3-' . getmypid();
 $orig3 = $tmp3 . '/photo.jpg';
 file_put_contents($orig3, str_repeat('Z', 4000));
 $GLOBALS['__files'] = array('attached:21' => $orig3);
-$GLOBALS['__meta'] = array(21 => array('sizes' => array()));
+$GLOBALS['__meta'] = array(21 => array('sizes' => array(), 'width' => 1200, 'height' => 675));
 $GLOBALS['__editor_ok'] = true;
 $GLOBALS['__editor_calls'] = 0;
 $r = argon_get_lqip_for_img_src('https://example.com/wp-content/uploads/2026/10/photo.jpg');
 chk('原图 URL 能查到附件并生成 LQIP', strpos($r, 'data:image/jpeg;base64,') === 0, substr($r, 0, 30));
+$metaG = argon_get_img_meta_for_src('https://example.com/wp-content/uploads/2026/10/photo.jpg');
+chk('同时返回了宽高（用于预留空间）', $metaG[1] > 0 && $metaG[2] > 0, $metaG[1] . 'x' . $metaG[2]);
+chk('宽高与附件元数据一致（不是缩略图尺寸）', $metaG[1] === 1200 && $metaG[2] === 675, $metaG[1] . 'x' . $metaG[2]);
 chk('确实生成了（不是空串）', $r !== '');
 
 echo "\n  场景 G2：带尺寸后缀的 URL 也能反查到同一附件\n";

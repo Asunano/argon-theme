@@ -668,32 +668,54 @@ function argon_render_post_thumbnail($thumbnail_url, $lazyload = true){
 	}
 }
 
-/* 给正文里的一张 <img> 找对应的附件 LQIP。
+/* 给正文里的一张 <img> 找对应的附件，返回 array(lqip, width, height)。
    正文图片是用户上传的，src 可能是任意尺寸变体，所以先按 URL 反查附件 ID；
-   attachment_url_to_postid 自带查询缓存，代价可控。 */
-function argon_get_lqip_for_img_src($src){
+   attachment_url_to_postid 自带查询缓存，代价可控。
+
+   为什么要一并拿宽高：正文图尺寸五花八门，若没有宽高，浏览器在图片到达前
+   按占位图（1×1）算高度，图片一到就整段重排 —— 观感就是「正文抽搐」。
+   补上 width/height 后，浏览器能按宽高比【提前预留】正确的空间，
+   不同尺寸的图都能稳住，这是通用解。 */
+function argon_get_img_meta_for_src($src){
 	if ($src == '' || strpos($src, 'data:') === 0){
-		return '';
+		return array('', 0, 0);
 	}
 	static $cache = array();
 	/* 去掉 -1024x576 这类尺寸后缀，拿原图 URL 去查 */
 	$base = preg_replace('/-\d+x\d+(\.[a-zA-Z0-9]+)$/', '$1', $src);
-	$key = $base;
-	if (isset($cache[$key])){
-		return $cache[$key];
+	if (isset($cache[$base])){
+		return $cache[$base];
 	}
-	$cache[$key] = '';
+	$cache[$base] = array('', 0, 0);
 	if (!function_exists('attachment_url_to_postid')){
-		return '';
+		return $cache[$base];
 	}
 	$id = attachment_url_to_postid($base);
 	if (!$id){
 		$id = attachment_url_to_postid($src);
 	}
-	if ($id){
-		$cache[$key] = argon_get_lqip_data_uri($id);
+	if (!$id){
+		return $cache[$base];
 	}
-	return $cache[$key];
+	$w = 0; $h = 0;
+	$meta = wp_get_attachment_metadata($id);
+	if (is_array($meta) && !empty($meta['width']) && !empty($meta['height'])){
+		$w = (int) $meta['width'];
+		$h = (int) $meta['height'];
+		/* 正文里用的往往是某个尺寸变体，宽高比一致，但用变体的实际像素更准确 */
+		if (preg_match('/-(\d+)x(\d+)\.[a-zA-Z0-9]+$/', $src, $m)){
+			$w = (int) $m[1];
+			$h = (int) $m[2];
+		}
+	}
+	$cache[$base] = array(argon_get_lqip_data_uri($id), $w, $h);
+	return $cache[$base];
+}
+
+/* 兼容旧调用点：只要 LQIP */
+function argon_get_lqip_for_img_src($src){
+	$m = argon_get_img_meta_for_src($src);
+	return $m[0];
 }
 
 
@@ -3213,16 +3235,42 @@ function argon_lazyload($content){
 				$img->removeAttribute('srcset'); // 移除 srcset，避免浏览器提前加载
 				$existing_class = $img->getAttribute('class');
 				/* 正文图片也给 LQIP 占位：拿 data-original 反查附件，取它的 32px 小图，
-				   作为元素自身的 background-image。加载中由 CSS 叠一层 blur，
+				   作为元素自身的 background-image。加载中由 CSS 叠一层模糊，
 				   清晰图到位后 blur 归零 —— 与卡片缩略图完全同一套机制。 */
 				$lqip_src = $img->getAttribute('data-original');
-				$lqip = $lqip_src != '' ? argon_get_lqip_for_img_src($lqip_src) : '';
+				$meta = $lqip_src != '' ? argon_get_img_meta_for_src($lqip_src) : array('', 0, 0);
+				$lqip = $meta[0];
 				$lqip_class = $lqip != '' ? ' has-lqip' : ' no-lqip';
 				if ($lqip != ''){
 					$style = trim($img->getAttribute('style'));
 					if ($style != '' && substr($style, -1) != ';'){ $style .= ';'; }
 					$style .= "background-image:url('" . esc_attr($lqip) . "');background-size:cover;background-position:center;";
-					$img->setAttribute('style', $style);
+				}
+				/* 【通用解：给不同尺寸的正文图锁定真实宽高比】
+				   只写 width/height 属性是不够的 —— 那两个属性只在图片「不可用」时
+				   才用来推算比例；而这里的占位图是 1×1 的 SVG，一旦它加载完，
+				   浏览器就改用【它的固有比例 1:1】，框立刻变成正方形，
+				   再被主题的 max-height:60vh 一压，所有图都变成同一个高度；
+				   真实图到达、比例一变，整段就重排 —— 观感就是「正文抽搐」。
+				   aspect-ratio 优先于固有比例，所以显式写上它就锁住了。
+
+				   宽度也要一起锁：主题那条占位规则给的是 width:100%，
+				   而图片加载完之后该规则不再匹配（src 变了），宽度退回 auto ——
+				   比容器窄的图会突然缩回自然宽度，照样跳。
+				   最终宽度正好是 min(容器宽, 自然宽)，所以这里用 CSS min() 精确表达，
+				   占位阶段与最终状态逐像素一致。 */
+				if ($meta[1] > 0 && $meta[2] > 0){
+					$style .= 'width:min(100%,' . (int) $meta[1] . 'px);'
+						. 'aspect-ratio:' . (int) $meta[1] . ' / ' . (int) $meta[2] . ';';
+					if ($img->getAttribute('width') == ''){
+						$img->setAttribute('width', (string) $meta[1]);
+					}
+					if ($img->getAttribute('height') == ''){
+						$img->setAttribute('height', (string) $meta[2]);
+					}
+					if ($style != ''){
+						$img->setAttribute('style', $style);
+					}
 				}
 				$img->setAttribute('class', trim('lazyload ' . $lazyload_loading_style . $lqip_class . ' ' . $existing_class));
 				$img->setAttribute('src', 'data:image/svg+xml;base64,PCEtLUFyZ29uTG9hZGluZy0tPgo8c3ZnIHdpZHRoPSIxIiBoZWlnaHQ9IjEiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIgc3Ryb2tlPSIjZmZmZmZmMDAiPjxnPjwvZz4KPC9zdmc+');
@@ -3245,11 +3293,21 @@ function argon_lazyload($content){
 			   机制与 DOM 分支一致：拿 src 反查附件，把小图挂到元素背景上。 */
 			$content = preg_replace_callback('/<img(.*?)src=[\'"](.*?)[\'"](.*?)((\/>)|(<\/img>))/i', function($m) use ($lazyload_loading_style){
 				$src = $m[2];
-				$lqip = argon_get_lqip_for_img_src($src);
+				$meta = argon_get_img_meta_for_src($src);
+				$lqip = $meta[0];
 				$cls = 'lazyload ' . $lazyload_loading_style . ($lqip != '' ? ' has-lqip' : ' no-lqip');
-				$style = $lqip != '' ? " style=\"background-image:url('" . esc_attr($lqip) . "');background-size:cover;background-position:center;\"" : '';
+				$style = $lqip != '' ? "background-image:url('" . esc_attr($lqip) . "');background-size:cover;background-position:center;" : '';
+				/* 与 DOM 分支一致：补宽高，并用 aspect-ratio 锁定真实比例
+				   （占位图是 1×1 的 SVG，它的固有比例会盖掉 width/height 属性）。 */
+				$wh = '';
+				if ($meta[1] > 0 && $meta[2] > 0){
+					if (!preg_match('/\swidth=/i', $m[1])){ $wh .= ' width="' . (int) $meta[1] . '"'; }
+					if (!preg_match('/\sheight=/i', $m[1])){ $wh .= ' height="' . (int) $meta[2] . '"'; }
+					$style .= 'width:min(100%,' . (int) $meta[1] . 'px);'
+						. 'aspect-ratio:' . (int) $meta[1] . ' / ' . (int) $meta[2] . ';';
+				}
 				$ph = 'data:image/svg+xml;base64,PCEtLUFyZ29uTG9hZGluZy0tPgo8c3ZnIHdpZHRoPSIxIiBoZWlnaHQ9IjEiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PC9zdmc+';
-				return '<img' . $m[1] . 'data-original="' . $src . '" class="' . $cls . '" src="' . $ph . '"' . $style . ' ' . $m[4];
+				return '<img' . $m[1] . 'data-original="' . $src . '" class="' . $cls . '"' . $wh . ' src="' . $ph . '"' . ($style != '' ? ' style="' . $style . '"' : '') . ' ' . $m[4];
 			}, $content);
 			$content = preg_replace('/<img(.*?)data-full-url=[\'"]([^\'"]+)[\'"](.*)>/i',"<img$1data-full-url=\"$2\" data-original=\"$2\"$3>" , $content);
 			$content = preg_replace('/<img(.*?)srcset=[\'"](.*?)[\'"](.*?)>/i',"<img$1$3>" , $content);

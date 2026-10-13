@@ -1963,6 +1963,13 @@ html.filter-grayscale {
 .post-preview.post-pjax-loading {
 	opacity: 1 !important;
 }
+/* FLIP 飞入期间禁掉 .card 的 card-show 动画。
+   CSS 动画会覆盖【普通内联声明】，而飞入正是靠内联 transform 实现的 ——
+   不禁掉的话内联 transform 被完全压掉，飞入永远不生效。 */
+.post-preview.post-pjax-flip {
+	animation: none;
+	transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
 .post-list-pjax-loading .post-preview {
 	opacity: 0;
 	pointer-events: none;
@@ -2140,26 +2147,25 @@ html.darkmode .post-thumbnail.no-lqip {
 }
 /* —— 正文图片的 LQIP 占位 ——
    与缩略图同一套机制：argon_lazyload() 把 32px 小图挂到元素自身的 background-image 上
-   （见 functions.php），这里只负责「加载中模糊、到位后清晰」。
-   正文图尺寸不一、又常与文字混排，所以 blur 用得更轻 ——
-   32px 小图放大后本身就偏软，不需要太重的模糊。 */
+   （见 functions.php），这里只负责「加载中 → 到位后」的呈现。
+
+   正文图【不加 blur】：一张 1200px 宽的图做 filter: blur() 很贵，
+   滚动时每帧都要重算，实测观感就是「正文抽搐」。
+   而 32px 小图放大到正文尺寸本身就足够软，不需要再叠模糊。
+
+   尺寸稳定性靠另一件事：argon_lazyload() 会给缺宽高的正文图补上
+   width/height（从附件元数据取），配合下面的 height: auto，
+   浏览器能按宽高比【提前预留】空间 —— 不同尺寸的图都不会引起重排。 */
 article img.lazyload.has-lqip,
 .wp-block-image img.lazyload.has-lqip {
 	background-size: cover;
 	background-position: center center;
 	background-repeat: no-repeat;
-	transition: filter 0.45s ease, opacity 0.35s ease;
 }
-article img.lazyload.has-lqip:not(.lazyload-loaded),
-.wp-block-image img.lazyload.has-lqip:not(.lazyload-loaded) {
-	filter: blur(6px);
-}
-@media (prefers-reduced-motion: reduce) {
-	article img.lazyload.has-lqip,
-	.wp-block-image img.lazyload.has-lqip {
-		transition: opacity 0.2s linear;
-		filter: none;
-	}
+/* 宽高比预留：只在没写死高度时生效，不干扰作者自定义尺寸 */
+article img.lazyload,
+.wp-block-image img.lazyload {
+	height: auto;
 }
 /* 正文图没有 LQIP 时用一块中性底色兜底（同样不扫光） */
 article img.lazyload.no-lqip:not(.lazyload-loaded),

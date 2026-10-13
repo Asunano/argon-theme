@@ -38,11 +38,13 @@ $block = substr($src, $start, $endMark - $start);
 /* argon_lazyload() 现在还会给正文图片挂 LQIP 背景（argon_get_lqip_for_img_src），
    这里桩掉它，返回一个可辨识的 data URI，好断言背景确实挂上了。 */
 $GLOBALS['__lqip_on'] = true;
-function argon_get_lqip_for_img_src($src) {
-	if (empty($GLOBALS['__lqip_on'])) { return ''; }
-	if ($src == '' || strpos($src, 'data:') === 0) { return ''; }
-	return 'data:image/jpeg;base64,FAKELQIP';
+function argon_get_img_meta_for_src($src) {
+	if (empty($GLOBALS['__lqip_on'])) { return array('', 0, 0); }
+	if ($src == '' || strpos($src, 'data:') === 0) { return array('', 0, 0); }
+	/* 顺便返回宽高，用来验证「补宽高」那段 */
+	return array('data:image/jpeg;base64,FAKELQIP', 1200, 675);
 }
+function argon_get_lqip_for_img_src($src) { $m = argon_get_img_meta_for_src($src); return $m[0]; }
 function esc_attr($s) { return htmlspecialchars((string) $s, ENT_QUOTES, 'UTF-8'); }
 
 function run_block($content, $style = 'lazyload-style-none') {

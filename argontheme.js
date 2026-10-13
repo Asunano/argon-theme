@@ -2186,6 +2186,54 @@ function argonLightboxCleanupScrollLock(){
 		de.style.removeProperty("--fancybox-scrollbar-compensate");
 	}
 }
+/* 关闭灯箱后把焦点还给触发元素，但【绝不滚动页面】。
+   背景：Fancybox 的 placeFocusBack（默认开启）在关闭时执行
+     const r = slide.triggerEl || option("triggerEl");
+     r && (et(r) ? ot(r) : r.focus());
+   et() 是「元素有多少落在视口内」的百分比：
+     · 在视口内 → 走 ot()，那里用 focus({preventScroll:true})，安全
+     · 不在视口内 → 走【裸 r.focus()】，浏览器会把该元素滚进视口
+   实测：点第 1 张图、在画廊里翻到第 8 张再关闭，页面从 652 直接滚到 4941（+4289px），
+   焦点落在第 8 个锚点上。用户看到的就是「关掉灯箱后页面跳走」。
+   画廊翻页后「当前图的锚点」本来就可能远在视口之外，所以这个跳变很容易触发。
+
+   对策：关掉 placeFocusBack（见 argonLightboxInit），改用下面这个函数恢复焦点 ——
+   它始终走 preventScroll 路径。 */
+var argonLightboxFocusTarget = null;
+/* 记下用户点的是哪个锚点（捕获阶段，先于 Fancybox 的委托绑定） */
+document.addEventListener("click", function(e){
+	var a = e.target && e.target.closest && e.target.closest("[data-fancybox]");
+	if (a){
+		argonLightboxFocusTarget = a;
+	}
+}, true);
+function argonLightboxRestoreFocus(){
+	var el = argonLightboxFocusTarget;
+	argonLightboxFocusTarget = null;
+	if (!el || typeof el.focus != "function"){
+		return;
+	}
+	if (!document.documentElement.contains(el)){
+		return; /* Pjax 换页后旧元素已不在文档里 */
+	}
+	var x = window.scrollX || window.pageXOffset || 0;
+	var y = window.scrollY || window.pageYOffset || 0;
+	try {
+		el.focus({ preventScroll: true });
+	} catch (err) {
+		try { el.focus(); } catch (err2) { return; }
+	}
+	/* 老浏览器会忽略 preventScroll，这里兜底复位。
+	   必须用 window.scrollTo —— Fancybox 自己用的是 document.body.scrollTo，
+	   而标准模式下滚动容器是 <html>，那样复位是无效的。 */
+	if ((window.scrollX || 0) !== x || (window.scrollY || 0) !== y){
+		try {
+			window.scrollTo({ left: x, top: y, behavior: "instant" });
+		} catch (err3) {
+			window.scrollTo(x, y);
+		}
+	}
+}
 /* 独立兜底：监听 <html> 的 with-fancybox 类。一旦灯箱关闭后该类仍残留
    （.fancybox__container 已不存在），强制复位。该机制不依赖 Fancybox 内部销毁
    流程，可覆盖其清理被中断/异常的场景；正常清理时零副作用。*/
@@ -2217,12 +2265,20 @@ function argonLightboxInit(){
 	var showThumbs = true;
 	try {
 		Fancybox.bind('[data-fancybox]', {
+			/* 关掉 Fancybox 自带的「关闭时把焦点还给触发元素」——
+			 它对【不在视口内】的锚点会走裸 focus()，浏览器随即把锚点滚进视口，
+			 表现为「关掉灯箱后页面跳走」（实测画廊翻页后关闭会跳 4289px）。
+			 焦点改由 argonLightboxRestoreFocus() 恢复，始终带 preventScroll。 */
+			placeFocusBack: false,
 			Thumbs: {
 				showOnStart: showThumbs,
 				type: "classic"
 			},
 			on: {
-				destroy: function () { argonLightboxCleanupScrollLock(); }
+				destroy: function () {
+					argonLightboxCleanupScrollLock();
+					argonLightboxRestoreFocus();
+				}
 			}
 		});
 		/* 监听 with-fancybox 类，提供不依赖 Fancybox 内部销毁流程的兜底清理 */

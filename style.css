@@ -930,11 +930,15 @@ html.darkmode #navbar-main {
 	display: none;
 }
 #navbar-main {
-	transition: background 0s, padding 0.15s ease;
 	background-color: var(--toolbar-color) !important;
 	padding-top: 0.5rem;
 	padding-bottom: 0.5rem;
-	transition: all 0.3s ease;
+	/* 注意这里【不能】写 transition: all ——
+	   background-color 与 backdrop-filter 是随滚动逐帧写的，
+	   一旦纳入过渡，它们就会一直「追」滚动位置，观感发黏、跟不上手。
+	   平滑度改由 argontheme.js 里按滚动进度连续插值来保证。
+	   这里只保留非滚动驱动的属性做过渡。 */
+	transition: padding 0.3s ease, transform 0.3s ease, box-shadow 0.3s ease, color 0.3s ease;
 }
 #navbar-main.navbar-ontop {
 	padding-top: 1rem;
@@ -988,13 +992,19 @@ html.navbar-absolute:not(.no-banner) #navbar-main {
 html.no-banner #navbar-main {
 	background-color: rgba(var(--themecolor-rgbstr), 0.85) !important;
 }
+/* 无 JS 时的兜底（正常由 argontheme.js 按滚动进度连续插值，见 applyBlur）。
+   参数与 JS 里的终值保持一致：blur(14px) saturate(180%)。
+   只加 blur 会让玻璃后的画面发灰发脏，配上饱和度提升才是干净的毛玻璃质感。
+   -webkit- 前缀不可省 —— Safari 需要它，原来只写了标准属性。 */
 html.no-banner.toolbar-blur #navbar-main {
 	background-color: rgba(var(--themecolor-rgbstr), 0.65) !important;
-	backdrop-filter: blur(16px);
+	backdrop-filter: blur(14px) saturate(180%);
+	-webkit-backdrop-filter: blur(14px) saturate(180%);
 }
 html.no-banner.toolbar-blur #navbar-main.navbar-no-blur {
 	background-color: rgba(var(--themecolor-rgbstr), 0.85) !important;
-	backdrop-filter: blur(0px);
+	backdrop-filter: blur(0px) saturate(100%);
+	-webkit-backdrop-filter: blur(0px) saturate(100%);
 }
 .banner {
 	margin-bottom: 25px;

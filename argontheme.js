@@ -330,12 +330,81 @@ function __(text){
 /*根据滚动高度改变顶栏透明度*/
 !function(){
 	let toolbar = document.getElementById("navbar-main");
+	if (!toolbar){
+		return;
+	}
 	let $bannerContainer = $("#banner_container");
 	let $content = $("#content");
 
 	let startTransitionHeight;
 	let endTransitionHeight;
 	let maxOpacity = 0.85;
+
+	/* —— 毛玻璃参数 ——
+	   原来只有两档：进度 < 0.3 时 blur(0px)，>= 0.3 时直接跳到 blur(16px)，
+	   中间没有任何过渡，所以观感很突兀。现在按滚动进度【连续插值】：
+	     · 模糊半径 0 → maxBlur
+	     · 饱和度   100% → maxSaturate（顺带提饱和度能让玻璃后的颜色不发灰，
+	       这是毛玻璃质感的关键；只加 blur 会显得糊而脏）
+	   半径量化到整像素：既让变化足够细，又不至于每个滚动事件都重绘一遍模糊。 */
+	const maxBlur = 14;
+	const MIN_SATURATE = 100;
+	const MAX_SATURATE = 180;
+	/* 没有 banner 时没有「banner→内容」的区间可用，用一个固定滚动距离做过渡 */
+	const NO_BANNER_RANGE = 120;
+	let lastBlurKey = "";
+
+	/* 同时写 -webkit- 前缀 —— 原来只写了标准属性，Safari 拿不到这个模糊 */
+	function applyBlur(progress){
+		if (!argonConfig.toolbar_blur){
+			return;
+		}
+		if (!(progress >= 0)){
+			progress = 0;
+		}else if (progress > 1){
+			progress = 1;
+		}
+		let blur = Math.round(maxBlur * progress);
+		let saturate = Math.round(MIN_SATURATE + (MAX_SATURATE - MIN_SATURATE) * progress);
+		let key = blur + "/" + saturate;
+		if (key === lastBlurKey){
+			return;   /* 值没变就不碰样式，省掉无谓的重绘 */
+		}
+		lastBlurKey = key;
+		let value = "blur(" + blur + "px) saturate(" + saturate + "%)";
+		toolbar.style.setProperty("backdrop-filter", value);
+		toolbar.style.setProperty("-webkit-backdrop-filter", value);
+	}
+
+	/* 先判定是否开启毛玻璃 —— 必须放在 no-banner 分支之前，
+	   否则 banner 设为 hide 的站点走那条分支时 argonConfig.toolbar_blur 还没被赋值。 */
+	if ($("html").hasClass("toolbar-blur")) {
+		argonConfig.toolbar_blur = true;
+		maxOpacity = 0.65;
+	}else{
+		argonConfig.toolbar_blur = false;
+	}
+
+	if ($("html").hasClass("no-banner")) {
+		/* banner 设为 hide：没有「banner→内容」的滚动区间，改用固定距离做过渡 */
+		function changeToolbarOnTopClass(){
+			let scrollTop = document.documentElement.scrollTop || document.body.scrollTop;
+			applyBlur(scrollTop / NO_BANNER_RANGE);
+			/* 保留原来的类切换语义（CSS 里还有基于它的规则） */
+			if (scrollTop < 30){
+				toolbar.classList.add("navbar-no-blur");
+			}else{
+				toolbar.classList.remove("navbar-no-blur");
+			}
+		}
+		changeToolbarOnTopClass();
+		document.addEventListener("scroll", changeToolbarOnTopClass, {passive: true});
+		return;
+	}
+	if (argonConfig.headroom == "absolute") {
+		toolbar.classList.add("navbar-ontop");
+		return;
+	}
 
 	startTransitionHeight = $bannerContainer.offset().top - 75;
 	endTransitionHeight = $content.offset().top - 75;
@@ -350,55 +419,22 @@ function __(text){
 		if (scrollTop < startTransitionHeight){
 			toolbar.style.setProperty('background-color', 'rgba(var(--toolbar-color), 0)', 'important');
 			toolbar.style.setProperty('box-shadow', 'none');
-			if (argonConfig.toolbar_blur){
-				toolbar.style.setProperty('backdrop-filter', 'blur(0px)');
-			}
+			applyBlur(0);
 			toolbar.classList.add("navbar-ontop");
 			return;
 		}
 		if (scrollTop > endTransitionHeight){
 			toolbar.style.setProperty('background-color', 'rgba(var(--toolbar-color), ' + maxOpacity + ')', 'important');
 			toolbar.style.setProperty('box-shadow', '');
-			if (argonConfig.toolbar_blur){
-				toolbar.style.setProperty('backdrop-filter', 'blur(16px)');
-			}
+			applyBlur(1);
 			toolbar.classList.remove("navbar-ontop");
 			return;
 		}
-		let transparency = (scrollTop - startTransitionHeight) / (endTransitionHeight - startTransitionHeight) * maxOpacity;
-		toolbar.style.setProperty('background-color', 'rgba(var(--toolbar-color), ' + transparency, 'important');
+		let progress = (scrollTop - startTransitionHeight) / (endTransitionHeight - startTransitionHeight);
+		toolbar.style.setProperty('background-color', 'rgba(var(--toolbar-color), ' + (progress * maxOpacity), 'important');
 		toolbar.style.setProperty('box-shadow', '');
-		if (argonConfig.toolbar_blur){
-			if ((scrollTop - startTransitionHeight) / (endTransitionHeight - startTransitionHeight) > 0.3){
-				toolbar.style.setProperty('backdrop-filter', 'blur(16px)');
-			}else{
-				toolbar.style.setProperty('backdrop-filter', 'blur(0px)');
-			}
-		}
+		applyBlur(progress);
 		toolbar.classList.remove("navbar-ontop");
-	}
-	function changeToolbarOnTopClass(){
-		let scrollTop = document.documentElement.scrollTop || document.body.scrollTop;
-		if (scrollTop < 30){
-			toolbar.classList.add("navbar-no-blur");
-		}else{
-			toolbar.classList.remove("navbar-no-blur");
-		}
-	}
-	if ($("html").hasClass("no-banner")) {
-		changeToolbarOnTopClass();
-		document.addEventListener("scroll", changeToolbarOnTopClass, {passive: true});
-		return;
-	}
-	if (argonConfig.headroom == "absolute") {
-		toolbar.classList.add("navbar-ontop");
-		return;
-	}
-	if ($("html").hasClass("toolbar-blur")) {
-		argonConfig.toolbar_blur = true;
-		maxOpacity = 0.65;
-	}else{
-		argonConfig.toolbar_blur = false;
 	}
 	changeToolbarTransparency();
 	document.addEventListener("scroll", changeToolbarTransparency, {passive: true});

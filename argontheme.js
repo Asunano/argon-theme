@@ -2274,6 +2274,14 @@ function argonLightboxInit(){
 				showOnStart: showThumbs,
 				type: "classic"
 			},
+			/* 关闭时 Fancybox 的 Images(Zoom) 插件会把容器缩放回缩略图的位置，
+			   但 zoomOpacity 默认是 "auto"，只在【缩略图与图片宽高比相差 > 0.1】时才顺带淡出。
+			   本站文章图与缩略图宽高比一致，于是关闭动画全程不透明，
+			   最后一帧容器被移除、正文图出现 —— 交接处会有一次硬切（看起来像「抽一下」）。
+			   设为 true 让它在缩小的同时淡出，交接就平滑了。 */
+			Images: {
+				zoomOpacity: true
+			},
 			on: {
 				destroy: function () {
 					argonLightboxCleanupScrollLock();

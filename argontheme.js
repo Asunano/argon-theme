@@ -2234,6 +2234,68 @@ function argonLightboxRestoreFocus(){
 		}
 	}
 }
+/* 打开灯箱时的「从缩略图放大」动画（FLIP）。
+   为什么自己实现：Fancybox 的 Images(Zoom) 插件确实有这个效果，但它的时长不可调 ——
+   插件内部写死了 panTo({ friction: … })，Panzoom 的时长由 friction 决定，
+   CSS 变量完全参与不进来（实测 --f-transition-duration 设 0.2s/0.42s/1.5s，耗时都是 130ms）。
+   改用 FLIP：先把内容层平移到缩略图位置并缩到缩略图大小（此时禁用 transition），
+   强制一次布局后移除该状态，由 CSS transition 补间回原位 ——
+   时长与曲线就完全由 --argon-lb-duration / --argon-lb-easing 控制。
+
+   触发元素取自 argonLightboxFocusTarget（点击时在捕获阶段记录）。 */
+function argonLightboxFlipIn(){
+	var container = document.querySelector(".fancybox__container");
+	if (!container){
+		return;
+	}
+	var content = container.querySelector(".fancybox__content");
+	if (!content){
+		return;
+	}
+	var trigger = argonLightboxFocusTarget;
+	if (!trigger){
+		return;
+	}
+	var thumb = trigger.querySelector("img") || trigger;
+
+	/* 两个必须注意的点（都踩过）：
+	   ① Fancybox / Panzoom 是用【内联】transform 控制内容层的，
+	      内联样式压过任何选择器 —— 所以这里也走内联，用类选择器是压不过的。
+	   ② reveal 触发时内容层还停在轮播轨道的屏幕外位置，此刻量到的 rect 是过期的
+	      （实测会算出 1506px 这种离谱位移），所以要等一帧、等它归位后再量。 */
+	var prevTransform = content.style.transform;   /* 通常是 matrix(1, 0, 0, 1, 0, 0) */
+	requestAnimationFrame(function(){
+		if (!document.documentElement.contains(content)){
+			return;
+		}
+		var t, c;
+		try {
+			t = thumb.getBoundingClientRect();
+			c = content.getBoundingClientRect();
+		} catch (err) {
+			return;
+		}
+		if (!t.width || !t.height || !c.width || !c.height){
+			return;
+		}
+		var scale = t.width / c.width;
+		/* 缩略图不比内容小就没必要 FLIP；数值异常也直接跳过，宁可不动画也不要错位 */
+		if (!(scale > 0.05) || !(scale < 0.98) || !isFinite(scale)){
+			return;
+		}
+		var tx = (t.left + t.width / 2) - (c.left + c.width / 2);
+		var ty = (t.top + t.height / 2) - (c.top + c.height / 2);
+		if (!isFinite(tx) || !isFinite(ty)){
+			return;
+		}
+		/* 先无过渡地跳到缩略图的位置与大小，强制一次布局，再还原 —— 由 CSS transition 补间 */
+		content.style.transition = "none";
+		content.style.transform = "translate(" + tx.toFixed(2) + "px, " + ty.toFixed(2) + "px) scale(" + scale.toFixed(4) + ")";
+		void content.offsetWidth;
+		content.style.transition = "";
+		content.style.transform = prevTransform || "";
+	});
+}
 /* 独立兜底：监听 <html> 的 with-fancybox 类。一旦灯箱关闭后该类仍残留
    （.fancybox__container 已不存在），强制复位。该机制不依赖 Fancybox 内部销毁
    流程，可覆盖其清理被中断/异常的场景；正常清理时零副作用。*/
@@ -2286,6 +2348,11 @@ function argonLightboxInit(){
 			   时长与曲线才能真正可调。代价是不再「缩放回正文图的位置」，
 			   换来的是可控、更从容的淡入淡出。
 			   若想恢复缩放效果，把 zoom 改回 true 即可（那时 CSS 时长会失效）。 */
+			/* 打开时的「从缩略图放大」动画由主题自己实现（见 argonLightboxFlipIn）：
+			   用 FLIP —— 先把内容层平移到缩略图的位置并缩到缩略图大小，
+			   下一帧移除该状态，由 CSS transition 补间回原位。
+			   这样时长与曲线完全由 --argon-lb-duration / --argon-lb-easing 控制，
+			   而 Fancybox 自带的 Zoom 插件做不到（它的 panTo 把 friction 写死了）。 */
 			Images: {
 				zoom: false,
 				zoomOpacity: true
@@ -2293,6 +2360,10 @@ function argonLightboxInit(){
 			showClass: "argon-lb-in",
 			hideClass: "argon-lb-out",
 			on: {
+				/* reveal 在图片加载完、内容层已完成布局之后触发，正是做 FLIP 的时机 */
+				reveal: function () {
+					argonLightboxFlipIn();
+				},
 				destroy: function () {
 					argonLightboxCleanupScrollLock();
 					argonLightboxRestoreFocus();

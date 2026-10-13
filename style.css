@@ -930,22 +930,12 @@ html.darkmode #navbar-main {
 	display: none;
 }
 #navbar-main {
+	transition: background 0s, padding 0.15s ease;
 	background-color: var(--toolbar-color) !important;
 	padding-top: 0.5rem;
 	padding-bottom: 0.5rem;
-	/* background-color 是随滚动逐帧写的，不能纳入过渡，否则会一直「追」滚动位置、发黏。
-	   backdrop-filter 则【要】过渡：模糊只有开/关两种状态（不再有渐进档位），
-	   这条过渡就是它开关时的淡入淡出 —— 顶栏获得背景色的同时模糊一并淡入。
-	   缓动用 cubic-bezier(0.4, 0, 0.2, 1)（Material 标准曲线，两端平缓），
-	   比 ease 更柔，不会在开关的一瞬间显得硬。 */
-	transition: padding 0.3s ease, transform 0.3s ease, box-shadow 0.3s ease, color 0.3s ease,
-		backdrop-filter 0.4s cubic-bezier(0.4, 0, 0.2, 1),
-		-webkit-backdrop-filter 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+	transition: all 0.3s ease;
 }
-/* 顶栏就是一个 fixed 容器 + 半透明背景 + 毛玻璃。
-   不再有「下沿渐变过渡带」（原来那条 ::after）——
-   顶栏叠加在滚动内容之上时，渐变带的复杂度远大于它带来的收益，
-   而且它本身也会引入接缝问题。现在只保留容器与模糊两件事。 */
 #navbar-main.navbar-ontop {
 	padding-top: 1rem;
 	padding-bottom: 1rem;
@@ -998,19 +988,13 @@ html.navbar-absolute:not(.no-banner) #navbar-main {
 html.no-banner #navbar-main {
 	background-color: rgba(var(--themecolor-rgbstr), 0.85) !important;
 }
-/* 无 JS 时的兜底（正常由 argontheme.js 开关，见 applyBlur）。
-   参数与 JS 里的常量保持一致：blur(12px) saturate(130%)。
-   饱和度只做轻抬 —— 抬到 180% 会让玻璃后的颜色过饱和发艳，观感很「怪」。
-   -webkit- 前缀不可省 —— Safari 需要它，原来只写了标准属性。 */
 html.no-banner.toolbar-blur #navbar-main {
-	background-color: rgba(var(--themecolor-rgbstr), 0.82) !important;
-	backdrop-filter: blur(12px) saturate(130%);
-	-webkit-backdrop-filter: blur(12px) saturate(130%);
+	background-color: rgba(var(--themecolor-rgbstr), 0.65) !important;
+	backdrop-filter: blur(16px);
 }
 html.no-banner.toolbar-blur #navbar-main.navbar-no-blur {
-	background-color: rgba(var(--themecolor-rgbstr), 0.82) !important;
-	backdrop-filter: blur(0px) saturate(100%);
-	-webkit-backdrop-filter: blur(0px) saturate(100%);
+	background-color: rgba(var(--themecolor-rgbstr), 0.85) !important;
+	backdrop-filter: blur(0px);
 }
 .banner {
 	margin-bottom: 25px;

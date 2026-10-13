@@ -934,37 +934,36 @@ html.darkmode #navbar-main {
 	padding-top: 0.5rem;
 	padding-bottom: 0.5rem;
 	/* background-color 是随滚动逐帧写的，不能纳入过渡，否则会一直「追」滚动位置、发黏。
-	   backdrop-filter 则【要】过渡：它是 5/10/15 三档步进的，档位之间靠这条 0.25s 补间，
-	   观感上是平滑推进而不是硬切（档位少、单次变化大，所以这条过渡是必要的；
-	   而它一次滚动只变两三次，不会像逐帧写那样产生滞后）。
-	   transform / padding / box-shadow / color 是状态切换用的，保留原有过渡。 */
+	   backdrop-filter 则【要】过渡：它是 5/10/15 三档步进的，档位之间靠这条补间，
+	   观感上才是平滑推进而不是硬切。
+	   缓动特意用 cubic-bezier(0.4, 0, 0.2, 1)（Material 标准曲线）并放到 0.35s ——
+	   它两端都平缓，每一档读起来是「呼吸」而不是「跳一下」；
+	   用 ease 或更短的时长，档位切换会显得生硬。 */
 	transition: padding 0.3s ease, transform 0.3s ease, box-shadow 0.3s ease, color 0.3s ease,
-		backdrop-filter 0.25s ease, -webkit-backdrop-filter 0.25s ease;
+		backdrop-filter 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+		-webkit-backdrop-filter 0.35s cubic-bezier(0.4, 0, 0.2, 1);
 }
 /* 下沿的渐变过渡带：接在顶栏自身的渐变之后，继续收到全透明。
-   顶栏背景是 linear-gradient(alpha → alpha * 0.72)（见 argontheme.js 的 setToolbarBg），
-   所以这里从 alpha * 0.72 起，两者在交界处【数值完全相同】——
-   整条（顶栏 + 过渡带）读起来就是一个连续渐变，而不是「一块实色 + 一条带子」。
-   若这里写死一个 alpha（上一版写 0.5），交界处就会留一道接缝
-   （实测顶栏 (110,123,197) 与过渡带顶部 (107,120,192) 差 11 个色阶）。
-   backdrop-filter 是【必须的】：顶栏自身带模糊+提饱和，过渡带不带的话
-   两者合成底色不同（一个模糊后、一个清晰），接缝会从 11 涨到 21。
-   用 position:absolute 是为了不参与 .navbar 的 flex 布局。 */
+   顶栏背景是 linear-gradient(alpha → alpha * 0.88)（见 argontheme.js 的 setToolbarBg），
+   所以这里从 alpha * 0.88 起，两者在交界处【数值完全相同】。
+   用 position:absolute 是为了不参与 .navbar 的 flex 布局。
+   backdrop-filter 必须与顶栏一致：顶栏带模糊、这里不带的话，
+   两者合成底色不同（一个模糊后、一个清晰），交界处会露出接缝。 */
 #navbar-main::after {
 	content: "";
 	position: absolute;
 	left: 0;
 	right: 0;
 	top: 100%;
-	height: 32px;
+	height: 26px;
 	pointer-events: none;
-	backdrop-filter: blur(15px) saturate(180%);
-	-webkit-backdrop-filter: blur(15px) saturate(180%);
+	backdrop-filter: blur(15px) saturate(135%);
+	-webkit-backdrop-filter: blur(15px) saturate(135%);
 	background: linear-gradient(
 		to bottom,
-		rgba(var(--toolbar-color), calc(var(--argon-navbar-alpha, 0) * 0.72)) 0%,
-		rgba(var(--toolbar-color), calc(var(--argon-navbar-alpha, 0) * 0.36)) 30%,
-		rgba(var(--toolbar-color), calc(var(--argon-navbar-alpha, 0) * 0.12)) 60%,
+		rgba(var(--toolbar-color), calc(var(--argon-navbar-alpha, 0) * 0.88)) 0%,
+		rgba(var(--toolbar-color), calc(var(--argon-navbar-alpha, 0) * 0.5)) 28%,
+		rgba(var(--toolbar-color), calc(var(--argon-navbar-alpha, 0) * 0.18)) 62%,
 		rgba(var(--toolbar-color), 0) 100%
 	);
 }
@@ -1021,18 +1020,18 @@ html.no-banner #navbar-main {
 	background-color: rgba(var(--themecolor-rgbstr), 0.85) !important;
 }
 /* 无 JS 时的兜底（正常由 argontheme.js 按滚动档位切换，见 applyBlur）。
-   参数与 JS 里的终值保持一致：blur(15px) saturate(180%)。
-   只加 blur 会让玻璃后的画面发灰发脏，配上饱和度提升才是干净的毛玻璃质感。
+   参数与 JS 里的终值保持一致：blur(15px) saturate(135%)。
+   饱和度只做轻抬 —— 抬到 180% 会让玻璃后的颜色过饱和发艳，观感很「怪」。
    -webkit- 前缀不可省 —— Safari 需要它，原来只写了标准属性。 */
 html.no-banner.toolbar-blur #navbar-main {
-	background-color: rgba(var(--themecolor-rgbstr), 0.65) !important;
-	backdrop-filter: blur(15px) saturate(180%);
-	-webkit-backdrop-filter: blur(15px) saturate(180%);
+	background-color: rgba(var(--themecolor-rgbstr), 0.82) !important;
+	backdrop-filter: blur(15px) saturate(135%);
+	-webkit-backdrop-filter: blur(15px) saturate(135%);
 }
 html.no-banner.toolbar-blur #navbar-main.navbar-no-blur {
-	background-color: rgba(var(--themecolor-rgbstr), 0.85) !important;
-	backdrop-filter: blur(5px) saturate(120%);
-	-webkit-backdrop-filter: blur(5px) saturate(120%);
+	background-color: rgba(var(--themecolor-rgbstr), 0.82) !important;
+	backdrop-filter: blur(5px) saturate(115%);
+	-webkit-backdrop-filter: blur(5px) saturate(115%);
 }
 .banner {
 	margin-bottom: 25px;

@@ -341,15 +341,14 @@ function __(text){
 	let maxOpacity = 0.85;
 
 	/* —— 毛玻璃参数 ——
-	   设计要点（上一版是 0 → 14px 连续插值，仍然偏「从无到有」，割裂感明显）：
+	   设计要点：
 	     · 起点就有 BLUR_STEPS[0] 的底噪模糊，而不是从 0 起 ——
 	       「无模糊 → 有模糊」那一下最刺眼，起始带一点模糊后，后面的变化只是「加深」；
-	     · 模糊分 5 / 10 / 15 三档步进，而不是连续 1px 爬升 ——
-	       档位少、单次变化大，但每档之间由 CSS transition 补间（见 style.css），
-	       观感上是平滑推进，同时把重绘次数压到最低；
-	     · 饱和度随档位一起抬升，避免玻璃后的画面发灰。 */
+	     · 模糊分 5 / 10 / 15 三档步进，档位之间由 CSS transition 补间（见 style.css）；
+	     · 饱和度只做【轻抬】。抬到 180% 会让玻璃后的颜色明显过饱和、发艳，
+	       看起来就「怪」—— 这是上一版的主要问题，现在收到 135% 以内。 */
 	const BLUR_STEPS = [5, 10, 15];
-	const SATURATE_STEPS = [120, 150, 180];
+	const SATURATE_STEPS = [115, 125, 135];
 	/* 没有 banner 时没有「banner→内容」的区间可用，用一个固定滚动距离做过渡 */
 	const NO_BANNER_RANGE = 120;
 	let lastBlurKey = "";
@@ -376,14 +375,12 @@ function __(text){
 		toolbar.style.setProperty("-webkit-backdrop-filter", value);
 	}
 
-	/* 顶栏背景：用 background-image 的渐变代替纯色 background-color。
-	   原来顶栏是一块纯色（rgba(色, 0.65) 铺满整条），下面再接一条渐变带 ——
-	   读起来是「一块实色 + 一条带子」，不是一体的渐变，交界处也就难免有痕迹。
-	   现在让顶栏自身从 alpha 渐变到 alpha * BOTTOM_RATIO，
-	   ::after 的渐变正好从 alpha * BOTTOM_RATIO 接着往下收到 0 ——
-	   整条（顶栏 + 过渡带）连成一个连续的渐变。
+	/* 顶栏背景：由 alpha 渐变到 alpha * BOTTOM_RATIO。
+	   衰减刻意做得【很轻】（0.88，只降 12%）——
+	   上一版用 0.72，整条顶栏平均浓度被拉低，观感就是「颜色发淡」。
+	   轻衰减既能与下沿过渡带无缝接上，又不会让顶栏本身变淡。
 	   background-color 必须置为 transparent：否则它会从渐变里透出来，把渐变冲淡。 */
-	const BOTTOM_RATIO = 0.72;
+	const BOTTOM_RATIO = 0.88;
 	function setToolbarBg(alpha){
 		toolbar.style.setProperty("--argon-navbar-alpha", String(alpha));
 		toolbar.style.setProperty("background-color", "transparent", "important");
@@ -404,7 +401,8 @@ function __(text){
 	   否则 banner 设为 hide 的站点走那条分支时 argonConfig.toolbar_blur 还没被赋值。 */
 	if ($("html").hasClass("toolbar-blur")) {
 		argonConfig.toolbar_blur = true;
-		maxOpacity = 0.65;
+		/* 0.65 偏淡（叠上模糊后更淡），提到 0.82 让顶栏颜色更实、字更清楚 */
+		maxOpacity = 0.82;
 	}else{
 		argonConfig.toolbar_blur = false;
 	}

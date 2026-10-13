@@ -340,37 +340,29 @@ function __(text){
 	let endTransitionHeight;
 	let maxOpacity = 0.85;
 
-	/* —— 毛玻璃参数 ——
-	   设计要点：
-	     · 起点就有 BLUR_STEPS[0] 的底噪模糊，而不是从 0 起 ——
-	       「无模糊 → 有模糊」那一下最刺眼，起始带一点模糊后，后面的变化只是「加深」；
-	     · 模糊分 5 / 10 / 15 三档步进，档位之间由 CSS transition 补间（见 style.css）；
-	     · 饱和度只做【轻抬】。抬到 180% 会让玻璃后的颜色明显过饱和、发艳，
-	       看起来就「怪」—— 这是上一版的主要问题，现在收到 135% 以内。 */
-	const BLUR_STEPS = [5, 10, 15];
-	const SATURATE_STEPS = [115, 125, 135];
+	/* —— 毛玻璃 ——
+	   只用【一个固定的模糊值】，不做 5/10/15 那种渐进档位。
+	   渐进的问题：模糊半径本身在变，画面会持续「动」，反而更不自然。
+	   现在模糊只有开/关两种状态，切换靠 CSS transition 平滑过渡一次
+	   （见 style.css 里 #navbar-main 的 backdrop-filter 过渡），
+	   观感是「顶栏获得背景色的同时，模糊一并淡入」，而不是半径一路爬升。
+	   饱和度只做【轻抬】用来抵消模糊带来的发灰 —— 抬到 180% 会明显过饱和发艳。 */
+	const BLUR_ON = "blur(12px) saturate(130%)";
+	const BLUR_OFF = "blur(0px) saturate(100%)";
 	/* 没有 banner 时没有「banner→内容」的区间可用，用一个固定滚动距离做过渡 */
 	const NO_BANNER_RANGE = 120;
-	let lastBlurKey = "";
+	let blurOn = null;
 
 	/* 同时写 -webkit- 前缀 —— 原来只写了标准属性，Safari 拿不到这个模糊 */
-	function applyBlur(progress){
+	function applyBlur(on){
 		if (!argonConfig.toolbar_blur){
 			return;
 		}
-		if (!(progress >= 0)){
-			progress = 0;
-		}else if (progress > 1){
-			progress = 1;
+		if (on === blurOn){
+			return;   /* 状态没变就不碰样式，省掉无谓的重绘 */
 		}
-		/* 把 0~1 的进度映射到 0~N-1 的档位 */
-		let level = Math.min(BLUR_STEPS.length - 1, Math.floor(progress * BLUR_STEPS.length));
-		let key = String(level);
-		if (key === lastBlurKey){
-			return;   /* 档位没变就不碰样式，省掉无谓的重绘 */
-		}
-		lastBlurKey = key;
-		let value = "blur(" + BLUR_STEPS[level] + "px) saturate(" + SATURATE_STEPS[level] + "%)";
+		blurOn = on;
+		let value = on ? BLUR_ON : BLUR_OFF;
 		toolbar.style.setProperty("backdrop-filter", value);
 		toolbar.style.setProperty("-webkit-backdrop-filter", value);
 	}
@@ -414,7 +406,7 @@ function __(text){
 			let p = scrollTop / NO_BANNER_RANGE;
 			if (p > 1){ p = 1; }
 			if (p < 0){ p = 0; }
-			applyBlur(p);
+			applyBlur(p > 0);
 			if (p > 0){ setToolbarBg(p * maxOpacity); } else { clearToolbarBg(); }
 			/* 保留原来的类切换语义（CSS 里还有基于它的规则） */
 			if (scrollTop < 30){
@@ -445,21 +437,22 @@ function __(text){
 		if (scrollTop < startTransitionHeight){
 			clearToolbarBg();
 			toolbar.style.setProperty('box-shadow', 'none');
-			applyBlur(0);
+			applyBlur(false);
 			toolbar.classList.add("navbar-ontop");
 			return;
 		}
 		if (scrollTop > endTransitionHeight){
 			setToolbarBg(maxOpacity);
 			toolbar.style.setProperty('box-shadow', '');
-			applyBlur(1);
+			applyBlur(true);
 			toolbar.classList.remove("navbar-ontop");
 			return;
 		}
 		let progress = (scrollTop - startTransitionHeight) / (endTransitionHeight - startTransitionHeight);
 		setToolbarBg(progress * maxOpacity);
 		toolbar.style.setProperty('box-shadow', '');
-		applyBlur(progress);
+		/* 只要开始获得背景色，模糊就一并淡入 —— 不再随进度改变半径 */
+		applyBlur(true);
 		toolbar.classList.remove("navbar-ontop");
 	}
 	changeToolbarTransparency();

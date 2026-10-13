@@ -934,14 +934,13 @@ html.darkmode #navbar-main {
 	padding-top: 0.5rem;
 	padding-bottom: 0.5rem;
 	/* background-color 是随滚动逐帧写的，不能纳入过渡，否则会一直「追」滚动位置、发黏。
-	   backdrop-filter 则【要】过渡：它是 5/10/15 三档步进的，档位之间靠这条补间，
-	   观感上才是平滑推进而不是硬切。
-	   缓动特意用 cubic-bezier(0.4, 0, 0.2, 1)（Material 标准曲线）并放到 0.35s ——
-	   它两端都平缓，每一档读起来是「呼吸」而不是「跳一下」；
-	   用 ease 或更短的时长，档位切换会显得生硬。 */
+	   backdrop-filter 则【要】过渡：模糊只有开/关两种状态（不再有渐进档位），
+	   这条过渡就是它开关时的淡入淡出 —— 顶栏获得背景色的同时模糊一并淡入。
+	   缓动用 cubic-bezier(0.4, 0, 0.2, 1)（Material 标准曲线，两端平缓），
+	   比 ease 更柔，不会在开关的一瞬间显得硬。 */
 	transition: padding 0.3s ease, transform 0.3s ease, box-shadow 0.3s ease, color 0.3s ease,
-		backdrop-filter 0.35s cubic-bezier(0.4, 0, 0.2, 1),
-		-webkit-backdrop-filter 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+		backdrop-filter 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+		-webkit-backdrop-filter 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
 /* 下沿的渐变过渡带：接在顶栏自身的渐变之后，继续收到全透明。
    顶栏背景是 linear-gradient(alpha → alpha * 0.88)（见 argontheme.js 的 setToolbarBg），
@@ -957,8 +956,8 @@ html.darkmode #navbar-main {
 	top: 100%;
 	height: 26px;
 	pointer-events: none;
-	backdrop-filter: blur(15px) saturate(135%);
-	-webkit-backdrop-filter: blur(15px) saturate(135%);
+	backdrop-filter: blur(12px) saturate(130%);
+	-webkit-backdrop-filter: blur(12px) saturate(130%);
 	background: linear-gradient(
 		to bottom,
 		rgba(var(--toolbar-color), calc(var(--argon-navbar-alpha, 0) * 0.88)) 0%,
@@ -1019,19 +1018,19 @@ html.navbar-absolute:not(.no-banner) #navbar-main {
 html.no-banner #navbar-main {
 	background-color: rgba(var(--themecolor-rgbstr), 0.85) !important;
 }
-/* 无 JS 时的兜底（正常由 argontheme.js 按滚动档位切换，见 applyBlur）。
-   参数与 JS 里的终值保持一致：blur(15px) saturate(135%)。
+/* 无 JS 时的兜底（正常由 argontheme.js 开关，见 applyBlur）。
+   参数与 JS 里的常量保持一致：blur(12px) saturate(130%)。
    饱和度只做轻抬 —— 抬到 180% 会让玻璃后的颜色过饱和发艳，观感很「怪」。
    -webkit- 前缀不可省 —— Safari 需要它，原来只写了标准属性。 */
 html.no-banner.toolbar-blur #navbar-main {
 	background-color: rgba(var(--themecolor-rgbstr), 0.82) !important;
-	backdrop-filter: blur(15px) saturate(135%);
-	-webkit-backdrop-filter: blur(15px) saturate(135%);
+	backdrop-filter: blur(12px) saturate(130%);
+	-webkit-backdrop-filter: blur(12px) saturate(130%);
 }
 html.no-banner.toolbar-blur #navbar-main.navbar-no-blur {
 	background-color: rgba(var(--themecolor-rgbstr), 0.82) !important;
-	backdrop-filter: blur(5px) saturate(115%);
-	-webkit-backdrop-filter: blur(5px) saturate(115%);
+	backdrop-filter: blur(0px) saturate(100%);
+	-webkit-backdrop-filter: blur(0px) saturate(100%);
 }
 .banner {
 	margin-bottom: 25px;

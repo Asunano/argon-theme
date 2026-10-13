@@ -2186,6 +2186,116 @@ function argonLightboxCleanupScrollLock(){
 		de.style.removeProperty("--fancybox-scrollbar-compensate");
 	}
 }
+/* 关闭灯箱后把焦点还给触发元素，但【绝不滚动页面】。
+   背景：Fancybox 的 placeFocusBack（默认开启）在关闭时执行
+     const r = slide.triggerEl || option("triggerEl");
+     r && (et(r) ? ot(r) : r.focus());
+   et() 是「元素有多少落在视口内」的百分比：
+     · 在视口内 → 走 ot()，那里用 focus({preventScroll:true})，安全
+     · 不在视口内 → 走【裸 r.focus()】，浏览器会把该元素滚进视口
+   实测：点第 1 张图、在画廊里翻到第 8 张再关闭，页面从 652 直接滚到 4941（+4289px），
+   焦点落在第 8 个锚点上。用户看到的就是「关掉灯箱后页面跳走」。
+   画廊翻页后「当前图的锚点」本来就可能远在视口之外，所以这个跳变很容易触发。
+
+   对策：关掉 placeFocusBack（见 argonLightboxInit），改用下面这个函数恢复焦点 ——
+   它始终走 preventScroll 路径。 */
+var argonLightboxFocusTarget = null;
+/* 记下用户点的是哪个锚点（捕获阶段，先于 Fancybox 的委托绑定） */
+document.addEventListener("click", function(e){
+	var a = e.target && e.target.closest && e.target.closest("[data-fancybox]");
+	if (a){
+		argonLightboxFocusTarget = a;
+	}
+}, true);
+function argonLightboxRestoreFocus(){
+	var el = argonLightboxFocusTarget;
+	argonLightboxFocusTarget = null;
+	if (!el || typeof el.focus != "function"){
+		return;
+	}
+	if (!document.documentElement.contains(el)){
+		return; /* Pjax 换页后旧元素已不在文档里 */
+	}
+	var x = window.scrollX || window.pageXOffset || 0;
+	var y = window.scrollY || window.pageYOffset || 0;
+	try {
+		el.focus({ preventScroll: true });
+	} catch (err) {
+		try { el.focus(); } catch (err2) { return; }
+	}
+	/* 老浏览器会忽略 preventScroll，这里兜底复位。
+	   必须用 window.scrollTo —— Fancybox 自己用的是 document.body.scrollTo，
+	   而标准模式下滚动容器是 <html>，那样复位是无效的。 */
+	if ((window.scrollX || 0) !== x || (window.scrollY || 0) !== y){
+		try {
+			window.scrollTo({ left: x, top: y, behavior: "instant" });
+		} catch (err3) {
+			window.scrollTo(x, y);
+		}
+	}
+}
+/* 打开灯箱时的「从缩略图放大」动画（FLIP）。
+   为什么自己实现：Fancybox 的 Images(Zoom) 插件确实有这个效果，但它的时长不可调 ——
+   插件内部写死了 panTo({ friction: … })，Panzoom 的时长由 friction 决定，
+   CSS 变量完全参与不进来（实测 --f-transition-duration 设 0.2s/0.42s/1.5s，耗时都是 130ms）。
+   改用 FLIP：先把内容层平移到缩略图位置并缩到缩略图大小（此时禁用 transition），
+   强制一次布局后移除该状态，由 CSS transition 补间回原位 ——
+   时长与曲线就完全由 --argon-lb-duration / --argon-lb-easing 控制。
+
+   触发元素取自 argonLightboxFocusTarget（点击时在捕获阶段记录）。 */
+function argonLightboxFlipIn(){
+	var container = document.querySelector(".fancybox__container");
+	if (!container){
+		return;
+	}
+	var content = container.querySelector(".fancybox__content");
+	if (!content){
+		return;
+	}
+	var trigger = argonLightboxFocusTarget;
+	if (!trigger){
+		return;
+	}
+	var thumb = trigger.querySelector("img") || trigger;
+
+	/* 两个必须注意的点（都踩过）：
+	   ① Fancybox / Panzoom 是用【内联】transform 控制内容层的，
+	      内联样式压过任何选择器 —— 所以这里也走内联，用类选择器是压不过的。
+	   ② reveal 触发时内容层还停在轮播轨道的屏幕外位置，此刻量到的 rect 是过期的
+	      （实测会算出 1506px 这种离谱位移），所以要等一帧、等它归位后再量。 */
+	var prevTransform = content.style.transform;   /* 通常是 matrix(1, 0, 0, 1, 0, 0) */
+	requestAnimationFrame(function(){
+		if (!document.documentElement.contains(content)){
+			return;
+		}
+		var t, c;
+		try {
+			t = thumb.getBoundingClientRect();
+			c = content.getBoundingClientRect();
+		} catch (err) {
+			return;
+		}
+		if (!t.width || !t.height || !c.width || !c.height){
+			return;
+		}
+		var scale = t.width / c.width;
+		/* 缩略图不比内容小就没必要 FLIP；数值异常也直接跳过，宁可不动画也不要错位 */
+		if (!(scale > 0.05) || !(scale < 0.98) || !isFinite(scale)){
+			return;
+		}
+		var tx = (t.left + t.width / 2) - (c.left + c.width / 2);
+		var ty = (t.top + t.height / 2) - (c.top + c.height / 2);
+		if (!isFinite(tx) || !isFinite(ty)){
+			return;
+		}
+		/* 先无过渡地跳到缩略图的位置与大小，强制一次布局，再还原 —— 由 CSS transition 补间 */
+		content.style.transition = "none";
+		content.style.transform = "translate(" + tx.toFixed(2) + "px, " + ty.toFixed(2) + "px) scale(" + scale.toFixed(4) + ")";
+		void content.offsetWidth;
+		content.style.transition = "";
+		content.style.transform = prevTransform || "";
+	});
+}
 /* 独立兜底：监听 <html> 的 with-fancybox 类。一旦灯箱关闭后该类仍残留
    （.fancybox__container 已不存在），强制复位。该机制不依赖 Fancybox 内部销毁
    流程，可覆盖其清理被中断/异常的场景；正常清理时零副作用。*/
@@ -2217,12 +2327,47 @@ function argonLightboxInit(){
 	var showThumbs = true;
 	try {
 		Fancybox.bind('[data-fancybox]', {
+			/* 关掉 Fancybox 自带的「关闭时把焦点还给触发元素」——
+			 它对【不在视口内】的锚点会走裸 focus()，浏览器随即把锚点滚进视口，
+			 表现为「关掉灯箱后页面跳走」（实测画廊翻页后关闭会跳 4289px）。
+			 焦点改由 argonLightboxRestoreFocus() 恢复，始终带 preventScroll。 */
+			placeFocusBack: false,
 			Thumbs: {
 				showOnStart: showThumbs,
 				type: "classic"
 			},
+			/* 关闭时 Fancybox 的 Images(Zoom) 插件会把容器缩放回缩略图的位置，
+			   但它的动画时长【不可调】：插件内部写死了
+			     panTo({ ..., friction: zoomOpacity ? .2 : .33, ignoreBounds: true })
+			   Panzoom 的时长完全由 friction 决定，CSS 变量不参与。
+			   实测把 --f-transition-duration 设为 0.2s / 0.42s / 1.5s，
+			   开关耗时都是 130ms 左右 —— 该变量对图片灯箱【毫无作用】。
+
+			   所以这里关掉 Zoom 的缩放，让动画交回 CSS 的 showClass / hideClass
+			   （argon-lb-in / argon-lb-out，见 style.css），
+			   时长与曲线才能真正可调。代价是不再「缩放回正文图的位置」，
+			   换来的是可控、更从容的淡入淡出。
+			   若想恢复缩放效果，把 zoom 改回 true 即可（那时 CSS 时长会失效）。 */
+			/* 打开时的「从缩略图放大」动画由主题自己实现（见 argonLightboxFlipIn）：
+			   用 FLIP —— 先把内容层平移到缩略图的位置并缩到缩略图大小，
+			   下一帧移除该状态，由 CSS transition 补间回原位。
+			   这样时长与曲线完全由 --argon-lb-duration / --argon-lb-easing 控制，
+			   而 Fancybox 自带的 Zoom 插件做不到（它的 panTo 把 friction 写死了）。 */
+			Images: {
+				zoom: false,
+				zoomOpacity: true
+			},
+			showClass: "argon-lb-in",
+			hideClass: "argon-lb-out",
 			on: {
-				destroy: function () { argonLightboxCleanupScrollLock(); }
+				/* reveal 在图片加载完、内容层已完成布局之后触发，正是做 FLIP 的时机 */
+				reveal: function () {
+					argonLightboxFlipIn();
+				},
+				destroy: function () {
+					argonLightboxCleanupScrollLock();
+					argonLightboxRestoreFocus();
+				}
 			}
 		});
 		/* 监听 with-fancybox 类，提供不依赖 Fancybox 内部销毁流程的兜底清理 */

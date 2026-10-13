@@ -3025,10 +3025,19 @@ function argon_lazyload($content){
 }
 function argon_fancybox($content){
 	if(!is_feed() && !is_robots() && !is_home()){
+		/* data-thumb：给 Fancybox 的缩略图条（Thumbs）与关闭动画指定图片源。
+		   为什么必须显式给：Fancybox 这样取缩略图源 ——
+		     r = img.currentSrc || img.src;
+		     !r && img.dataset && (r = img.dataset.lazySrc || img.dataset.src);
+		   而本站的正文图是懒加载的，未进入视口前 src 是 1x1 的 SVG 占位 data-URI。
+		   那个 data-URI 是【真值】，于是 !r 的兜底分支永远不会执行，
+		   Fancybox 就把占位图当成了缩略图 —— 表现是灯箱底部缩略图条大片空白
+		   （实测：滚到页面顶部后打开灯箱，15 个缩略图里 10 个是 1x1 占位图）。
+		   这里直接把真实地址写进 data-thumb，绕开对 img.src 的依赖。 */
 		if (argon_get_option('argon_enable_lazyload') != 'false'){
-			$content = preg_replace('/<img(.*?)data-original=[\'"](.*?)[\'"](.*?)((\/>)|>|(<\/img>))/i',"<a class='argon-lightbox-img' data-fancybox='post-images' href='$2'>$0</a>" , $content);
+			$content = preg_replace('/<img(.*?)data-original=[\'"](.*?)[\'"](.*?)((\/>)|>|(<\/img>))/i',"<a class='argon-lightbox-img' data-fancybox='post-images' data-thumb='$2' href='$2'>$0</a>" , $content);
 		}else{
-			$content = preg_replace('/<img(.*?)src=[\'"](.*?)[\'"](.*?)((\/>)|>|(<\/img>))/i',"<a class='argon-lightbox-img' data-fancybox='post-images' href='$2'>$0</a>" , $content);
+			$content = preg_replace('/<img(.*?)src=[\'"](.*?)[\'"](.*?)((\/>)|>|(<\/img>))/i',"<a class='argon-lightbox-img' data-fancybox='post-images' data-thumb='$2' href='$2'>$0</a>" , $content);
 		}
 	}
 	return $content;

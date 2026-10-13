@@ -6576,6 +6576,102 @@ a[data-fancybox].comment-image img {
 	cursor: zoom-in;
 }
 
+/* 灯箱开关时不再让界面抽搐（滚动条补偿）
+   ----------------------------------------------------------------
+   现象：打开图片灯箱时，顶栏导航（站点名称、搜索那一行）会横向抖一下，关闭时再抖回来。
+   根因：Fancybox 打开时会给 <body> 加 hide-scrollbar，滚动条消失 → 视口可用宽度 +10px。
+         它的补偿方式是给 <body> 加 margin-right：
+             html.with-fancybox body.hide-scrollbar{
+                 margin-right:calc(var(--fancybox-body-margin,0px) + var(--fancybox-scrollbar-compensate,0px))
+             }
+         这对【普通流】内容有效（实测 #content / #leftbar 不位移），
+         但 position:fixed 的元素是相对【视口】定位的，body 的 margin 管不到它们：
+         实测 .navbar-brand 右移 5px、#float_action_buttons 右移 10px。
+
+   修法：用 scrollbar-gutter:stable 在 <html> 上常驻预留滚动条空间 ——
+         滚动条显不显示，可用宽度都不变，fixed 元素自然不动。
+         但此时 Fancybox 那套 margin-right 补偿就成了【过度补偿】，
+         普通流内容反而会左移 5px（实测 #content / #leftbar 各 -5px），
+         所以必须在支持的浏览器上把它清零。
+
+   兼容性：scrollbar-gutter 需要 Chrome/Edge 94+、Firefox 97+、Safari 18.2+。
+         不支持的浏览器保持原状（导航栏会抖，但不影响可用性）；
+         Safari 默认用 overlay 滚动条、本来就没有宽度变化，不受影响。
+         因此这里用 @supports 包起来，不去动老浏览器的行为。 */
+@supports (scrollbar-gutter: stable) {
+	html {
+		scrollbar-gutter: stable;
+	}
+	html.with-fancybox body.hide-scrollbar {
+		margin-right: 0 !important;
+	}
+}
+
+/* Fancybox v5 灯箱动画（自定义，可调）
+   ----------------------------------------------------------------
+   背景：Fancybox 默认的开关动画【时长不可调】。
+     · 它的 CSS 只把 --f-transition-duration / -easing / -delay 当作 var() 的回退值，
+       从未定义过它们（已核实 fancybox.css 里 0 处定义），回退值 0.2s + ease 就是实际值；
+     · 更关键的是图片灯箱走的是 Images(Zoom) 插件 —— 它用 Panzoom 做缩放，
+       内部写死了 panTo({ friction: .2 或 .33 })，时长由 friction 决定，CSS 完全不参与。
+       实测把 --f-transition-duration 设成 0.2s / 0.42s / 1.5s，开关耗时都是约 130ms。
+   因此 argontheme.js 里把 Zoom 关掉（Images.zoom = false），改用下面这套，
+   时长与曲线才真正可控。
+
+   曲线用 cubic-bezier(0.16, 1, 0.3, 1)：起步快、收尾长（easeOutExpo 风格），
+   与 Fancybox 自己给幻灯片用的曲线一致，观感更从容。
+
+   打开时的「从缩略图放大」由 JS 用 FLIP 实现（argonLightboxFlipIn）：
+   内容层先被平移到缩略图位置、缩到缩略图大小，再靠下面这条 transition 补间回原位。
+   所以 .argon-lb-in 只负责透明度，transform 交给 FLIP，两者互不打架。 */
+:root {
+	--argon-lb-duration: 0.55s;
+	--argon-lb-easing: cubic-bezier(0.16, 1, 0.3, 1);
+}
+/* 内容层的补间（FLIP 用）。
+   必须用 html 前缀 + 完整选择器：Fancybox 里有
+       .fancybox__slide.has-image > .fancybox__content{ transition:none; transform:translate3d(0,0,0) }
+   特异性是 (0,2,0)，而它的样式表又是懒加载、排在主题之后 ——
+   只写 .fancybox__content (0,1,0) 会被它盖掉（实测 transition 变成 0s）。
+   注意：FLIP 的起始 transform 由 JS 写成【内联】样式 —— Fancybox/Panzoom 也是用内联
+   transform 控制内容层的，内联压过一切选择器，所以这里只负责提供 transition。 */
+html .fancybox__content,
+html .fancybox__slide.has-image > .fancybox__content {
+	transition: transform var(--argon-lb-duration, 0.55s) var(--argon-lb-easing, ease);
+	transform-origin: center center;
+}
+@keyframes argon-lb-in {
+	from {
+		opacity: 0;
+	}
+	to {
+		opacity: 1;
+	}
+}
+@keyframes argon-lb-out {
+	from {
+		opacity: 1;
+		transform: scale(1);
+	}
+	to {
+		opacity: 0;
+		transform: scale(0.96);
+	}
+}
+/* html 前缀是为了压过 Fancybox 懒加载注入的同名规则（它的样式表排在主题之后） */
+html .argon-lb-in {
+	animation: var(--argon-lb-duration, 0.55s) var(--argon-lb-easing, ease) both argon-lb-in;
+}
+html .argon-lb-out {
+	animation: var(--argon-lb-duration, 0.55s) var(--argon-lb-easing, ease) both argon-lb-out;
+}
+/* 尊重「减少动态效果」偏好 */
+@media (prefers-reduced-motion: reduce) {
+	:root {
+		--argon-lb-duration: 0.01s;
+	}
+}
+
 /* 友链自助提交/修改表单（Enhanced） */
 /* 友链自主申请按钮 + 弹窗（仿赞赏 / 评论区风格） */
 .friendlink-apply{position:relative;display:block;text-align:center;margin:30px 0 12px;}

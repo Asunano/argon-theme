@@ -2140,20 +2140,33 @@ html.darkmode .post-thumbnail.no-lqip {
 }
 /* —— 正文图片的 LQIP 占位 ——
    与缩略图同一套机制：argon_lazyload() 把 32px 小图挂到元素自身的 background-image 上
-   （见 functions.php），这里只负责「加载中 → 到位后」的呈现。
+   （见 functions.php），这里负责「加载中 → 到位后」的过渡。
 
-   正文图【不加 blur】：一张 1200px 宽的图做 filter: blur() 很贵，
-   滚动时每帧都要重算，实测观感就是「正文抽搐」。
-   而 32px 小图放大到正文尺寸本身就足够软，不需要再叠模糊。
+   过渡用 filter: blur() —— 加载中整个元素是模糊的（此时显示的是 LQIP 背景），
+   清晰图到位后归零，观感是「从模糊变清晰」而不是硬切。
+   代价可控：模糊只在加载期间存在，且 blur 值取得小（正文图尺寸大）。
+   注意不能改用 opacity —— LQIP 是元素【自己的背景】，淡出会把背景一起淡掉。
 
-   尺寸稳定性靠另一件事：argon_lazyload() 会给缺宽高的正文图补上
-   width/height（从附件元数据取），配合下面的 height: auto，
-   浏览器能按宽高比【提前预留】空间 —— 不同尺寸的图都不会引起重排。 */
+   尺寸稳定性靠两件事（都在 functions.php 里写进内联样式）：
+   · aspect-ratio 锁定真实比例（占位图是 1×1 的 SVG，其固有比例会盖掉 width/height 属性）；
+   · width: min(100%, 自然宽) 让占位阶段的宽度精确等于最终宽度。 */
 article img.lazyload.has-lqip,
 .wp-block-image img.lazyload.has-lqip {
 	background-size: cover;
 	background-position: center center;
 	background-repeat: no-repeat;
+	transition: filter 0.45s ease;
+}
+article img.lazyload.has-lqip:not(.lazyload-loaded),
+.wp-block-image img.lazyload.has-lqip:not(.lazyload-loaded) {
+	filter: blur(8px);
+}
+@media (prefers-reduced-motion: reduce) {
+	article img.lazyload.has-lqip,
+	.wp-block-image img.lazyload.has-lqip {
+		transition: none;
+		filter: none;
+	}
 }
 /* 宽高比预留：只在没写死高度时生效，不干扰作者自定义尺寸 */
 article img.lazyload,

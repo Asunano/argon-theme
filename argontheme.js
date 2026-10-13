@@ -2648,18 +2648,24 @@ function lazyloadInit(){
 	if (lazyBaseOptions.effect == "none"){
 		delete lazyBaseOptions.effect;
 	}
-	$("article img.lazyload:not(.lazyload-loaded) , .related-post-thumbnail.lazyload:not(.lazyload-loaded) , .shuoshuo-preview-container img.lazyload:not(.lazyload-loaded)").lazyload(
-		Object.assign({}, lazyBaseOptions, {
-			load: function () {
-				$(this).addClass("lazyload-loaded");
-				$(this).parent().removeClass("lazyload-container-unload");
-				/*表格内懒加载图片加载后会使 border-collapse 重排变细，强制修复*/
-				if ($(this).closest("table, .wp-block-table").length){
-					tableReflow();
-				}
+	/* 正文图片也【不用 fadeIn】——
+	   jQuery 的 fadeIn 会把元素 display:none → block 并从 opacity:0 动画到 1，
+	   那段时间元素【连同它自己的 LQIP 背景】完全不可见 ——
+	   正文里就会露一下底色再淡入，观感是「抽搐/抖一下」。
+	   （只给缩略图关掉是不够的，正文图走的是同一个 lazyBaseOptions。）
+	   过渡交给 CSS：加载中 filter: blur()，到位后归零，从模糊变清晰。 */
+	var contentOptions = Object.assign({}, lazyBaseOptions, {
+		load: function () {
+			$(this).addClass("lazyload-loaded");
+			$(this).parent().removeClass("lazyload-container-unload");
+			/*表格内懒加载图片加载后会使 border-collapse 重排变细，强制修复*/
+			if ($(this).closest("table, .wp-block-table").length){
+				tableReflow();
 			}
-		})
-	);
+		}
+	});
+	delete contentOptions.effect;
+	$("article img.lazyload:not(.lazyload-loaded) , .related-post-thumbnail.lazyload:not(.lazyload-loaded) , .shuoshuo-preview-container img.lazyload:not(.lazyload-loaded)").lazyload(contentOptions);
 	/* 缩略图【不用 fadeIn】——
 	   jQuery 的 fadeIn 会把元素 display:none → block 并从 opacity:0 动画到 1，
 	   那段时间元素完全不可见：既看不到 LQIP 背景，也看不到清晰图，

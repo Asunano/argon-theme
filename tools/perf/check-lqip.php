@@ -217,6 +217,7 @@ $r = argon_get_lqip_for_img_src('https://example.com/wp-content/uploads/2026/10/
 chk('原图 URL 能查到附件并生成 LQIP', strpos($r, 'data:image/jpeg;base64,') === 0, substr($r, 0, 30));
 $metaG = argon_get_img_meta_for_src('https://example.com/wp-content/uploads/2026/10/photo.jpg');
 chk('同时返回了宽高（用于预留空间）', $metaG[1] > 0 && $metaG[2] > 0, $metaG[1] . 'x' . $metaG[2]);
+chk('宽高与附件元数据一致（不是缩略图尺寸）', $metaG[1] === 1200 && $metaG[2] === 675, $metaG[1] . 'x' . $metaG[2]);
 chk('确实生成了（不是空串）', $r !== '');
 
 echo "\n  场景 G2：带尺寸后缀的 URL 也能反查到同一附件\n";

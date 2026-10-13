@@ -116,6 +116,9 @@ chk('挂了 LQIP 背景（has-lqip）', strpos($out, 'has-lqip') !== false);
 chk('背景是 LQIP data URI', strpos($out, "background-image:url('data:image/jpeg;base64,FAKELQIP')") !== false, substr($out, 0, 200));
 chk('背景铺满（background-size:cover）', strpos($out, 'background-size:cover') !== false);
 chk('背景居中（background-position:center）', strpos($out, 'background-position:center') !== false);
+/* 尺寸锁定：占位阶段就要与最终一致，否则图片一到会跳 */
+chk('用 aspect-ratio 锁定真实比例', strpos($out, 'aspect-ratio:1200 / 675') !== false, substr($out, 0, 240));
+chk('宽度用 min(100%,自然宽) 锁定', strpos($out, 'width:min(100%,1200px)') !== false);
 
 echo "\n=== 3b. 拿不到 LQIP 时退回 no-lqip（中性底色兜底） ===\n";
 $GLOBALS['__lqip_on'] = false;

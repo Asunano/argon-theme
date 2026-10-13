@@ -2767,8 +2767,6 @@ if ($("html").hasClass("banner-as-cover")){
 /*Pjax*/
 var pjaxScrollTop = 0, pjaxLoading = false;
 /* FLIP 飞入用：换页前记下被点卡片的 id 与位置，换页后在新 DOM 里找到它再飞。
-   必须跨两个事件传递，所以放在这个作用域里。 */
-var flipCardId = "", flipFromTop = 0, flipActive = false;
 /*Pjax 换页后表格 border-collapse 重排：懒加载图片加载或 Web 字体(FOUT)就绪都会使
   折叠边框按子像素重绘，偶发变细/缺失；强制一次同步重排可修复（纯 CSS 无法自愈）*/
 function tableReflow(){
@@ -2809,25 +2807,32 @@ $(document).pjax("a[href]:not([no-pjax]):not(.no-pjax):not([target='_blank']):no
 }).on('pjax:afterGetContainers', function(e, f, g) {
 	/* 选择器必须同时匹配两种标记：
 	     · 现在的：<h2 class="post-title"><a href>…</a></h2>   —— 类在 h2 上，a 是后代
-	     · 旧版的：<a class="post-title">…</a>                 —— 类在 a 上
+	     · 上游的：<a class="post-title">…</a>                 —— 类在 a 上
 	   标题语义化（列表标题包进 <h2>，见 SEO 那批改动）把类从 <a> 移到了 <h2>，
-	   而这里原来只判 `a.post-title`，于是【整个进入动画从此不再触发】。 */
+	   而这里原来只判 `a.post-title`，于是【进入动画从此完全不触发】。
+	   其余逻辑保持与上游一致 —— 不要在这里自己发明新的动画。 */
 	if (g.is("#main article.post-preview .post-title a") || g.is("#main article.post-preview a.post-title")){
 		let $card = $(g.parents("article.post-preview")[0]);
-		/* 记下「从哪儿飞」。
-		   必须在 DOM 被替换【之前】取：这个事件触发于替换之前，
-		   此刻拿到的才是用户点击时卡片所在的位置。
-		   飞入本身放到 pjax:complete 做 —— 那里新 DOM 已经就位。 */
-		flipCardId = $card.attr("id") || "";
-		flipFromTop = $card[0] ? $card[0].getBoundingClientRect().top : 0;
-		flipActive = flipCardId !== "";
-		/* 请求期间给旧卡片一个点加载动画、其余卡片压暗 —— 给用户即时反馈。
-		   这一片马上会被新 DOM 整片替换掉，所以不需要在这里做收尾。 */
+		let waterflowOn = false;
+		if ($("#main").hasClass("waterflow")){
+			waterflowOn = true;
+			$card.css("transition", "all .5s ease");
+		}
 		$card.append("<div class='loading-css-animation'><div class='loading-dot loading-dot-1' ></div><div class='loading-dot loading-dot-2' ></div><div class='loading-dot loading-dot-3' ></div><div class='loading-dot loading-dot-4' ></div><div class='loading-dot loading-dot-5' ></div><div class='loading-dot loading-dot-6' ></div><div class='loading-dot loading-dot-7' ></div><div class='loading-dot loading-dot-8' ></div></div></div>");
 		$card.addClass("post-pjax-loading");
 		$("#main").addClass("post-list-pjax-loading");
-		if ($("#main").hasClass("waterflow")){
-			$card.css("transition", "all .5s ease");
+		let offsetTop = $($card).offset().top - $("#main").offset().top;
+		if ($("html").hasClass("is-home") && $("html").hasClass("banner-as-cover")){
+			offsetTop = $($card).offset().top - window.outerHeight * 0.418;
+		}
+		/* 这里的位移是【给旧卡片看的】：请求期间把被点的卡片挪到列表顶部，
+		   .post-list-pjax-loading 再把其余卡片压成透明 ——
+		   给用户的即时反馈就是「列表收拢 + 点动画」。
+		   新内容到位时整片 DOM 会被替换，所以不需要在这里收尾。
+		   注意：.card 上有 animation: card-show，CSS 动画会覆盖普通内联声明，
+		   所以这条 transform 实际上不会生效 —— 上游也是这个行为，保持不动。 */
+		$card.css("transform" , "translateY(-" + offsetTop + "px)");
+		if (waterflowOn){
 			$card.css("left", "10px");
 			$card.css("width", "calc(100% - 20px)");
 		}
@@ -2857,39 +2862,10 @@ $(document).pjax("a[href]:not([no-pjax]):not(.no-pjax):not([target='_blank']):no
 }).on('pjax:complete', function() {
 	pjaxLoading = false;
 	NProgress.inc();
-	/* —— FLIP 飞入 ——
-	   新 DOM 已经就位，找到同一篇文章的卡片（卡片 id 就是 post-<ID>），
-	   先把它挪回用户点击时的位置，下一帧再归位，形成「从点击处飞上来」。
-
-	   为什么放在这里而不是 afterGetContainers：
-	   那个事件触发于容器替换【之前】，那时操作的卡片马上就会被丢掉，
-	   位移再对也看不到 —— 这也是原来那段飞入从来没生效的原因之一。
-	   另一个原因是 .card 上的 card-show 动画会覆盖普通内联 transform，
-	   所以这里给它加 .post-pjax-flip（animation: none）把动画让开。 */
-	if (flipActive){
-		flipActive = false;
-		var $newCard = flipCardId ? $("#main #" + flipCardId) : $();
-		if ($newCard.length && $newCard.hasClass("post-preview")){
-			var toTop = $newCard[0].getBoundingClientRect().top;
-			var dy = flipFromTop - toTop;
-			if (Math.abs(dy) > 4){
-				$newCard.addClass("post-pjax-flip");
-				$newCard.css("transform", "translateY(" + dy + "px)");
-				/* 等两帧再归零：否则浏览器会把两次 transform 合并成一次，看不到过渡 */
-				requestAnimationFrame(function(){
-					requestAnimationFrame(function(){
-						$newCard.css("transform", "none");
-						setTimeout(function(){
-							$newCard.removeClass("post-pjax-flip").css("transform", "");
-						}, 560);
-					});
-				});
-			}
-		}
-		flipCardId = ""; flipFromTop = 0;
-	}
-	/* 兜底清理：请求期间加在旧 DOM 上的类。正常随替换一起消失，
-	   但若某次替换没发生（请求失败等），留着会让整个列表 opacity:0 且点不动。 */
+	/* 兜底清理：请求期间加在列表上的类。
+	   .post-list-pjax-loading .post-preview 是 opacity:0 + pointer-events:none，
+	   正常随 DOM 替换一起消失；但若某次替换没发生（请求失败、被中断等），
+	   留着会让整个列表永久隐身且点不动。上游没有这一步，属于防御性补充。 */
 	$("#main").removeClass("post-list-pjax-loading");
 	$("#main article.post-preview").removeClass("post-pjax-loading");
 	$("#main .loading-css-animation").remove();

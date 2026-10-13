@@ -3245,20 +3245,31 @@ function argon_lazyload($content){
 					$style = trim($img->getAttribute('style'));
 					if ($style != '' && substr($style, -1) != ';'){ $style .= ';'; }
 					$style .= "background-image:url('" . esc_attr($lqip) . "');background-size:cover;background-position:center;";
-					$img->setAttribute('style', $style);
 				}
-				/* 【通用解：给不同尺寸的正文图预留正确空间】
-				   正文图若没有 width/height，浏览器在图片到达前只能按占位图（1×1）
-				   算高度，图片一到整段重排 —— 观感就是「正文抽搐」。
-				   这里从附件元数据补上真实宽高；配合 CSS 的 max-width:100%; height:auto，
-				   浏览器会按宽高比提前预留空间，任意尺寸都稳。
-				   只在缺失时补，不覆盖作者/编辑器已经写好的值。 */
+				/* 【通用解：给不同尺寸的正文图锁定真实宽高比】
+				   只写 width/height 属性是不够的 —— 那两个属性只在图片「不可用」时
+				   才用来推算比例；而这里的占位图是 1×1 的 SVG，一旦它加载完，
+				   浏览器就改用【它的固有比例 1:1】，框立刻变成正方形，
+				   再被主题的 max-height:60vh 一压，所有图都变成同一个高度；
+				   真实图到达、比例一变，整段就重排 —— 观感就是「正文抽搐」。
+				   aspect-ratio 优先于固有比例，所以显式写上它就锁住了。
+
+				   宽度也要一起锁：主题那条占位规则给的是 width:100%，
+				   而图片加载完之后该规则不再匹配（src 变了），宽度退回 auto ——
+				   比容器窄的图会突然缩回自然宽度，照样跳。
+				   最终宽度正好是 min(容器宽, 自然宽)，所以这里用 CSS min() 精确表达，
+				   占位阶段与最终状态逐像素一致。 */
 				if ($meta[1] > 0 && $meta[2] > 0){
+					$style .= 'width:min(100%,' . (int) $meta[1] . 'px);'
+						. 'aspect-ratio:' . (int) $meta[1] . ' / ' . (int) $meta[2] . ';';
 					if ($img->getAttribute('width') == ''){
 						$img->setAttribute('width', (string) $meta[1]);
 					}
 					if ($img->getAttribute('height') == ''){
 						$img->setAttribute('height', (string) $meta[2]);
+					}
+					if ($style != ''){
+						$img->setAttribute('style', $style);
 					}
 				}
 				$img->setAttribute('class', trim('lazyload ' . $lazyload_loading_style . $lqip_class . ' ' . $existing_class));
@@ -3285,15 +3296,18 @@ function argon_lazyload($content){
 				$meta = argon_get_img_meta_for_src($src);
 				$lqip = $meta[0];
 				$cls = 'lazyload ' . $lazyload_loading_style . ($lqip != '' ? ' has-lqip' : ' no-lqip');
-				$style = $lqip != '' ? " style=\"background-image:url('" . esc_attr($lqip) . "');background-size:cover;background-position:center;\"" : '';
-				/* 与 DOM 分支一致：缺宽高时补上，让浏览器按宽高比预留空间 */
+				$style = $lqip != '' ? "background-image:url('" . esc_attr($lqip) . "');background-size:cover;background-position:center;" : '';
+				/* 与 DOM 分支一致：补宽高，并用 aspect-ratio 锁定真实比例
+				   （占位图是 1×1 的 SVG，它的固有比例会盖掉 width/height 属性）。 */
 				$wh = '';
 				if ($meta[1] > 0 && $meta[2] > 0){
 					if (!preg_match('/\swidth=/i', $m[1])){ $wh .= ' width="' . (int) $meta[1] . '"'; }
 					if (!preg_match('/\sheight=/i', $m[1])){ $wh .= ' height="' . (int) $meta[2] . '"'; }
+					$style .= 'width:min(100%,' . (int) $meta[1] . 'px);'
+						. 'aspect-ratio:' . (int) $meta[1] . ' / ' . (int) $meta[2] . ';';
 				}
 				$ph = 'data:image/svg+xml;base64,PCEtLUFyZ29uTG9hZGluZy0tPgo8c3ZnIHdpZHRoPSIxIiBoZWlnaHQ9IjEiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PC9zdmc+';
-				return '<img' . $m[1] . 'data-original="' . $src . '" class="' . $cls . '"' . $wh . ' src="' . $ph . '"' . $style . ' ' . $m[4];
+				return '<img' . $m[1] . 'data-original="' . $src . '" class="' . $cls . '"' . $wh . ' src="' . $ph . '"' . ($style != '' ? ' style="' . $style . '"' : '') . ' ' . $m[4];
 			}, $content);
 			$content = preg_replace('/<img(.*?)data-full-url=[\'"]([^\'"]+)[\'"](.*)>/i',"<img$1data-full-url=\"$2\" data-original=\"$2\"$3>" , $content);
 			$content = preg_replace('/<img(.*?)srcset=[\'"](.*?)[\'"](.*?)>/i',"<img$1$3>" , $content);

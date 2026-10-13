@@ -2275,13 +2275,23 @@ function argonLightboxInit(){
 				type: "classic"
 			},
 			/* 关闭时 Fancybox 的 Images(Zoom) 插件会把容器缩放回缩略图的位置，
-			   但 zoomOpacity 默认是 "auto"，只在【缩略图与图片宽高比相差 > 0.1】时才顺带淡出。
-			   本站文章图与缩略图宽高比一致，于是关闭动画全程不透明，
-			   最后一帧容器被移除、正文图出现 —— 交接处会有一次硬切（看起来像「抽一下」）。
-			   设为 true 让它在缩小的同时淡出，交接就平滑了。 */
+			   但它的动画时长【不可调】：插件内部写死了
+			     panTo({ ..., friction: zoomOpacity ? .2 : .33, ignoreBounds: true })
+			   Panzoom 的时长完全由 friction 决定，CSS 变量不参与。
+			   实测把 --f-transition-duration 设为 0.2s / 0.42s / 1.5s，
+			   开关耗时都是 130ms 左右 —— 该变量对图片灯箱【毫无作用】。
+
+			   所以这里关掉 Zoom 的缩放，让动画交回 CSS 的 showClass / hideClass
+			   （argon-lb-in / argon-lb-out，见 style.css），
+			   时长与曲线才能真正可调。代价是不再「缩放回正文图的位置」，
+			   换来的是可控、更从容的淡入淡出。
+			   若想恢复缩放效果，把 zoom 改回 true 即可（那时 CSS 时长会失效）。 */
 			Images: {
+				zoom: false,
 				zoomOpacity: true
 			},
+			showClass: "argon-lb-in",
+			hideClass: "argon-lb-out",
 			on: {
 				destroy: function () {
 					argonLightboxCleanupScrollLock();

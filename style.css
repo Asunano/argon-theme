@@ -6576,35 +6576,55 @@ a[data-fancybox].comment-image img {
 	cursor: zoom-in;
 }
 
-/* Fancybox v5 灯箱动画节奏
+/* Fancybox v5 灯箱动画（自定义，可调）
    ----------------------------------------------------------------
-   Fancybox 自己的 CSS 里【只把 --f-transition-duration / -easing / -delay
-   当作 var() 的回退值使用，从未定义过它们】（已核实：fancybox.css 里 0 处定义），
-   所以回退值 0.2s / ease 就是实际生效值 —— 偏快、偏生硬。
-   这里在 :root 上定义，自定义属性会继承进 .fancybox__container，从而接管全部动画。
+   背景：Fancybox 默认的开关动画【时长不可调】。
+     · 它的 CSS 只把 --f-transition-duration / -easing / -delay 当作 var() 的回退值，
+       从未定义过它们（已核实 fancybox.css 里 0 处定义），回退值 0.2s + ease 就是实际值；
+     · 更关键的是图片灯箱走的是 Images(Zoom) 插件 —— 它用 Panzoom 做缩放，
+       内部写死了 panTo({ friction: .2 或 .33 })，时长由 friction 决定，CSS 完全不参与。
+       实测把 --f-transition-duration 设成 0.2s / 0.42s / 1.5s，开关耗时都是约 130ms。
+   因此 argontheme.js 里把 Zoom 关掉（Images.zoom = false），改用下面的自定义类，
+   时长与曲线才真正可控。
 
-   注意 .f-zoomInUp / .f-zoomOutDown 两个类的 animation 简写把缓动【写死成 ease】
-   （不像 .f-fadeIn 那样用 var(--f-transition-easing)），所以下面要单独覆盖它们，
-   否则改了变量也只有时长生效、缓动仍是 ease。
-   而且 Fancybox 的 CSS 是【按需懒加载】的，注入后排在主题样式表之后 ——
-   同特异性下后者胜，因此这里加 html 前缀把特异性提到 (0,1,1) 压过它的 (0,1,0)。 */
+   曲线用 cubic-bezier(0.16, 1, 0.3, 1)：起步快、收尾长（easeOutExpo 风格），
+   与 Fancybox 自己给幻灯片用的曲线一致，观感更从容。
+   缩放下限刻意做得克制（进场 0.94、出场 0.96），避免「弹一下」的廉价感。 */
 :root {
-	--f-transition-duration: 0.42s;
-	/* 与 Fancybox 给幻灯片用的曲线一致：起步快、收尾长，观感更「优雅」 */
-	--f-transition-easing: cubic-bezier(0.16, 1, 0.3, 1);
-	--f-transition-delay: 0s;
+	--argon-lb-duration: 0.55s;
+	--argon-lb-easing: cubic-bezier(0.16, 1, 0.3, 1);
 }
-html .f-zoomInUp {
-	animation: var(--f-transition-duration, 0.42s) var(--f-transition-easing, ease) 0.08s both f-zoomInUp;
+@keyframes argon-lb-in {
+	from {
+		opacity: 0;
+		transform: scale(0.94);
+	}
+	to {
+		opacity: 1;
+		transform: scale(1);
+	}
 }
-html .f-zoomOutDown {
-	animation: var(--f-transition-duration, 0.42s) var(--f-transition-easing, ease) both f-zoomOutDown;
+@keyframes argon-lb-out {
+	from {
+		opacity: 1;
+		transform: scale(1);
+	}
+	to {
+		opacity: 0;
+		transform: scale(0.96);
+	}
+}
+/* html 前缀是为了压过 Fancybox 懒加载注入的同名规则（它的样式表排在主题之后） */
+html .argon-lb-in {
+	animation: var(--argon-lb-duration, 0.55s) var(--argon-lb-easing, ease) both argon-lb-in;
+}
+html .argon-lb-out {
+	animation: var(--argon-lb-duration, 0.55s) var(--argon-lb-easing, ease) both argon-lb-out;
 }
 /* 尊重「减少动态效果」偏好 */
 @media (prefers-reduced-motion: reduce) {
 	:root {
-		--f-transition-duration: 0.01s;
-		--f-transition-delay: 0s;
+		--argon-lb-duration: 0.01s;
 	}
 }
 

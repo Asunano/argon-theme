@@ -367,26 +367,11 @@ function __(text){
 		toolbar.style.setProperty("-webkit-backdrop-filter", value);
 	}
 
-	/* 顶栏背景：由 alpha 渐变到 alpha * BOTTOM_RATIO。
-	   衰减刻意做得【很轻】（0.88，只降 12%）——
-	   上一版用 0.72，整条顶栏平均浓度被拉低，观感就是「颜色发淡」。
-	   轻衰减既能与下沿过渡带无缝接上，又不会让顶栏本身变淡。
-	   background-color 必须置为 transparent：否则它会从渐变里透出来，把渐变冲淡。 */
-	const BOTTOM_RATIO = 0.88;
+	/* 顶栏背景：就是一块半透明色，随滚动改变不透明度。
+	   不再做「内部渐变 + 下沿过渡带」那套 —— 顶栏本身是个 fixed 容器，
+	   叠加滚动内容时，渐变与过渡带带来的复杂度远大于收益。 */
 	function setToolbarBg(alpha){
-		toolbar.style.setProperty("--argon-navbar-alpha", String(alpha));
-		toolbar.style.setProperty("background-color", "transparent", "important");
-		toolbar.style.setProperty(
-			"background-image",
-			"linear-gradient(to bottom, rgba(var(--toolbar-color), " + alpha + "), rgba(var(--toolbar-color), " + (alpha * BOTTOM_RATIO) + "))",
-			"important"
-		);
-	}
-	/* 完全透明时（页面顶部）不要留一条看不见的渐变，直接清掉，省一次合成 */
-	function clearToolbarBg(){
-		toolbar.style.setProperty("--argon-navbar-alpha", "0");
-		toolbar.style.setProperty("background-color", "rgba(var(--toolbar-color), 0)", "important");
-		toolbar.style.setProperty("background-image", "none", "important");
+		toolbar.style.setProperty("background-color", "rgba(var(--toolbar-color), " + alpha + ")", "important");
 	}
 
 	/* 先判定是否开启毛玻璃 —— 必须放在 no-banner 分支之前，
@@ -407,7 +392,7 @@ function __(text){
 			if (p > 1){ p = 1; }
 			if (p < 0){ p = 0; }
 			applyBlur(p > 0);
-			if (p > 0){ setToolbarBg(p * maxOpacity); } else { clearToolbarBg(); }
+			setToolbarBg(p * maxOpacity);
 			/* 保留原来的类切换语义（CSS 里还有基于它的规则） */
 			if (scrollTop < 30){
 				toolbar.classList.add("navbar-no-blur");
@@ -435,7 +420,7 @@ function __(text){
 	function changeToolbarTransparency(){
 		let scrollTop = document.documentElement.scrollTop || document.body.scrollTop;
 		if (scrollTop < startTransitionHeight){
-			clearToolbarBg();
+			setToolbarBg(0);
 			toolbar.style.setProperty('box-shadow', 'none');
 			applyBlur(false);
 			toolbar.classList.add("navbar-ontop");
@@ -451,7 +436,7 @@ function __(text){
 		let progress = (scrollTop - startTransitionHeight) / (endTransitionHeight - startTransitionHeight);
 		setToolbarBg(progress * maxOpacity);
 		toolbar.style.setProperty('box-shadow', '');
-		/* 只要开始获得背景色，模糊就一并淡入 —— 不再随进度改变半径 */
+		/* 只要开始获得背景色，模糊就一并淡入 */
 		applyBlur(true);
 		toolbar.classList.remove("navbar-ontop");
 	}

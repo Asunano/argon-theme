@@ -942,30 +942,10 @@ html.darkmode #navbar-main {
 		backdrop-filter 0.4s cubic-bezier(0.4, 0, 0.2, 1),
 		-webkit-backdrop-filter 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
-/* 下沿的渐变过渡带：接在顶栏自身的渐变之后，继续收到全透明。
-   顶栏背景是 linear-gradient(alpha → alpha * 0.88)（见 argontheme.js 的 setToolbarBg），
-   所以这里从 alpha * 0.88 起，两者在交界处【数值完全相同】。
-   用 position:absolute 是为了不参与 .navbar 的 flex 布局。
-   backdrop-filter 必须与顶栏一致：顶栏带模糊、这里不带的话，
-   两者合成底色不同（一个模糊后、一个清晰），交界处会露出接缝。 */
-#navbar-main::after {
-	content: "";
-	position: absolute;
-	left: 0;
-	right: 0;
-	top: 100%;
-	height: 26px;
-	pointer-events: none;
-	backdrop-filter: blur(12px) saturate(130%);
-	-webkit-backdrop-filter: blur(12px) saturate(130%);
-	background: linear-gradient(
-		to bottom,
-		rgba(var(--toolbar-color), calc(var(--argon-navbar-alpha, 0) * 0.88)) 0%,
-		rgba(var(--toolbar-color), calc(var(--argon-navbar-alpha, 0) * 0.5)) 28%,
-		rgba(var(--toolbar-color), calc(var(--argon-navbar-alpha, 0) * 0.18)) 62%,
-		rgba(var(--toolbar-color), 0) 100%
-	);
-}
+/* 顶栏就是一个 fixed 容器 + 半透明背景 + 毛玻璃。
+   不再有「下沿渐变过渡带」（原来那条 ::after）——
+   顶栏叠加在滚动内容之上时，渐变带的复杂度远大于它带来的收益，
+   而且它本身也会引入接缝问题。现在只保留容器与模糊两件事。 */
 #navbar-main.navbar-ontop {
 	padding-top: 1rem;
 	padding-bottom: 1rem;

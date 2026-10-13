@@ -142,7 +142,7 @@ $GLOBALS['__meta'] = array(9 => array('sizes' => array()));
 $GLOBALS['__updates'] = 0;
 $r = argon_get_lqip_data_uri(9);
 chk('返回空串', $r === '', var_export($r, true));
-chk('没有写坏元数据', $GLOBALS['__updates'] === 0, '写入 ' . $GLOBALS['__updates'] . ' 次');
+chk('写入了失败标记（避免每次渲染都重试）', $GLOBALS['__updates'] === 1 && !empty($GLOBALS['__meta'][9]['argon_lqip_failed']), '写入 ' . $GLOBALS['__updates'] . ' 次');
 $GLOBALS['__editor_ok'] = true;
 @unlink($orig);
 @rmdir($tmp);
@@ -169,6 +169,35 @@ chk('不带 lazyload 类', strpos($html2, 'lazyload') === false);
 chk('直接输出 src', strpos($html2, "src=\"https://example.com/a.jpg\"") !== false || strpos($html2, "src='https://example.com/a.jpg'") !== false);
 chk('仍有包裹层', strpos($html2, 'post-thumbnail-wrap') !== false);
 
+echo "\n  场景 F：生成失败后不再重试（性能保护）\n";
+$tmp2 = sys_get_temp_dir() . '/argon-lqip-test2-' . getmypid();
+@mkdir($tmp2, 0777, true);
+$orig2 = $tmp2 . '/orig2.jpg';
+file_put_contents($orig2, str_repeat('Y', 3000));
+$GLOBALS['__tid'] = 11;
+$GLOBALS['__files'] = array('attached:11' => $orig2);
+$GLOBALS['__meta'] = array(11 => array('sizes' => array()));
+$GLOBALS['__editor_ok'] = false;      // 让生成失败
+$GLOBALS['__editor_calls'] = 0;
+$GLOBALS['__updates'] = 0;
+$r = argon_get_lqip_data_uri(11);
+chk('失败时返回空串', $r === '', var_export($r, true));
+chk('第一次确实尝试了生成', $GLOBALS['__editor_calls'] === 1, '调用 ' . $GLOBALS['__editor_calls'] . ' 次');
+chk('记下了失败标记', !empty($GLOBALS['__meta'][11]['argon_lqip_failed']));
+chk('保留了原有元数据', isset($GLOBALS['__meta'][11]['sizes']));
+
+echo "\n  场景 F2：换个请求（清掉静态缓存）再取 —— 不应再跑图像处理\n";
+/* 静态缓存在同一进程内无法重置，这里用另一个附件 id 走「已带失败标记」的路径 */
+$GLOBALS['__tid'] = 12;
+$GLOBALS['__files'] = array('attached:12' => $orig2);
+$GLOBALS['__meta'] = array(12 => array('sizes' => array(), 'argon_lqip_failed' => 1));
+$GLOBALS['__editor_calls'] = 0;
+$r = argon_get_lqip_data_uri(12);
+chk('带失败标记时直接返回空', $r === '', var_export($r, true));
+chk('完全不再调用图像编辑器', $GLOBALS['__editor_calls'] === 0, '调用 ' . $GLOBALS['__editor_calls'] . ' 次');
+$GLOBALS['__editor_ok'] = true;
+@unlink($orig2);
+@rmdir($tmp2);
 echo "\n";
 if ($fail === 0) {
 	echo "=== 全部通过 ===\n";

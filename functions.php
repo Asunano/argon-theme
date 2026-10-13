@@ -584,8 +584,15 @@ function argon_get_lqip_data_uri($attachment_id){
 	}
 	$cache[$attachment_id] = '';   /* 先占位，避免同一请求内重复生成 */
 
-	$path = '';
+	/* 生成失败过就不再重试 —— 否则附件不在本地（CDN-only）、编辑器不可用等情况
+	   会让【每次页面渲染】都跑一遍图像处理，是实打实的性能坑。
+	   失败标记写在附件元数据里，与 lqip 尺寸名同一处，便于排查。 */
 	$meta = wp_get_attachment_metadata($attachment_id);
+	if (is_array($meta) && !empty($meta['argon_lqip_failed'])){
+		return '';
+	}
+
+	$path = '';
 	if (is_array($meta) && !empty($meta['sizes']['argon-lqip']['file'])){
 		$attached = get_attached_file($attachment_id);
 		if ($attached){
@@ -599,6 +606,11 @@ function argon_get_lqip_data_uri($attachment_id){
 		$path = argon_generate_lqip($attachment_id);
 	}
 	if ($path == '' || !@file_exists($path)){
+		/* 记下失败，下次直接跳过 */
+		if (is_array($meta)){
+			$meta['argon_lqip_failed'] = 1;
+			wp_update_attachment_metadata($attachment_id, $meta);
+		}
 		return '';
 	}
 	$data = @file_get_contents($path);

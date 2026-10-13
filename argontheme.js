@@ -404,6 +404,46 @@ function __(text){
 	document.addEventListener("scroll", changeToolbarTransparency, {passive: true});
 }();
 
+/* —— LQIP 占位 ——
+   缩略图的 LQIP 是挂在 <img> 自身的 background-image 上，加载中由 CSS 叠一层
+   blur（.post-thumbnail.lazyload.has-lqip），清晰图到位后把 blur 归零 ——
+   全程同一个元素，所以不会闪白。
+
+   这里只做一件事：清理历史遗留的状态类。占位的显隐完全交给 CSS，
+   不再需要 JS 逐个标记「已加载」。
+   （之前那套「包裹层 + 两层 img + 光晕 + 60ms 错开」已按需求撤掉：
+     光晕与懒加载的逐个加载叠在一起会一直闪，两层方案在换 src 时会露白底。） */
+!function(){
+	function cleanup(){
+		var els = document.querySelectorAll(".post-thumbnail-wrap, .argon-sk, .post-thumbnail-lqip");
+		for (var i = 0; i < els.length; i++){
+			var el = els[i];
+			if (el.classList.contains("post-thumbnail-wrap")){
+				/* 把包裹层里的 img 提出来，去掉包裹层 —— 老版本渲染的页面在 Pjax 后可能残留 */
+				var img = el.querySelector("img.post-thumbnail");
+				if (img && el.parentNode){
+					el.parentNode.insertBefore(img, el);
+				}
+				el.parentNode && el.parentNode.removeChild(el);
+			}else{
+				el.parentNode && el.parentNode.removeChild(el);
+			}
+		}
+		var lists = document.querySelectorAll(".article-list.has-skeleton");
+		for (var j = 0; j < lists.length; j++){
+			lists[j].classList.remove("has-skeleton");
+		}
+	}
+	if (document.readyState === "complete"){
+		cleanup();
+	}else{
+		document.addEventListener("DOMContentLoaded", cleanup);
+	}
+	if (window.jQuery){
+		jQuery(document).on("pjax:complete pjax:end", cleanup);
+	}
+}();
+
 /*搜索*/
 function searchPosts(word){
 	if ($(".search-result").length > 0){
@@ -2620,16 +2660,21 @@ function lazyloadInit(){
 			}
 		})
 	);
-	$(".post-thumbnail.lazyload:not(.lazyload-loaded)").lazyload(
-		Object.assign({}, lazyBaseOptions, {
-			threshold: argonConfig.lazyload.threshold,
-			load: function () {
-				$(this).addClass("lazyload-loaded");
-				$(this).parent().removeClass("lazyload-container-unload");
-				waterflowInit();
-			}
-		})
-	);
+	/* 缩略图【不用 fadeIn】——
+	   jQuery 的 fadeIn 会把元素 display:none → block 并从 opacity:0 动画到 1，
+	   那段时间元素完全不可见：既看不到 LQIP 背景，也看不到清晰图，
+	   露出来的是卡片白底 —— 观感就是「闪一下白色」。
+	   这里改用无效果的加载，过渡交给 CSS（filter/transform 从模糊到清晰）。 */
+	var thumbOptions = Object.assign({}, lazyBaseOptions, {
+		threshold: argonConfig.lazyload.threshold,
+		load: function () {
+			$(this).addClass("lazyload-loaded");
+			$(this).parent().removeClass("lazyload-container-unload");
+			waterflowInit();
+		}
+	});
+	delete thumbOptions.effect;
+	$(".post-thumbnail.lazyload:not(.lazyload-loaded)").lazyload(thumbOptions);
 	$(".comment-item-text .comment-sticker.lazyload").lazyload(Object.assign({}, lazyBaseOptions, {load: function(){$(this).removeClass("lazyload")}}));
 }
 lazyloadInit();

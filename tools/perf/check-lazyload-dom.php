@@ -35,6 +35,16 @@ $block = substr($src, $start, $endMark - $start);
 /* 桩：$lazyload_loading_style 与 $content 由用例提供。
    注意：被抽出的代码是【修改 $content 变量】而不是 echo，
    所以返回 $content，不是输出缓冲。 */
+/* argon_lazyload() 现在还会给正文图片挂 LQIP 背景（argon_get_lqip_for_img_src），
+   这里桩掉它，返回一个可辨识的 data URI，好断言背景确实挂上了。 */
+$GLOBALS['__lqip_on'] = true;
+function argon_get_lqip_for_img_src($src) {
+	if (empty($GLOBALS['__lqip_on'])) { return ''; }
+	if ($src == '' || strpos($src, 'data:') === 0) { return ''; }
+	return 'data:image/jpeg;base64,FAKELQIP';
+}
+function esc_attr($s) { return htmlspecialchars((string) $s, ENT_QUOTES, 'UTF-8'); }
+
 function run_block($content, $style = 'lazyload-style-none') {
 	$lazyload_loading_style = $style;
 	eval($GLOBALS['__block']);
@@ -99,6 +109,19 @@ chk('加上了 data-original', strpos($out, 'data-original="https://example.com/
 chk('移除了 srcset', strpos($out, 'srcset') === false);
 chk('src 换成了占位图', strpos($out, 'data:image/svg+xml;base64') !== false);
 chk('保留了原有 class', strpos($out, 'wp-image') !== false);
+/* 新增：正文图片也挂 LQIP 占位（背景方案，见 functions.php 的 argon_lazyload） */
+chk('挂了 LQIP 背景（has-lqip）', strpos($out, 'has-lqip') !== false);
+chk('背景是 LQIP data URI', strpos($out, "background-image:url('data:image/jpeg;base64,FAKELQIP')") !== false, substr($out, 0, 200));
+chk('背景铺满（background-size:cover）', strpos($out, 'background-size:cover') !== false);
+chk('背景居中（background-position:center）', strpos($out, 'background-position:center') !== false);
+
+echo "\n=== 3b. 拿不到 LQIP 时退回 no-lqip（中性底色兜底） ===\n";
+$GLOBALS['__lqip_on'] = false;
+$outNo = run_block('<p>文字</p><img class="wp-image" src="https://example.com/a.jpg">');
+chk('退回 no-lqip', strpos($outNo, 'no-lqip') !== false, substr($outNo, 0, 160));
+chk('不挂背景图', strpos($outNo, 'background-image:url(') === false);
+chk('懒加载标记仍在', strpos($outNo, 'lazyload') !== false);
+$GLOBALS['__lqip_on'] = true;
 
 echo "\n=== 4. data-full-url 优先于 src ===\n";
 $img2 = '<img data-full-url="https://example.com/full.jpg" src="https://example.com/thumb.jpg">';

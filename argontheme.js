@@ -404,83 +404,44 @@ function __(text){
 	document.addEventListener("scroll", changeToolbarTransparency, {passive: true});
 }();
 
-/* —— LQIP 交叉过渡 + 骨架块 ——
-   卡片/头图在「文字已渲染、原图还没下完」这段时间显示该图自己的模糊版本（LQIP）；
-   没有 LQIP 时退回骨架块，由 .article-list 上那层【共用的】斜向光晕扫过。
-   清晰图 load 后给包裹层加 .argon-lqip-done，占位层随之淡出 —— 两层反向淡入淡出，
-   中间任何时刻都有一层是不透明的，所以不会露白底。
+/* —— LQIP 占位 ——
+   缩略图的 LQIP 是挂在 <img> 自身的 background-image 上，加载中由 CSS 叠一层
+   blur（.post-thumbnail.lazyload.has-lqip），清晰图到位后把 blur 归零 ——
+   全程同一个元素，所以不会闪白。
 
-   判定必须用 complete && naturalWidth，【不能】看 lazyload 的 lazyload-loaded 类：
-   那个类只说明 src 被换过了，不保证解码完成。
-   （灯箱底部缩略图条那次就是只看 src 而误判的。） */
+   这里只做一件事：清理历史遗留的状态类。占位的显隐完全交给 CSS，
+   不再需要 JS 逐个标记「已加载」。
+   （之前那套「包裹层 + 两层 img + 光晕 + 60ms 错开」已按需求撤掉：
+     光晕与懒加载的逐个加载叠在一起会一直闪，两层方案在换 src 时会露白底。） */
 !function(){
-	/* 给每张卡片写 --sk-i：按文档顺序，也就是「首屏可见 → 越靠下」。
-	   上限 12 档，再往下就没必要继续加了（0.72s 之后视觉上已同步）。 */
-	function assignStagger(){
-		var wraps = document.querySelectorAll(".post-thumbnail-wrap.has-lqip, .post-thumbnail-wrap.has-skeleton");
-		for (var i = 0; i < wraps.length; i++){
-			wraps[i].style.setProperty("--sk-i", String(Math.min(i, 12)));
-		}
-	}
-	/* 列表上还有没有未完成的占位层？没有就撤掉光晕 */
-	function syncShimmer(){
-		var lists = document.querySelectorAll(".article-list");
-		for (var i = 0; i < lists.length; i++){
-			var left = lists[i].querySelectorAll(
-				".post-thumbnail-wrap.has-skeleton:not(.argon-lqip-done), .post-thumbnail-wrap.has-lqip:not(.argon-lqip-done)"
-			);
-			if (left.length > 0){
-				lists[i].classList.add("has-skeleton");
+	function cleanup(){
+		var els = document.querySelectorAll(".post-thumbnail-wrap, .argon-sk, .post-thumbnail-lqip");
+		for (var i = 0; i < els.length; i++){
+			var el = els[i];
+			if (el.classList.contains("post-thumbnail-wrap")){
+				/* 把包裹层里的 img 提出来，去掉包裹层 —— 老版本渲染的页面在 Pjax 后可能残留 */
+				var img = el.querySelector("img.post-thumbnail");
+				if (img && el.parentNode){
+					el.parentNode.insertBefore(img, el);
+				}
+				el.parentNode && el.parentNode.removeChild(el);
 			}else{
-				lists[i].classList.remove("has-skeleton");
+				el.parentNode && el.parentNode.removeChild(el);
 			}
 		}
-	}
-	function markLoaded(img){
-		/* 【必须排除 1×1 占位图】——
-		   懒加载的占位图是 data URI 的 1×1 PNG，它同样满足
-		   complete === true 且 naturalWidth === 1。
-		   只判 naturalWidth > 0 的话，占位图会被当成「已加载」，
-		   于是清晰图还没到就把占位层淡出了 —— 表现为「完全没有占位」。
-		   真实图片都远大于 1px，所以用 > 1 作为判据。 */
-		if (!img || !img.naturalWidth || img.naturalWidth <= 1 || !img.naturalHeight || img.naturalHeight <= 1){
-			return;
+		var lists = document.querySelectorAll(".article-list.has-skeleton");
+		for (var j = 0; j < lists.length; j++){
+			lists[j].classList.remove("has-skeleton");
 		}
-		var wrap = img.closest ? img.closest(".post-thumbnail-wrap") : null;
-		if (wrap){
-			wrap.classList.add("argon-lqip-done");
-			syncShimmer();
-		}
-	}
-	/* 图片已在缓存里时 load 可能早于监听绑定，这里主动扫一遍 */
-	function sweep(){
-		assignStagger();
-		var imgs = document.querySelectorAll(".post-thumbnail-wrap .post-thumbnail");
-		for (var i = 0; i < imgs.length; i++){
-			if (imgs[i].complete && imgs[i].naturalWidth > 1 && imgs[i].naturalHeight > 1){
-				markLoaded(imgs[i]);
-			}
-		}
-		syncShimmer();
-	}
-	/* load 不冒泡，但会在捕获阶段经过 document —— 用捕获做委托 */
-	document.addEventListener("load", function(e){
-		var t = e.target;
-		if (t && t.classList && t.classList.contains("post-thumbnail")){
-			markLoaded(t);
-		}
-	}, true);
-	/* Pjax 换页后补一遍 */
-	if (window.jQuery){
-		jQuery(document).on("pjax:complete pjax:end", sweep);
 	}
 	if (document.readyState === "complete"){
-		sweep();
+		cleanup();
 	}else{
-		document.addEventListener("DOMContentLoaded", sweep);
-		window.addEventListener("load", sweep);
+		document.addEventListener("DOMContentLoaded", cleanup);
 	}
-	setTimeout(sweep, 1200);
+	if (window.jQuery){
+		jQuery(document).on("pjax:complete pjax:end", cleanup);
+	}
 }();
 
 /*搜索*/
@@ -2699,16 +2660,21 @@ function lazyloadInit(){
 			}
 		})
 	);
-	$(".post-thumbnail.lazyload:not(.lazyload-loaded)").lazyload(
-		Object.assign({}, lazyBaseOptions, {
-			threshold: argonConfig.lazyload.threshold,
-			load: function () {
-				$(this).addClass("lazyload-loaded");
-				$(this).parent().removeClass("lazyload-container-unload");
-				waterflowInit();
-			}
-		})
-	);
+	/* 缩略图【不用 fadeIn】——
+	   jQuery 的 fadeIn 会把元素 display:none → block 并从 opacity:0 动画到 1，
+	   那段时间元素完全不可见：既看不到 LQIP 背景，也看不到清晰图，
+	   露出来的是卡片白底 —— 观感就是「闪一下白色」。
+	   这里改用无效果的加载，过渡交给 CSS（filter/transform 从模糊到清晰）。 */
+	var thumbOptions = Object.assign({}, lazyBaseOptions, {
+		threshold: argonConfig.lazyload.threshold,
+		load: function () {
+			$(this).addClass("lazyload-loaded");
+			$(this).parent().removeClass("lazyload-container-unload");
+			waterflowInit();
+		}
+	});
+	delete thumbOptions.effect;
+	$(".post-thumbnail.lazyload:not(.lazyload-loaded)").lazyload(thumbOptions);
 	$(".comment-item-text .comment-sticker.lazyload").lazyload(Object.assign({}, lazyBaseOptions, {load: function(){$(this).removeClass("lazyload")}}));
 }
 lazyloadInit();

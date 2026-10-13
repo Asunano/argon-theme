@@ -636,35 +636,66 @@ function argon_get_post_lqip($postID = 0){
 	return argon_get_lqip_data_uri(get_post_thumbnail_id($postID));
 }
 
-/* 输出缩略图标记 —— 所有输出头图的模板都走这里，保证形状与过渡行为一致。
-   外面那层 .post-thumbnail-wrap 是交叉过渡的前提：
-   单张 <img> 换 src 是硬切，没有过渡；两层才能反向淡入淡出。
+/* 输出缩略图标记。
+   占位做法：把 LQIP 直接作为 <img> 自己的 background-image，加载中再给元素
+   加一层 filter: blur()。这样只需要【一个元素】，而且换 src 时不会闪白 ——
+   浏览器在换 src 时会清空图片内容，但元素背景不受影响，所以底下始终有东西垫着。
+
+   （早先用的是「包裹层 + 两层 <img> 交叉淡入淡出」，但那样在换 src 的瞬间
+     会露出卡片白底，观感是「闪一下白色」。背景方案没有这个问题，也更简单。）
 
    $lazyload = true  → 卡片列表：走懒加载（1×1 占位 + data-original）
-   $lazyload = false → 文章/页面头图、时间线：直接 src（这些位置本就不懒加载）
+   $lazyload = false → 文章/页面头图、时间线：直接 src
 
-   没有 LQIP 时不输出模糊层，标记退回原来的单 <img> 形态 ——
-   尺寸语义完全不变（min-height 等在 CSS 里挂在包裹层上）。 */
+   没有 LQIP 时只给一块中性底色，不再扫光（扫光会和懒加载的逐个加载叠在一起，
+   看起来像一直在闪）。 */
 function argon_render_post_thumbnail($thumbnail_url, $lazyload = true){
 	static $placeholder = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAGXRFWHRTb2Z0d2FyZQBBZG9iZSBJbWFnZVJlYWR5ccllPAAAABBJREFUeNpi+P//PwNAgAEACPwC/tuiTRYAAAAASUVORK5CYII=';
 	$lqip = argon_get_post_lqip();
+	/* 刻意【不设 opacity: 0】——
+	   LQIP 是挂在元素自身的 background-image 上，而 opacity 会连背景一起隐藏，
+	   那样加载中就什么都看不到了。这里让元素始终可见：
+	   加载中显示的是透明 1×1 占位 + 底下的 LQIP 背景（外面再叠一层 blur），
+	   清晰图到位后自然盖住背景。 */
+	$style = '';
 	if ($lqip != ''){
-		echo '<div class="post-thumbnail-wrap has-lqip">';
-		echo '<img class="post-thumbnail-lqip" src="' . esc_attr($lqip) . '" alt="" aria-hidden="true">';
-	}else{
-		/* 没有 LQIP（附件不在本地、编辑器不可用、或特色图取不到）时退回骨架块。
-		   它由 .article-list 上那层共用的斜向光晕扫过 —— 光晕是【一道】，
-		   铺在整个列表上，不是每块各自一道。 */
-		echo '<div class="post-thumbnail-wrap has-skeleton">';
-		echo '<span class="argon-sk argon-sk-thumb" aria-hidden="true"></span>';
+		$style = "background-image:url('" . esc_attr($lqip) . "');";
 	}
 	if ($lazyload){
-		echo "<img class='post-thumbnail lazyload' src='" . $placeholder . "' data-original='" . esc_url($thumbnail_url) . "' alt='thumbnail' style='opacity: 0;'>";
+		echo "<img class='post-thumbnail lazyload" . ($lqip != '' ? ' has-lqip' : ' no-lqip') . "' src='" . $placeholder . "' data-original='" . esc_url($thumbnail_url) . "' alt='thumbnail'" . ($style != '' ? " style=\"" . $style . "\"" : '') . ">";
 	}else{
-		echo "<img class='post-thumbnail' src='" . esc_url($thumbnail_url) . "' alt='thumbnail'>";
+		echo "<img class='post-thumbnail" . ($lqip != '' ? ' has-lqip' : ' no-lqip') . "' src='" . esc_url($thumbnail_url) . "' alt='thumbnail'" . ($style != '' ? " style=\"" . $style . "\"" : '') . ">";
 	}
-	echo '</div>';
 }
+
+/* 给正文里的一张 <img> 找对应的附件 LQIP。
+   正文图片是用户上传的，src 可能是任意尺寸变体，所以先按 URL 反查附件 ID；
+   attachment_url_to_postid 自带查询缓存，代价可控。 */
+function argon_get_lqip_for_img_src($src){
+	if ($src == '' || strpos($src, 'data:') === 0){
+		return '';
+	}
+	static $cache = array();
+	/* 去掉 -1024x576 这类尺寸后缀，拿原图 URL 去查 */
+	$base = preg_replace('/-\d+x\d+(\.[a-zA-Z0-9]+)$/', '$1', $src);
+	$key = $base;
+	if (isset($cache[$key])){
+		return $cache[$key];
+	}
+	$cache[$key] = '';
+	if (!function_exists('attachment_url_to_postid')){
+		return '';
+	}
+	$id = attachment_url_to_postid($base);
+	if (!$id){
+		$id = attachment_url_to_postid($src);
+	}
+	if ($id){
+		$cache[$key] = argon_get_lqip_data_uri($id);
+	}
+	return $cache[$key];
+}
+
 
 function argon_get_post_thumbnail($postID = 0){
 	if ($postID == 0){
@@ -3181,7 +3212,19 @@ function argon_lazyload($content){
 				}
 				$img->removeAttribute('srcset'); // 移除 srcset，避免浏览器提前加载
 				$existing_class = $img->getAttribute('class');
-				$img->setAttribute('class', trim('lazyload ' . $lazyload_loading_style . ' ' . $existing_class));
+				/* 正文图片也给 LQIP 占位：拿 data-original 反查附件，取它的 32px 小图，
+				   作为元素自身的 background-image。加载中由 CSS 叠一层 blur，
+				   清晰图到位后 blur 归零 —— 与卡片缩略图完全同一套机制。 */
+				$lqip_src = $img->getAttribute('data-original');
+				$lqip = $lqip_src != '' ? argon_get_lqip_for_img_src($lqip_src) : '';
+				$lqip_class = $lqip != '' ? ' has-lqip' : ' no-lqip';
+				if ($lqip != ''){
+					$style = trim($img->getAttribute('style'));
+					if ($style != '' && substr($style, -1) != ';'){ $style .= ';'; }
+					$style .= "background-image:url('" . esc_attr($lqip) . "');background-size:cover;background-position:center;";
+					$img->setAttribute('style', $style);
+				}
+				$img->setAttribute('class', trim('lazyload ' . $lazyload_loading_style . $lqip_class . ' ' . $existing_class));
 				$img->setAttribute('src', 'data:image/svg+xml;base64,PCEtLUFyZ29uTG9hZGluZy0tPgo8c3ZnIHdpZHRoPSIxIiBoZWlnaHQ9IjEiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIgc3Ryb2tlPSIjZmZmZmZmMDAiPjxnPjwvZz4KPC9zdmc+');
 			}
 			/* 逐个子节点输出，拆掉临时根 —— 不留任何包裹层 */
@@ -3198,7 +3241,16 @@ function argon_lazyload($content){
 			}
 		}
 		if (!$use_dom){
-			$content = preg_replace('/<img(.*?)src=[\'"](.*?)[\'"](.*?)((\/>)|(<\/img>))/i',"<img class=\"lazyload " . $lazyload_loading_style . "\" src=\"data:image/svg+xml;base64,PCEtLUFyZ29uTG0aG9hZGluZy8tPgo8c3ZnIHdpZHRoPSIxIiBoZWlnaHQ9IjEiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIgc3Ryb2tlPSIjZmZmZmZmMDAiPjxnPjwvZz4KPC9zdmc+\" \$1data-original=\"\$2\" src=\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsQAAA7EAZUrDhsAAAANSURBVBhXYzh8+PB/AAffA0nNPuCLAAAAAElFTkSuQmCC\"\$3$4" , $content);
+			/* 正则分支（DOMDocument 不可用时的兜底）也给 LQIP 占位，
+			   机制与 DOM 分支一致：拿 src 反查附件，把小图挂到元素背景上。 */
+			$content = preg_replace_callback('/<img(.*?)src=[\'"](.*?)[\'"](.*?)((\/>)|(<\/img>))/i', function($m) use ($lazyload_loading_style){
+				$src = $m[2];
+				$lqip = argon_get_lqip_for_img_src($src);
+				$cls = 'lazyload ' . $lazyload_loading_style . ($lqip != '' ? ' has-lqip' : ' no-lqip');
+				$style = $lqip != '' ? " style=\"background-image:url('" . esc_attr($lqip) . "');background-size:cover;background-position:center;\"" : '';
+				$ph = 'data:image/svg+xml;base64,PCEtLUFyZ29uTG9hZGluZy0tPgo8c3ZnIHdpZHRoPSIxIiBoZWlnaHQ9IjEiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PC9zdmc+';
+				return '<img' . $m[1] . 'data-original="' . $src . '" class="' . $cls . '" src="' . $ph . '"' . $style . ' ' . $m[4];
+			}, $content);
 			$content = preg_replace('/<img(.*?)data-full-url=[\'"]([^\'"]+)[\'"](.*)>/i',"<img$1data-full-url=\"$2\" data-original=\"$2\"$3>" , $content);
 			$content = preg_replace('/<img(.*?)srcset=[\'"](.*?)[\'"](.*?)>/i',"<img$1$3>" , $content);
 		}

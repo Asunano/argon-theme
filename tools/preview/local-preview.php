@@ -206,9 +206,9 @@ for ($ci = 0; $ci < count($posts); $ci++) {
 $cards = ob_get_clean();
 
 /* 统计本次渲染的实际产出 */
-$nWrap = substr_count($cards, 'post-thumbnail-wrap');
-$nLqip = substr_count($cards, 'post-thumbnail-lqip');
-$nSk = substr_count($cards, 'argon-sk-thumb');
+$nWrap = substr_count($cards, "class='post-thumbnail");
+$nLqip = substr_count($cards, 'has-lqip');
+$nSk = substr_count($cards, 'no-lqip');
 $nDataUri = preg_match_all('/src="data:image\/(jpeg|webp|png);base64,/', $cards);
 $uriBytes = 0;
 if (preg_match_all('/src="data:image\/[a-z]+;base64,([A-Za-z0-9+\/=]+)"/', $cards, $m)) {
@@ -265,9 +265,9 @@ echo "  输出: $OUT_HTML\n";
 echo "  卡片: " . count($posts) . " 张\n";
 echo "\n";
 echo "  渲染产出:\n";
-printf("    %-34s %d\n", '包裹层 post-thumbnail-wrap', $nWrap);
-printf("    %-34s %d\n", 'LQIP 模糊层', $nLqip);
-printf("    %-34s %d\n", '骨架块（无 LQIP 时）', $nSk);
+printf("    %-34s %d\n", '缩略图 img', $nWrap);
+printf("    %-34s %d\n", '带 LQIP 背景（has-lqip）', $nLqip);
+printf("    %-34s %d\n", '无 LQIP（no-lqip）', $nSk);
 printf("    %-34s %d\n", '内联 data URI', $nDataUri);
 printf("    %-34s %.1f KB\n", 'data URI 合计', $uriBytes / 1024);
 echo "\n";

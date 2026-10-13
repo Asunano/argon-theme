@@ -2081,130 +2081,97 @@ html.filter-grayscale {
 	margin: -30px -30px 0 -30px;
 	border-radius: var(--card-radius) var(--card-radius) 0 0;
 	position: relative;
-}
-/* 缩略图包裹层。
-   原来 min-height / max-height / object-fit 挂在 .post-thumbnail 上；
-   现在移到包裹层 —— 因为交叉过渡需要【两层】<img>（模糊层 + 清晰层），
-   而尺寸必须由共同的父层决定，两层才能严格重合。
-   语义完全不变：250px 下限、25vh 上限、cover 裁剪都照旧。 */
-.post-thumbnail-wrap {
-	position: relative;
-	display: block;
-	width: 100%;
-	min-height: 250px;
-	max-height: 25vh;
+	/* 缩略图加载中会 scale(1.06) 把 blur 的羽化边缘推出可视区，
+	   这里兜住不溢出（同时保住圆角）。 */
 	overflow: hidden;
-	border-radius: var(--card-radius) var(--card-radius) 0 0;
 }
-/* 两层都绝对定位铺满；显式清掉 .post-thumbnail 自带的 min/max-height，
-   否则在 max-height(25vh) 小于 250px 的视口上会被撑高、裁掉一截 */
-.post-thumbnail-wrap > .post-thumbnail,
-.post-thumbnail-wrap > .post-thumbnail-lqip {
-	position: absolute;
-	inset: 0;
-	width: 100%;
-	height: 100%;
-	min-height: 0;
-	max-height: none;
-	object-fit: cover;
-}
-/* LQIP 模糊层。
-   scale(1.08) 是必须的：blur() 会在元素边缘留下半透明羽化，
-   放大一点把它推出可视区，否则四周会出现一圈发白的边。 */
-.post-thumbnail-lqip {
-	filter: blur(14px);
-	transform: scale(1.08);
-	transition: opacity 0.42s cubic-bezier(0.16, 1, 0.3, 1);
-}
-/* 清晰图 load 后，模糊层与清晰层反向淡入淡出 —— 中间任何时刻都有一层不透明 */
-.post-thumbnail-wrap.argon-lqip-done .post-thumbnail-lqip {
-	opacity: 0;
-}
-/* —— 骨架块（缩略图没有 LQIP 时的兜底）——
-   底色用【主题色的低透明度】而不是固定灰：换主题色时跟着变，暗色模式也自然。
-   缩略图区那块是卡片顶边，不要圆角。 */
-.argon-sk {
-	display: block;
-	background-color: rgba(var(--themecolor-rgbstr), 0.08);
-	border-radius: 4px;
-}
-html.darkmode .argon-sk {
-	background-color: rgba(255, 255, 255, 0.08);
-}
-.post-thumbnail-wrap > .argon-sk-thumb {
-	position: absolute;
-	inset: 0;
-	width: 100%;
-	height: 100%;
-	border-radius: 0;
-	transition: opacity 0.42s cubic-bezier(0.16, 1, 0.3, 1);
-}
-.post-thumbnail-wrap.argon-lqip-done > .argon-sk-thumb {
-	opacity: 0;
-}
-/* —— 共用一道斜向光晕 ——
-   关键：光晕铺在【整个列表】上，只有一个动画在跑。
-   若给每个骨架块各自加 background-position 动画，块宽不同会让相位不同，
-   看起来就是「每块各自扫」而不是一道光。 */
-.article-list {
-	position: relative;
-}
-.article-list.has-skeleton::after {
-	content: "";
-	position: absolute;
-	inset: 0;
-	pointer-events: none;
-	z-index: 2;
-	background-image: linear-gradient(
-		105deg,
-		transparent 38%,
-		rgba(255, 255, 255, 0.18) 45%,
-		rgba(255, 255, 255, 0.5) 50%,
-		rgba(255, 255, 255, 0.18) 55%,
-		transparent 62%
-	);
-	background-size: 240% 100%;
-	background-repeat: no-repeat;
-	animation: argon-sk-sweep 1.6s linear infinite;
-	will-change: background-position;
-}
-html.darkmode .article-list.has-skeleton::after {
-	background-image: linear-gradient(
-		105deg,
-		transparent 38%,
-		rgba(255, 255, 255, 0.06) 45%,
-		rgba(255, 255, 255, 0.16) 50%,
-		rgba(255, 255, 255, 0.06) 55%,
-		transparent 62%
-	);
-}
-@keyframes argon-sk-sweep {
-	from { background-position: 160% 0; }
-	to   { background-position: -60% 0; }
-}
-/* —— 数据到达：60ms 依次错开 ——
-   --sk-i 由 argontheme.js 按「首屏可见 → 越靠下」写入。
-   模糊层与骨架块用同一条延迟，所以同一张卡片内是同步淡出，卡片之间依次错开。 */
-.post-thumbnail-wrap.has-lqip .post-thumbnail-lqip,
-.post-thumbnail-wrap.has-skeleton > .argon-sk-thumb {
-	transition-delay: calc(var(--sk-i, 0) * 60ms);
-}
-/* 尊重「减少动态效果」偏好：停掉光晕，骨架仍正确显示 */
-@media (prefers-reduced-motion: reduce) {
-	.article-list.has-skeleton::after {
-		animation: none;
-		background-image: none;
-	}
-}
+/* —— 缩略图占位：LQIP 作为 <img> 自己的 background-image ——
+
+   为什么不用「包裹层 + 两层 <img> 交叉淡入淡出」：
+   浏览器在换 src 的瞬间会清空图片内容，两层方案在那一刻会露出卡片白底，
+   观感就是「闪一下白色」。背景方案底下始终垫着东西，没有这个窗口。
+   （1×1 占位 PNG 是完全透明的：alpha=127、带 tRNS，所以背景透得出来。）
+
+   过渡也只需要一个元素：加载中把整个 img 模糊掉（此时显示的是 LQIP 背景），
+   清晰图到位后把 filter 归零 —— 观感是「从模糊变清晰」，不是「闪一下换一张」。
+
+   另外，缩略图【不再使用 lazyload 的 fadeIn 效果】（见 argontheme.js）：
+   jQuery 的 fadeIn 会把元素 display:none → block 并从 opacity:0 动画到 1，
+   那段时间元素完全不可见 —— 这正是闪白的直接来源。 */
 .post-thumbnail {
 	width: 100%;
 	min-height: 250px;
 	max-height: 25vh;
 	object-fit: cover;
 	pointer-events: none;
+	background-size: cover;
+	background-position: center center;
+	background-repeat: no-repeat;
+	transition: filter 0.5s ease, transform 0.5s ease, opacity 0.35s ease;
+	transform-origin: center center;
+}
+/* 加载中：叠一层模糊。scale 稍微放大，把 blur 在边缘留下的半透明羽化推出可视区
+   （.post-header-with-thumbnail 上加了 overflow: hidden 兜住不溢出）。 */
+.post-thumbnail.lazyload.has-lqip {
+	filter: blur(12px);
+	transform: scale(1.06);
+}
+.post-thumbnail.lazyload.has-lqip.lazyload-loaded {
+	filter: blur(0px);
+	transform: none;
+}
+/* 没有 LQIP 时只给一块中性底色。
+   不再做扫光动效 —— 它铺在整个列表上、和懒加载的逐个加载叠在一起，
+   看起来像「一直在闪」，反而比静态底色更差。 */
+.post-thumbnail.no-lqip {
+	background-color: rgba(var(--themecolor-rgbstr), 0.08);
+}
+html.darkmode .post-thumbnail.no-lqip {
+	background-color: rgba(255, 255, 255, 0.08);
+}
+/* 尊重「减少动态效果」偏好：不做模糊过渡，直接换图 */
+@media (prefers-reduced-motion: reduce) {
+	.post-thumbnail,
+	.post-thumbnail.lazyload.has-lqip {
+		transition: opacity 0.2s linear;
+		filter: none;
+		transform: none;
+	}
+}
+/* —— 正文图片的 LQIP 占位 ——
+   与缩略图同一套机制：argon_lazyload() 把 32px 小图挂到元素自身的 background-image 上
+   （见 functions.php），这里只负责「加载中模糊、到位后清晰」。
+   正文图尺寸不一、又常与文字混排，所以 blur 用得更轻 ——
+   32px 小图放大后本身就偏软，不需要太重的模糊。 */
+article img.lazyload.has-lqip,
+.wp-block-image img.lazyload.has-lqip {
+	background-size: cover;
+	background-position: center center;
+	background-repeat: no-repeat;
+	transition: filter 0.45s ease, opacity 0.35s ease;
+}
+article img.lazyload.has-lqip:not(.lazyload-loaded),
+.wp-block-image img.lazyload.has-lqip:not(.lazyload-loaded) {
+	filter: blur(6px);
+}
+@media (prefers-reduced-motion: reduce) {
+	article img.lazyload.has-lqip,
+	.wp-block-image img.lazyload.has-lqip {
+		transition: opacity 0.2s linear;
+		filter: none;
+	}
+}
+/* 正文图没有 LQIP 时用一块中性底色兜底（同样不扫光） */
+article img.lazyload.no-lqip:not(.lazyload-loaded),
+.wp-block-image img.lazyload.no-lqip:not(.lazyload-loaded) {
+	background-color: rgba(var(--themecolor-rgbstr), 0.06);
+}
+html.darkmode article img.lazyload.no-lqip:not(.lazyload-loaded),
+html.darkmode .wp-block-image img.lazyload.no-lqip:not(.lazyload-loaded) {
+	background-color: rgba(255, 255, 255, 0.06);
 }
 .post-thumbnail.lazyload {
-	transition: opacity 0.3s ease 0s;
+	transition: filter 0.5s ease, transform 0.5s ease, opacity 0.35s ease;
 }
 .post-thumbnail.lazyload.lazyload-loaded {
 	opacity: 1 !important;

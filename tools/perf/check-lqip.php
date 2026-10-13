@@ -45,6 +45,7 @@ function get_attached_file($id) { return $GLOBALS['__files']["attached:$id"] ?? 
 function wp_get_attachment_metadata($id) { return $GLOBALS['__meta'][$id] ?? array(); }
 function wp_update_attachment_metadata($id, $m) { $GLOBALS['__meta'][$id] = $m; $GLOBALS['__updates']++; }
 function get_post_thumbnail_id($id = 0) { return $GLOBALS['__tid'] ?? 7; }
+function attachment_url_to_postid($u) { return $GLOBALS['__url2id'][$u] ?? 0; }
 function has_post_thumbnail($id = 0) { return true; }
 function wp_get_image_editor($f) {
 	$GLOBALS['__editor_calls']++;
@@ -86,10 +87,10 @@ function extract_fn($src, $name) {
 	return $j === null ? '' : substr($src, $i, $j - $i + 1);
 }
 $fns = '';
-foreach (array('argon_generate_lqip', 'argon_get_lqip_data_uri', 'argon_render_post_thumbnail', 'argon_get_post_lqip') as $n) {
+foreach (array('argon_generate_lqip', 'argon_get_lqip_data_uri', 'argon_render_post_thumbnail', 'argon_get_post_lqip', 'argon_get_lqip_for_img_src') as $n) {
 	$fns .= extract_fn($src, $n) . "\n";
 }
-chk('四个函数都抽到了', substr_count($fns, 'function ') === 4, '抽到 ' . substr_count($fns, 'function '));
+chk('五个函数都抽到了', substr_count($fns, 'function ') === 5, '抽到 ' . substr_count($fns, 'function '));
 eval($fns);
 
 echo "\n  场景 A：附件不在本地（get_attached_file 返回空）→ 应返回空串\n";
@@ -131,9 +132,11 @@ ob_start();
 argon_render_post_thumbnail('https://example.com/a.jpg', true);
 $htmlB = ob_get_clean();
 chk('有 has-lqip 类', strpos($htmlB, 'has-lqip') !== false);
-chk('输出了模糊层', strpos($htmlB, 'post-thumbnail-lqip') !== false);
-chk('模糊层是 data URI', strpos($htmlB, 'src="data:image/jpeg;base64,') !== false);
-chk('同时仍有清晰层', strpos($htmlB, 'post-thumbnail lazyload') !== false);
+chk('LQIP 挂在 background-image 上', strpos($htmlB, "background-image:url('data:image/jpeg;base64,") !== false);
+chk('没有独立的模糊层元素（单元素方案）', strpos($htmlB, 'post-thumbnail-lqip') === false);
+chk('清晰图仍走懒加载', strpos($htmlB, 'post-thumbnail lazyload') !== false);
+chk('data-original 仍在', strpos($htmlB, 'data-original=') !== false);
+chk('刻意不设 opacity: 0（否则背景也被隐藏）', strpos($htmlB, 'opacity: 0') === false);
 
 echo "\n  场景 C：图像编辑器不可用 → 返回空，不写元数据\n";
 $GLOBALS['__editor_ok'] = false;
@@ -153,11 +156,10 @@ $GLOBALS['__meta'] = array();
 ob_start();
 argon_render_post_thumbnail('https://example.com/a.jpg', true);
 $html = ob_get_clean();
-chk('有包裹层', strpos($html, 'post-thumbnail-wrap') !== false);
 chk('没有 has-lqip 类', strpos($html, 'has-lqip') === false);
-chk('没有模糊层', strpos($html, 'post-thumbnail-lqip') === false);
-chk('退回骨架块（has-skeleton）', strpos($html, 'has-skeleton') !== false);
-chk('输出了骨架块元素', strpos($html, 'argon-sk-thumb') !== false);
+chk('退回 no-lqip（中性底色兜底）', strpos($html, 'no-lqip') !== false);
+chk('不再有包裹层（单元素方案）', strpos($html, 'post-thumbnail-wrap') === false);
+chk('不再有独立骨架块', strpos($html, 'argon-sk') === false);
 chk('保留 lazyload 与 data-original', strpos($html, 'lazyload') !== false && strpos($html, 'data-original') !== false);
 chk('保留 1×1 占位 src', strpos($html, 'data:image/png;base64,') !== false);
 
@@ -167,7 +169,8 @@ argon_render_post_thumbnail('https://example.com/a.jpg', false);
 $html2 = ob_get_clean();
 chk('不带 lazyload 类', strpos($html2, 'lazyload') === false);
 chk('直接输出 src', strpos($html2, "src=\"https://example.com/a.jpg\"") !== false || strpos($html2, "src='https://example.com/a.jpg'") !== false);
-chk('仍有包裹层', strpos($html2, 'post-thumbnail-wrap') !== false);
+chk('直接输出 post-thumbnail img', strpos($html2, "class='post-thumbnail") !== false);
+chk('没有包裹层', strpos($html2, 'post-thumbnail-wrap') === false);
 
 echo "\n  场景 F：生成失败后不再重试（性能保护）\n";
 $tmp2 = sys_get_temp_dir() . '/argon-lqip-test2-' . getmypid();
@@ -198,6 +201,36 @@ chk('完全不再调用图像编辑器', $GLOBALS['__editor_calls'] === 0, '调�
 $GLOBALS['__editor_ok'] = true;
 @unlink($orig2);
 @rmdir($tmp2);
+echo "\n  场景 G：正文图片按 URL 反查附件，拿它的 LQIP\n";
+$GLOBALS['__url2id'] = array(
+  'https://example.com/wp-content/uploads/2026/10/photo.jpg' => 21,
+);
+$tmp3 = sys_get_temp_dir() . '/argon-lqip-test3-' . getmypid();
+@mkdir($tmp3, 0777, true);
+$orig3 = $tmp3 . '/photo.jpg';
+file_put_contents($orig3, str_repeat('Z', 4000));
+$GLOBALS['__files'] = array('attached:21' => $orig3);
+$GLOBALS['__meta'] = array(21 => array('sizes' => array()));
+$GLOBALS['__editor_ok'] = true;
+$GLOBALS['__editor_calls'] = 0;
+$r = argon_get_lqip_for_img_src('https://example.com/wp-content/uploads/2026/10/photo.jpg');
+chk('原图 URL 能查到附件并生成 LQIP', strpos($r, 'data:image/jpeg;base64,') === 0, substr($r, 0, 30));
+chk('确实生成了（不是空串）', $r !== '');
+
+echo "\n  场景 G2：带尺寸后缀的 URL 也能反查到同一附件\n";
+$GLOBALS['__editor_calls'] = 0;
+$r2 = argon_get_lqip_for_img_src('https://example.com/wp-content/uploads/2026/10/photo-1024x768.jpg');
+chk('去掉 -1024x768 后反查成功', $r2 === $r, '得到 ' . substr($r2, 0, 20));
+
+echo "\n  场景 G3：查不到的 URL 返回空（调用方退回中性底色）\n";
+$r3 = argon_get_lqip_for_img_src('https://example.com/wp-content/uploads/2026/10/unknown.jpg');
+chk('返回空串', $r3 === '', var_export($r3, true));
+$r4 = argon_get_lqip_for_img_src('data:image/svg+xml;base64,AAA');
+chk('data URI 直接跳过', $r4 === '');
+$r5 = argon_get_lqip_for_img_src('');
+chk('空串直接跳过', $r5 === '');
+@unlink($orig3);
+@rmdir($tmp3);
 echo "\n";
 if ($fail === 0) {
 	echo "=== 全部通过 ===\n";

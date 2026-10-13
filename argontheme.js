@@ -437,7 +437,13 @@ function __(text){
 		}
 	}
 	function markLoaded(img){
-		if (!img || !img.naturalWidth || img.naturalWidth <= 0){
+		/* 【必须排除 1×1 占位图】——
+		   懒加载的占位图是 data URI 的 1×1 PNG，它同样满足
+		   complete === true 且 naturalWidth === 1。
+		   只判 naturalWidth > 0 的话，占位图会被当成「已加载」，
+		   于是清晰图还没到就把占位层淡出了 —— 表现为「完全没有占位」。
+		   真实图片都远大于 1px，所以用 > 1 作为判据。 */
+		if (!img || !img.naturalWidth || img.naturalWidth <= 1 || !img.naturalHeight || img.naturalHeight <= 1){
 			return;
 		}
 		var wrap = img.closest ? img.closest(".post-thumbnail-wrap") : null;
@@ -451,7 +457,7 @@ function __(text){
 		assignStagger();
 		var imgs = document.querySelectorAll(".post-thumbnail-wrap .post-thumbnail");
 		for (var i = 0; i < imgs.length; i++){
-			if (imgs[i].complete && imgs[i].naturalWidth > 0){
+			if (imgs[i].complete && imgs[i].naturalWidth > 1 && imgs[i].naturalHeight > 1){
 				markLoaded(imgs[i]);
 			}
 		}

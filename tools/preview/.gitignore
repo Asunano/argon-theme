@@ -1,0 +1,4 @@
+# 本地预览的生成物 —— 不进仓库
+.work/
+.preview-meta.json
+preview.html

@@ -636,9 +636,15 @@ function argon_get_post_lqip($postID = 0){
 function argon_render_post_thumbnail($thumbnail_url, $lazyload = true){
 	static $placeholder = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAGXRFWHRTb2Z0d2FyZQBBZG9iZSBJbWFnZVJlYWR5ccllPAAAABBJREFUeNpi+P//PwNAgAEACPwC/tuiTRYAAAAASUVORK5CYII=';
 	$lqip = argon_get_post_lqip();
-	echo '<div class="post-thumbnail-wrap' . ($lqip != '' ? ' has-lqip' : '') . '">';
 	if ($lqip != ''){
+		echo '<div class="post-thumbnail-wrap has-lqip">';
 		echo '<img class="post-thumbnail-lqip" src="' . esc_attr($lqip) . '" alt="" aria-hidden="true">';
+	}else{
+		/* 没有 LQIP（附件不在本地、编辑器不可用、或特色图取不到）时退回骨架块。
+		   它由 .article-list 上那层共用的斜向光晕扫过 —— 光晕是【一道】，
+		   铺在整个列表上，不是每块各自一道。 */
+		echo '<div class="post-thumbnail-wrap has-skeleton">';
+		echo '<span class="argon-sk argon-sk-thumb" aria-hidden="true"></span>';
 	}
 	if ($lazyload){
 		echo "<img class='post-thumbnail lazyload' src='" . $placeholder . "' data-original='" . esc_url($thumbnail_url) . "' alt='thumbnail' style='opacity: 0;'>";

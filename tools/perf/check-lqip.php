@@ -156,6 +156,8 @@ $html = ob_get_clean();
 chk('有包裹层', strpos($html, 'post-thumbnail-wrap') !== false);
 chk('没有 has-lqip 类', strpos($html, 'has-lqip') === false);
 chk('没有模糊层', strpos($html, 'post-thumbnail-lqip') === false);
+chk('退回骨架块（has-skeleton）', strpos($html, 'has-skeleton') !== false);
+chk('输出了骨架块元素', strpos($html, 'argon-sk-thumb') !== false);
 chk('保留 lazyload 与 data-original', strpos($html, 'lazyload') !== false && strpos($html, 'data-original') !== false);
 chk('保留 1×1 占位 src', strpos($html, 'data:image/png;base64,') !== false);
 

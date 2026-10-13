@@ -2120,6 +2120,82 @@ html.filter-grayscale {
 .post-thumbnail-wrap.argon-lqip-done .post-thumbnail-lqip {
 	opacity: 0;
 }
+/* —— 骨架块（缩略图没有 LQIP 时的兜底）——
+   底色用【主题色的低透明度】而不是固定灰：换主题色时跟着变，暗色模式也自然。
+   缩略图区那块是卡片顶边，不要圆角。 */
+.argon-sk {
+	display: block;
+	background-color: rgba(var(--themecolor-rgbstr), 0.08);
+	border-radius: 4px;
+}
+html.darkmode .argon-sk {
+	background-color: rgba(255, 255, 255, 0.08);
+}
+.post-thumbnail-wrap > .argon-sk-thumb {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	border-radius: 0;
+	transition: opacity 0.42s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.post-thumbnail-wrap.argon-lqip-done > .argon-sk-thumb {
+	opacity: 0;
+}
+/* —— 共用一道斜向光晕 ——
+   关键：光晕铺在【整个列表】上，只有一个动画在跑。
+   若给每个骨架块各自加 background-position 动画，块宽不同会让相位不同，
+   看起来就是「每块各自扫」而不是一道光。 */
+.article-list {
+	position: relative;
+}
+.article-list.has-skeleton::after {
+	content: "";
+	position: absolute;
+	inset: 0;
+	pointer-events: none;
+	z-index: 2;
+	background-image: linear-gradient(
+		105deg,
+		transparent 38%,
+		rgba(255, 255, 255, 0.18) 45%,
+		rgba(255, 255, 255, 0.5) 50%,
+		rgba(255, 255, 255, 0.18) 55%,
+		transparent 62%
+	);
+	background-size: 240% 100%;
+	background-repeat: no-repeat;
+	animation: argon-sk-sweep 1.6s linear infinite;
+	will-change: background-position;
+}
+html.darkmode .article-list.has-skeleton::after {
+	background-image: linear-gradient(
+		105deg,
+		transparent 38%,
+		rgba(255, 255, 255, 0.06) 45%,
+		rgba(255, 255, 255, 0.16) 50%,
+		rgba(255, 255, 255, 0.06) 55%,
+		transparent 62%
+	);
+}
+@keyframes argon-sk-sweep {
+	from { background-position: 160% 0; }
+	to   { background-position: -60% 0; }
+}
+/* —— 数据到达：60ms 依次错开 ——
+   --sk-i 由 argontheme.js 按「首屏可见 → 越靠下」写入。
+   模糊层与骨架块用同一条延迟，所以同一张卡片内是同步淡出，卡片之间依次错开。 */
+.post-thumbnail-wrap.has-lqip .post-thumbnail-lqip,
+.post-thumbnail-wrap.has-skeleton > .argon-sk-thumb {
+	transition-delay: calc(var(--sk-i, 0) * 60ms);
+}
+/* 尊重「减少动态效果」偏好：停掉光晕，骨架仍正确显示 */
+@media (prefers-reduced-motion: reduce) {
+	.article-list.has-skeleton::after {
+		animation: none;
+		background-image: none;
+	}
+}
 .post-thumbnail {
 	width: 100%;
 	min-height: 250px;

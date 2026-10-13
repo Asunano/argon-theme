@@ -404,6 +404,52 @@ function __(text){
 	document.addEventListener("scroll", changeToolbarTransparency, {passive: true});
 }();
 
+/* —— LQIP 交叉过渡 ——
+   卡片/头图在「文字已渲染、原图还没下完」这段时间显示该图自己的模糊版本（LQIP），
+   清晰图 load 后给包裹层加 .argon-lqip-done，模糊层随之淡出 —— 两层反向淡入淡出，
+   中间任何时刻都有一层是不透明的，所以不会露白底。
+
+   判定必须用 complete && naturalWidth，【不能】看 lazyload 的 lazyload-loaded 类：
+   那个类只说明 src 被换过了，不保证解码完成。
+   （灯箱底部缩略图条那次就是只看 src 而误判的。） */
+!function(){
+	function markLoaded(img){
+		if (!img || !img.naturalWidth || img.naturalWidth <= 0){
+			return;
+		}
+		var wrap = img.closest ? img.closest(".post-thumbnail-wrap") : null;
+		if (wrap){
+			wrap.classList.add("argon-lqip-done");
+		}
+	}
+	/* 图片已在缓存里时 load 可能早于监听绑定，这里主动扫一遍 */
+	function sweep(){
+		var imgs = document.querySelectorAll(".post-thumbnail-wrap.has-lqip .post-thumbnail");
+		for (var i = 0; i < imgs.length; i++){
+			if (imgs[i].complete && imgs[i].naturalWidth > 0){
+				markLoaded(imgs[i]);
+			}
+		}
+	}
+	/* load 不冒泡，但会在捕获阶段经过 document —— 用捕获做委托 */
+	document.addEventListener("load", function(e){
+		var t = e.target;
+		if (t && t.classList && t.classList.contains("post-thumbnail")){
+			markLoaded(t);
+		}
+	}, true);
+	/* Pjax 换页后补一遍 */
+	if (window.jQuery){
+		jQuery(document).on("pjax:complete pjax:end", sweep);
+	}
+	if (document.readyState === "complete"){
+		sweep();
+	}else{
+		window.addEventListener("load", sweep);
+	}
+	setTimeout(sweep, 1200);
+}();
+
 /*搜索*/
 function searchPosts(word){
 	if ($(".search-result").length > 0){

@@ -515,6 +515,139 @@ add_filter('intermediate_image_sizes_advanced', function($sizes){
 	return $sizes;
 });
 
+/* —— LQIP（低清占位图）——
+   目的：首页卡片头图在「文字已渲染、原图还没下完」这段时间里不再是一片空白，
+        而是显示【该图自己的】模糊版本；原图到达后交叉过渡为清晰。
+
+   为什么自己生成、不能直接用现成尺寸：
+     实测生产站同一批图里，有的有 thumbnail(150) 变体、有的没有 ——
+     149087630_p0.webp 的 -150x87 是 404，而 b_88f475…jpg 的 -150x150 是 200。
+     所以不能依赖现成尺寸；150×150 本身也有 10~20KB，做占位偏大。
+
+   做法：注册一个 32px 宽的极小尺寸；新上传由 WP 自动生成，
+        已有图片在【首次渲染时按需生成】并写回附件元数据 —— 不需要预先重建。
+
+   输出为 data URI 内联（不是独立文件）：
+     慢网下 RTT 比字节数更贵；32px JPEG 约 0.7~1.2KB，首屏 6 张约 5~8KB。 */
+add_image_size('argon-lqip', 32, 0, false);
+
+/* 生成（或复用）某附件的 LQIP 文件，返回绝对路径；失败返回 '' */
+function argon_generate_lqip($attachment_id){
+	$file = get_attached_file($attachment_id);
+	if (!$file || !@file_exists($file)){
+		return '';
+	}
+	if (!function_exists('wp_get_image_editor')){
+		return '';
+	}
+	$editor = wp_get_image_editor($file);
+	if (is_wp_error($editor)){
+		return '';
+	}
+	/* 等比缩到 32px 宽 */
+	$editor->resize(32, null, false);
+	if (method_exists($editor, 'set_quality')){
+		$editor->set_quality(45);
+	}
+	$dir = dirname($file);
+	$base = pathinfo($file, PATHINFO_FILENAME);
+	$saved = $editor->save($dir . '/' . $base . '-argon-lqip.jpg');
+	if (is_wp_error($saved) || empty($saved['path']) || !@file_exists($saved['path'])){
+		return '';
+	}
+	/* 写回附件元数据，下次直接读，不再跑图像处理 */
+	$meta = wp_get_attachment_metadata($attachment_id);
+	if (is_array($meta)){
+		if (!isset($meta['sizes']) || !is_array($meta['sizes'])){
+			$meta['sizes'] = array();
+		}
+		$meta['sizes']['argon-lqip'] = array(
+			'file'      => basename($saved['path']),
+			'width'     => isset($saved['width']) ? (int) $saved['width'] : 0,
+			'height'    => isset($saved['height']) ? (int) $saved['height'] : 0,
+			'mime-type' => isset($saved['mime-type']) ? $saved['mime-type'] : 'image/jpeg',
+		);
+		wp_update_attachment_metadata($attachment_id, $meta);
+	}
+	return $saved['path'];
+}
+
+/* 取某附件的 LQIP data URI；取不到返回 ''（调用方据此退回骨架块） */
+function argon_get_lqip_data_uri($attachment_id){
+	static $cache = array();
+	$attachment_id = (int) $attachment_id;
+	if ($attachment_id <= 0){
+		return '';
+	}
+	if (isset($cache[$attachment_id])){
+		return $cache[$attachment_id];
+	}
+	$cache[$attachment_id] = '';   /* 先占位，避免同一请求内重复生成 */
+
+	$path = '';
+	$meta = wp_get_attachment_metadata($attachment_id);
+	if (is_array($meta) && !empty($meta['sizes']['argon-lqip']['file'])){
+		$attached = get_attached_file($attachment_id);
+		if ($attached){
+			$candidate = dirname($attached) . '/' . $meta['sizes']['argon-lqip']['file'];
+			if (@file_exists($candidate)){
+				$path = $candidate;
+			}
+		}
+	}
+	if ($path == ''){
+		$path = argon_generate_lqip($attachment_id);
+	}
+	if ($path == '' || !@file_exists($path)){
+		return '';
+	}
+	$data = @file_get_contents($path);
+	if ($data === false || $data === ''){
+		return '';
+	}
+	$ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+	$mimes = array('jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg', 'png' => 'image/png', 'webp' => 'image/webp', 'gif' => 'image/gif');
+	$mime = isset($mimes[$ext]) ? $mimes[$ext] : 'image/jpeg';
+	$cache[$attachment_id] = 'data:' . $mime . ';base64,' . base64_encode($data);
+	return $cache[$attachment_id];
+}
+
+/* 取某篇文章特色图的 LQIP data URI；没有特色图或取不到则返回 '' */
+function argon_get_post_lqip($postID = 0){
+	if ($postID == 0){
+		global $post;
+		$postID = $post -> ID;
+	}
+	if (!has_post_thumbnail($postID)){
+		return '';
+	}
+	return argon_get_lqip_data_uri(get_post_thumbnail_id($postID));
+}
+
+/* 输出缩略图标记 —— 所有输出头图的模板都走这里，保证形状与过渡行为一致。
+   外面那层 .post-thumbnail-wrap 是交叉过渡的前提：
+   单张 <img> 换 src 是硬切，没有过渡；两层才能反向淡入淡出。
+
+   $lazyload = true  → 卡片列表：走懒加载（1×1 占位 + data-original）
+   $lazyload = false → 文章/页面头图、时间线：直接 src（这些位置本就不懒加载）
+
+   没有 LQIP 时不输出模糊层，标记退回原来的单 <img> 形态 ——
+   尺寸语义完全不变（min-height 等在 CSS 里挂在包裹层上）。 */
+function argon_render_post_thumbnail($thumbnail_url, $lazyload = true){
+	static $placeholder = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAGXRFWHRTb2Z0d2FyZQBBZG9iZSBJbWFnZVJlYWR5ccllPAAAABBJREFUeNpi+P//PwNAgAEACPwC/tuiTRYAAAAASUVORK5CYII=';
+	$lqip = argon_get_post_lqip();
+	echo '<div class="post-thumbnail-wrap' . ($lqip != '' ? ' has-lqip' : '') . '">';
+	if ($lqip != ''){
+		echo '<img class="post-thumbnail-lqip" src="' . esc_attr($lqip) . '" alt="" aria-hidden="true">';
+	}
+	if ($lazyload){
+		echo "<img class='post-thumbnail lazyload' src='" . $placeholder . "' data-original='" . esc_url($thumbnail_url) . "' alt='thumbnail' style='opacity: 0;'>";
+	}else{
+		echo "<img class='post-thumbnail' src='" . esc_url($thumbnail_url) . "' alt='thumbnail'>";
+	}
+	echo '</div>';
+}
+
 function argon_get_post_thumbnail($postID = 0){
 	if ($postID == 0){
 		global $post;

@@ -2082,6 +2082,44 @@ html.filter-grayscale {
 	border-radius: var(--card-radius) var(--card-radius) 0 0;
 	position: relative;
 }
+/* 缩略图包裹层。
+   原来 min-height / max-height / object-fit 挂在 .post-thumbnail 上；
+   现在移到包裹层 —— 因为交叉过渡需要【两层】<img>（模糊层 + 清晰层），
+   而尺寸必须由共同的父层决定，两层才能严格重合。
+   语义完全不变：250px 下限、25vh 上限、cover 裁剪都照旧。 */
+.post-thumbnail-wrap {
+	position: relative;
+	display: block;
+	width: 100%;
+	min-height: 250px;
+	max-height: 25vh;
+	overflow: hidden;
+	border-radius: var(--card-radius) var(--card-radius) 0 0;
+}
+/* 两层都绝对定位铺满；显式清掉 .post-thumbnail 自带的 min/max-height，
+   否则在 max-height(25vh) 小于 250px 的视口上会被撑高、裁掉一截 */
+.post-thumbnail-wrap > .post-thumbnail,
+.post-thumbnail-wrap > .post-thumbnail-lqip {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	min-height: 0;
+	max-height: none;
+	object-fit: cover;
+}
+/* LQIP 模糊层。
+   scale(1.08) 是必须的：blur() 会在元素边缘留下半透明羽化，
+   放大一点把它推出可视区，否则四周会出现一圈发白的边。 */
+.post-thumbnail-lqip {
+	filter: blur(14px);
+	transform: scale(1.08);
+	transition: opacity 0.42s cubic-bezier(0.16, 1, 0.3, 1);
+}
+/* 清晰图 load 后，模糊层与清晰层反向淡入淡出 —— 中间任何时刻都有一层不透明 */
+.post-thumbnail-wrap.argon-lqip-done .post-thumbnail-lqip {
+	opacity: 0;
+}
 .post-thumbnail {
 	width: 100%;
 	min-height: 250px;

@@ -3,7 +3,7 @@
 		<?php
 			if (argon_has_post_thumbnail() && get_option('argon_show_thumbnail_in_banner_in_content_page') != 'true'){
 				$thumbnail_url = argon_get_post_thumbnail();
-				echo "<img class='post-thumbnail' src='" . $thumbnail_url . "'></img>";
+				argon_render_post_thumbnail($thumbnail_url, false);
 				echo "<div class='post-header-text-container'>";
 			}
 			if (argon_has_post_thumbnail() && get_option('argon_show_thumbnail_in_banner_in_content_page') == 'true'){

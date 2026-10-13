@@ -374,8 +374,30 @@ function __(text){
 		let value = "blur(" + BLUR_STEPS[level] + "px) saturate(" + SATURATE_STEPS[level] + "%)";
 		toolbar.style.setProperty("backdrop-filter", value);
 		toolbar.style.setProperty("-webkit-backdrop-filter", value);
-		/* 下沿的渐变过渡带跟着同一进度淡入，把顶栏与正文的硬边界化开 */
-		toolbar.style.setProperty("--argon-navbar-scrim", String(level / (BLUR_STEPS.length - 1)));
+	}
+
+	/* 顶栏背景：用 background-image 的渐变代替纯色 background-color。
+	   原来顶栏是一块纯色（rgba(色, 0.65) 铺满整条），下面再接一条渐变带 ——
+	   读起来是「一块实色 + 一条带子」，不是一体的渐变，交界处也就难免有痕迹。
+	   现在让顶栏自身从 alpha 渐变到 alpha * BOTTOM_RATIO，
+	   ::after 的渐变正好从 alpha * BOTTOM_RATIO 接着往下收到 0 ——
+	   整条（顶栏 + 过渡带）连成一个连续的渐变。
+	   background-color 必须置为 transparent：否则它会从渐变里透出来，把渐变冲淡。 */
+	const BOTTOM_RATIO = 0.72;
+	function setToolbarBg(alpha){
+		toolbar.style.setProperty("--argon-navbar-alpha", String(alpha));
+		toolbar.style.setProperty("background-color", "transparent", "important");
+		toolbar.style.setProperty(
+			"background-image",
+			"linear-gradient(to bottom, rgba(var(--toolbar-color), " + alpha + "), rgba(var(--toolbar-color), " + (alpha * BOTTOM_RATIO) + "))",
+			"important"
+		);
+	}
+	/* 完全透明时（页面顶部）不要留一条看不见的渐变，直接清掉，省一次合成 */
+	function clearToolbarBg(){
+		toolbar.style.setProperty("--argon-navbar-alpha", "0");
+		toolbar.style.setProperty("background-color", "rgba(var(--toolbar-color), 0)", "important");
+		toolbar.style.setProperty("background-image", "none", "important");
 	}
 
 	/* 先判定是否开启毛玻璃 —— 必须放在 no-banner 分支之前，
@@ -391,7 +413,11 @@ function __(text){
 		/* banner 设为 hide：没有「banner→内容」的滚动区间，改用固定距离做过渡 */
 		function changeToolbarOnTopClass(){
 			let scrollTop = document.documentElement.scrollTop || document.body.scrollTop;
-			applyBlur(scrollTop / NO_BANNER_RANGE);
+			let p = scrollTop / NO_BANNER_RANGE;
+			if (p > 1){ p = 1; }
+			if (p < 0){ p = 0; }
+			applyBlur(p);
+			if (p > 0){ setToolbarBg(p * maxOpacity); } else { clearToolbarBg(); }
 			/* 保留原来的类切换语义（CSS 里还有基于它的规则） */
 			if (scrollTop < 30){
 				toolbar.classList.add("navbar-no-blur");
@@ -419,21 +445,21 @@ function __(text){
 	function changeToolbarTransparency(){
 		let scrollTop = document.documentElement.scrollTop || document.body.scrollTop;
 		if (scrollTop < startTransitionHeight){
-			toolbar.style.setProperty('background-color', 'rgba(var(--toolbar-color), 0)', 'important');
+			clearToolbarBg();
 			toolbar.style.setProperty('box-shadow', 'none');
 			applyBlur(0);
 			toolbar.classList.add("navbar-ontop");
 			return;
 		}
 		if (scrollTop > endTransitionHeight){
-			toolbar.style.setProperty('background-color', 'rgba(var(--toolbar-color), ' + maxOpacity + ')', 'important');
+			setToolbarBg(maxOpacity);
 			toolbar.style.setProperty('box-shadow', '');
 			applyBlur(1);
 			toolbar.classList.remove("navbar-ontop");
 			return;
 		}
 		let progress = (scrollTop - startTransitionHeight) / (endTransitionHeight - startTransitionHeight);
-		toolbar.style.setProperty('background-color', 'rgba(var(--toolbar-color), ' + (progress * maxOpacity), 'important');
+		setToolbarBg(progress * maxOpacity);
 		toolbar.style.setProperty('box-shadow', '');
 		applyBlur(progress);
 		toolbar.classList.remove("navbar-ontop");

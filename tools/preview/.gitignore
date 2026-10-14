@@ -4,3 +4,6 @@
 .preview-content-meta.json
 preview.html
 preview-content.html
+# 动画方案对比页（本地参考用，不进仓库）
+preloader-anim-demo.html
+preloader-style-demo.html

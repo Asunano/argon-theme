@@ -588,7 +588,7 @@ function argon_get_lqip_data_uri($attachment_id){
 	   会让【每次页面渲染】都跑一遍图像处理，是实打实的性能坑。
 	   失败标记写在附件元数据里，与 lqip 尺寸名同一处，便于排查。 */
 	$meta = wp_get_attachment_metadata($attachment_id);
-	if (is_array($meta) && !empty($meta['argon_lqip_failed'])){
+	if ((is_array($meta) && !empty($meta['argon_lqip_failed'])) || get_post_meta($attachment_id, 'argon_lqip_failed', true)){
 		return '';
 	}
 
@@ -607,9 +607,14 @@ function argon_get_lqip_data_uri($attachment_id){
 	}
 	if ($path == '' || !@file_exists($path)){
 		/* 记下失败，下次直接跳过 */
+		/* 失败标记不能只依赖附件元数据 —— 元数据缺失（FTP/Add-From-Server 导入、
+		    wp_generate_attachment_metadata 失败）时它不是数组，标记就写不进去，
+		    于是每次页面渲染都会重跑一遍图像处理并写盘。用 post meta 兜底。 */
 		if (is_array($meta)){
 			$meta['argon_lqip_failed'] = 1;
 			wp_update_attachment_metadata($attachment_id, $meta);
+		}else{
+			update_post_meta($attachment_id, 'argon_lqip_failed', 1);
 		}
 		return '';
 	}
@@ -719,7 +724,7 @@ function argon_get_lqip_for_img_src($src){
 }
 
 
-function argon_get_post_thumbnail($postID = 0){
+function argon_get_post_thumbnail($postID = 0, $size = 'large'){
 	if ($postID == 0){
 		global $post;
 		$postID = $post -> ID;
@@ -733,7 +738,7 @@ function argon_get_post_thumbnail($postID = 0){
 		   改 large 后单张降到 1024 宽，首页头图体积降到 1~2 MiB 量级。
 		   wp_get_attachment_image_src 在 large 不存在时会自动回退到 full，
 		   所以小图不受影响；这里再兜一层，避免附件无图时 false[0] 报警。 */
-		$src = wp_get_attachment_image_src(get_post_thumbnail_id($postID), "large");
+		$src = wp_get_attachment_image_src(get_post_thumbnail_id($postID), $size);
 		if (!$src){
 			$src = wp_get_attachment_image_src(get_post_thumbnail_id($postID), "full");
 		}
@@ -866,7 +871,7 @@ function get_seo_description(){
 		if (get_the_excerpt() != ""){
 			/* 用真正的省略号字符而不是 &hellip; 实体 —— 输出端会 esc_attr()，
 			   实体里的 & 会被二次转义成 &amp;hellip; 显示为字面量。 */
-			return preg_replace('/ \[…\]$/', '…', get_the_excerpt());
+			return preg_replace('/\s*\[(?:&hellip;|…)\]$/', '…', get_the_excerpt());
 		}
 		if (!post_password_required()){
 			return mb_substr(str_replace("\n", '', strip_tags($post -> post_content)), 0, 50) . "...";
@@ -931,7 +936,8 @@ function get_og_image(){
 	$postID = $post -> ID;
 	$argon_first_image_as_thumbnail = get_post_meta($postID, 'argon_first_image_as_thumbnail', true);
 	if (has_post_thumbnail() || $argon_first_image_as_thumbnail == 'true'){
-		return argon_get_post_thumbnail($postID);
+		/* og:image 用 full：1024px 低于 Facebook/LinkedIn 推荐的 1200x630。 */
+		return argon_get_post_thumbnail($postID, 'full');
 	}
 	return '';
 }
@@ -3241,9 +3247,14 @@ function argon_lazyload($content){
 				$meta = $lqip_src != '' ? argon_get_img_meta_for_src($lqip_src) : array('', 0, 0);
 				$lqip = $meta[0];
 				$lqip_class = $lqip != '' ? ' has-lqip' : ' no-lqip';
+				/* $style 必须每张图【无条件重置】。
+				   它原来只在 $lqip != '' 分支里赋值，而写回却在 $meta 分支里 ——
+				   两个条件相互独立，于是「有 LQIP 的图」后面跟一张「没 LQIP 的图」时，
+				   后者会带着前者的 background-image 一起写回，显示成【上一张图的模糊图】；
+				   若第一张就没有 LQIP，还会触发 PHP 8 的 Undefined variable 警告。 */
+				$style = trim($img->getAttribute('style'));
+				if ($style != '' && substr($style, -1) != ';'){ $style .= ';'; }
 				if ($lqip != ''){
-					$style = trim($img->getAttribute('style'));
-					if ($style != '' && substr($style, -1) != ';'){ $style .= ';'; }
 					$style .= "background-image:url('" . esc_attr($lqip) . "');background-size:cover;background-position:center;";
 				}
 				/* 【通用解：给不同尺寸的正文图锁定真实宽高比】
@@ -3257,11 +3268,27 @@ function argon_lazyload($content){
 				   宽度也要一起锁：主题那条占位规则给的是 width:100%，
 				   而图片加载完之后该规则不再匹配（src 变了），宽度退回 auto ——
 				   比容器窄的图会突然缩回自然宽度，照样跳。
-				   最终宽度正好是 min(容器宽, 自然宽)，所以这里用 CSS min() 精确表达，
+				   最终宽度正好是 min(容器宽, 自然宽)，用 width:100% + max-width 表达，
 				   占位阶段与最终状态逐像素一致。 */
 				if ($meta[1] > 0 && $meta[2] > 0){
-					$style .= 'width:min(100%,' . (int) $meta[1] . 'px);'
-						. 'aspect-ratio:' . (int) $meta[1] . ' / ' . (int) $meta[2] . ';';
+					/* 注意：这里【不能】写 width:min(100%, Npx)。
+					   min() 里的百分比在 shrink-to-fit 上下文（图片常被放在这样的父元素里）
+					   是「不确定的」，min() 会退化成 auto，而替换元素的 auto 宽度就是
+					   占位图的内在宽度 —— 1px。于是占位阶段图只有 1px 宽，
+					   真实图到达后才撑到 810px，文章高度实测连跳两次（6248→6675→7102）。
+					   拆成 width:100% + max-width:Npx：百分比有确定基准，效果完全一样，
+					   而且比容器窄的图仍然不会被拉伸。 */
+					/* 只在图片【没有】显式尺寸时才写 width:100% ——
+					   否则会永久覆盖作者在编辑器里拖出来的宽度（Gutenberg 的 is-resized
+					   会带 width/height 属性），作者写了 height 时还会让 aspect-ratio 失效、图片变形。
+					   aspect-ratio 本身无害，无条件写。 */
+					$has_size = $img->getAttribute('width') != '' || $img->getAttribute('height') != ''
+						|| preg_match('/(^|;)\s*(width|height)\s*:/i', $style);
+					if (!$has_size){
+						$style .= 'width:100%;max-width:' . (int) $meta[1] . 'px;';
+					}
+					/* aspect-ratio 无条件写：它只锁比例，不覆盖任何作者设定的尺寸。 */
+					$style .= 'aspect-ratio:' . (int) $meta[1] . ' / ' . (int) $meta[2] . ';';
 					if ($img->getAttribute('width') == ''){
 						$img->setAttribute('width', (string) $meta[1]);
 					}
@@ -3303,11 +3330,27 @@ function argon_lazyload($content){
 				if ($meta[1] > 0 && $meta[2] > 0){
 					if (!preg_match('/\swidth=/i', $m[1])){ $wh .= ' width="' . (int) $meta[1] . '"'; }
 					if (!preg_match('/\sheight=/i', $m[1])){ $wh .= ' height="' . (int) $meta[2] . '"'; }
-					$style .= 'width:min(100%,' . (int) $meta[1] . 'px);'
-						. 'aspect-ratio:' . (int) $meta[1] . ' / ' . (int) $meta[2] . ';';
+					/* 注意：这里【不能】写 width:min(100%, Npx)。
+					   min() 里的百分比在 shrink-to-fit 上下文（图片常被放在这样的父元素里）
+					   是「不确定的」，min() 会退化成 auto，而替换元素的 auto 宽度就是
+					   占位图的内在宽度 —— 1px。于是占位阶段图只有 1px 宽，
+					   真实图到达后才撑到 810px，文章高度实测连跳两次（6248→6675→7102）。
+					   拆成 width:100% + max-width:Npx：百分比有确定基准，效果完全一样，
+					   而且比容器窄的图仍然不会被拉伸。 */
+					/* 只在图片【没有】显式尺寸时才写 width:100% ——
+					   否则会永久覆盖作者在编辑器里拖出来的宽度（Gutenberg 的 is-resized
+					   会带 width/height 属性），作者写了 height 时还会让 aspect-ratio 失效、图片变形。
+					   aspect-ratio 本身无害，无条件写。 */
+					$has_size = $img->getAttribute('width') != '' || $img->getAttribute('height') != ''
+						|| preg_match('/(^|;)\s*(width|height)\s*:/i', $style);
+					if (!$has_size){
+						$style .= 'width:100%;max-width:' . (int) $meta[1] . 'px;';
+					}
+					/* aspect-ratio 无条件写：它只锁比例，不覆盖任何作者设定的尺寸。 */
+					$style .= 'aspect-ratio:' . (int) $meta[1] . ' / ' . (int) $meta[2] . ';';
 				}
 				$ph = 'data:image/svg+xml;base64,PCEtLUFyZ29uTG9hZGluZy0tPgo8c3ZnIHdpZHRoPSIxIiBoZWlnaHQ9IjEiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PC9zdmc+';
-				return '<img' . $m[1] . 'data-original="' . $src . '" class="' . $cls . '"' . $wh . ' src="' . $ph . '"' . ($style != '' ? ' style="' . $style . '"' : '') . ' ' . $m[4];
+				return '<img' . $m[1] . 'data-original="' . $src . '" class="' . $cls . '"' . $wh . ' src="' . $ph . '"' . $m[3] . ($style != '' ? ' style="' . $style . '"' : '') . ' ' . $m[4];
 			}, $content);
 			$content = preg_replace('/<img(.*?)data-full-url=[\'"]([^\'"]+)[\'"](.*)>/i',"<img$1data-full-url=\"$2\" data-original=\"$2\"$3>" , $content);
 			$content = preg_replace('/<img(.*?)srcset=[\'"](.*?)[\'"](.*?)>/i',"<img$1$3>" , $content);

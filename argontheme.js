@@ -2635,6 +2635,46 @@ function argonCommentPrivInit(){
 argonLightboxInit();
 
 /*Lazyload*/
+/* 等图片【真正加载完成】再取消模糊。
+   jquery.lazyload 的 load 回调是在 attr("src", ...) 之后【立刻】触发的，
+   那时图片才刚开始下载 —— 直接加 lazyload-loaded 会让模糊在图片只下了一半时
+   就被取消，观感是「半张图慢慢变清晰」，很差。
+   这里改成监听图片自身的 load 事件（缓存命中时 complete 已为真，直接收尾）。
+   失败也要收尾，否则会永远停在模糊状态。
+   判据用 naturalWidth > 1：占位图是 1×1 的 SVG，不能被当成「已加载」。 */
+function argonWhenImageReady(img, done){
+	if (!img) { done(); return; }
+	/* 缓存命中：complete 为真且不是 1×1 占位图时，再等一次 decode() 就收尾。
+	   判据用 naturalWidth > 1 —— 占位图是 1×1 的 SVG，不能被当成「已加载」。 */
+	if (img.complete && img.naturalWidth > 1 && img.naturalHeight > 1) {
+		/* complete 只表示数据到齐，decode() 才保证「已解码、可立即绘制」。
+		   少这一步就会出现「模糊已经取消了，但图片还是糊的」。 */
+		if (img.decode) { img.decode().then(done).catch(done); } else { done(); }
+		return;
+	}
+	/* 两个条件都满足才收尾：
+	   ① load 事件（数据下载完成）
+	   ② decode()（解码完成，可立即绘制）
+	   只等 load 是不够的 —— naturalWidth 在文件头解析完就有了，那时图片数据还没下完，
+	   浏览器会边下边逐行画，于是「模糊已经取消、图还在一点点变清晰」，观感很差。 */
+	var pending = 2;
+	var fired = false;
+	function finish(){
+		pending--;
+		if (pending > 0 || fired) { return; }
+		fired = true;
+		img.removeEventListener("load", finish);
+		img.removeEventListener("error", finish);
+		done();
+	}
+	img.addEventListener("load", finish);
+	img.addEventListener("error", finish);
+	if (img.decode) {
+		img.decode().then(finish).catch(finish);
+	} else {
+		finish();
+	}
+}
 function lazyloadInit(){
 	if (argonConfig.lazyload == false){
 		return;
@@ -2655,14 +2695,18 @@ function lazyloadInit(){
 	   （只给缩略图关掉是不够的，正文图走的是同一个 lazyBaseOptions。）
 	   过渡交给 CSS：加载中 filter: blur()，到位后归零，从模糊变清晰。 */
 	var contentOptions = Object.assign({}, lazyBaseOptions, {
-		load: function () {
-			$(this).addClass("lazyload-loaded");
-			$(this).parent().removeClass("lazyload-container-unload");
-			/*表格内懒加载图片加载后会使 border-collapse 重排变细，强制修复*/
-			if ($(this).closest("table, .wp-block-table").length){
-				tableReflow();
-			}
-		}
+		  		load: function () {
+  			var img = this;
+  			var $img = $(img);
+  			argonWhenImageReady(img, function () {
+  				$img.addClass("lazyload-loaded");
+  				$img.parent().removeClass("lazyload-container-unload");
+  				/*表格内懒加载图片加载后会使 border-collapse 重排变细，强制修复*/
+  				if ($img.closest("table, .wp-block-table").length){
+  					tableReflow();
+  				}
+  			});
+  		}
 	});
 	delete contentOptions.effect;
 	$("article img.lazyload:not(.lazyload-loaded) , .related-post-thumbnail.lazyload:not(.lazyload-loaded) , .shuoshuo-preview-container img.lazyload:not(.lazyload-loaded)").lazyload(contentOptions);
@@ -2673,11 +2717,15 @@ function lazyloadInit(){
 	   这里改用无效果的加载，过渡交给 CSS（filter/transform 从模糊到清晰）。 */
 	var thumbOptions = Object.assign({}, lazyBaseOptions, {
 		threshold: argonConfig.lazyload.threshold,
-		load: function () {
-			$(this).addClass("lazyload-loaded");
-			$(this).parent().removeClass("lazyload-container-unload");
-			waterflowInit();
-		}
+		  		load: function () {
+  			var img = this;
+  			var $img = $(img);
+  			argonWhenImageReady(img, function () {
+  				$img.addClass("lazyload-loaded");
+  				$img.parent().removeClass("lazyload-container-unload");
+  				waterflowInit();
+  			});
+  		}
 	});
 	delete thumbOptions.effect;
 	$(".post-thumbnail.lazyload:not(.lazyload-loaded)").lazyload(thumbOptions);

@@ -87,35 +87,178 @@
 	<?php if (get_option('argon_enable_preloader') != 'false') { ?>
 	<style>
 	/* 背景跟随主题深浅：浅色白(#fff)，深色统一用有设计的深灰(非纯黑) */
-	#argon-preloader{position:fixed;inset:0;z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--argon-preloader-bg,#fff);transition:opacity .6s ease;will-change:opacity;}
+	/* 容器负责定位、层级与【mask 化开】。
+	   mask 放在容器上而不是只放背景层：这样遮罩色与加载内容会【一起】从中心化开、
+	   一起消失 —— 加载内容不会在遮罩散开之后还孤零零留在屏幕上。
+	   （加载内容自身不做模糊，见下面的关键帧；模糊只由 .argon-preloader__blur 负责。） */
+	#argon-preloader{position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:none;
+		--argon-reveal:0%;
+		-webkit-mask-image:radial-gradient(circle at 50% 50%,transparent calc(var(--argon-reveal) - 7%),#000 var(--argon-reveal));
+		mask-image:radial-gradient(circle at 50% 50%,transparent calc(var(--argon-reveal) - 7%),#000 var(--argon-reveal));
+	}
+	/* 遮罩色单独一层，便于深浅色变量与将来替换 */
+	.argon-preloader__bg{position:absolute;inset:0;background:var(--argon-preloader-bg,#fff);}
 	/* 退出：遮罩整体淡出；模糊作用在内层内容(纯色遮罩模糊不可见) */
-	#argon-preloader.ar--hidden,#argon-preloader.argon-preloader--hidden{opacity:0;pointer-events:none;}
+	/* 退场【只靠背景层的 mask 化开】，容器整体不再淡出。
+	   原来这里是 opacity:0 —— 拆层之后基础规则里已经没有 opacity 的过渡了，
+	   于是容器会瞬间变透明、连背景层一起消失，化开动画根本来不及显示，
+	   看起来就「只有模糊、没有化开」。这里只保留 pointer-events。 */
+	#argon-preloader.ar--hidden,#argon-preloader.argon-preloader--hidden{pointer-events:none;}
 	/* 仅当深浅开关真正打开(.darkmode)时用深色(纯黑)，amoled-dark 只是纯黑变体修饰，不能单独生效 */
 	.darkmode{--argon-preloader-bg:#000;}
 	.darkmode.amoled-dark{--argon-preloader-bg:#000;}
-	.argon-preloader__inner{display:flex;flex-direction:column;align-items:center;animation:argon-preloader-in 1.2s ease both;}
+	/* 入场动画 0.5s。
+	   原来是 1.2s —— 但退场的触发条件是「样式表就绪 + 字体就绪（超时 1.5s）+ 最短 150ms」，
+	   快网下大约 300ms 就会开始，于是 1.2s 的入场被【拦腰截断】：
+	   加载内容还没淡入完就开始退场，观感很突兀。
+	   0.5s 配合下面 JS 里 550ms 的最短可见时长，入场总能跑完，退场再接手。 */
+	.argon-preloader__inner{position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;text-align:center;animation:argon-preloader-in 0.5s ease both;}
 	#argon-preloader.ar--hidden .argon-preloader__inner,#argon-preloader.argon-preloader--hidden .argon-preloader__inner{animation:argon-preloader-out 2s ease forwards;}
-	/* 旋转圈：主题色弧 + 主题色浅轨道，浅底深底都清晰可见 */
-	.argon-preloader__spinner{width:56px;height:56px;border:5px solid rgba(94,114,228,.25);border-top-color:var(--themecolor,#5e72e4);border-radius:50%;animation:argon-spin 1s linear infinite,argon-glow 2.4s ease-in-out infinite;}
-	.argon-preloader__text{margin-top:18px;color:var(--themecolor,#5e72e4);font-size:15px;letter-spacing:.2em;}
-	.argon-preloader__text::after{content:'';animation:argon-dots 1.8s steps(1,end) infinite;}
-	@keyframes argon-spin{to{transform:rotate(360deg);}}
-	/* 旋转圈外发光脉冲 */
-	@keyframes argon-glow{0%,100%{box-shadow:0 0 0 0 rgba(94,114,228,0);}50%{box-shadow:0 0 16px 2px rgba(94,114,228,.4);}}
-	/* 内层渐入：从深模糊浮现，渐变转浅模糊再清晰（与消失动画同款渐变模糊） */
+		/* 内层渐入：从深模糊浮现 → 浅模糊 → 清晰（进场前是糊的）。
+	   时长 0.5s（见上面的 animation）。
+	   注意：退场动画会用 animation 简写【整体替换】这条入场动画，
+	   所以入场必须在退场开始之前跑完，否则退场会从它自己的 0%（blur(0)）起步，
+	   文字会「从模糊突然变清晰」再变模糊 —— 比不加模糊更难看。
+	   为此把下面 JS 里的最短可见时长提到了 550ms（> 0.5s）。 */
 	@keyframes argon-preloader-in{
-		0%   {opacity:0;   filter:blur(16px);transform:scale(1.04);}  /* 深模糊浮现 */
-		60%  {opacity:1;   filter:blur(4px); transform:scale(1.02);}  /* 渐变转浅模糊 */
-		100% {opacity:1;   filter:blur(0);   transform:scale(1);}     /* 清晰 */
+		0%   {opacity:0; filter:blur(16px); transform:scale(1.04);}
+		60%  {opacity:1; filter:blur(4px);  transform:scale(1.02);}
+		100% {opacity:1; filter:blur(0);    transform:scale(1);}
 	}
-	/* 内层渐出：先迅速加深到深模糊，再渐变回落到浅模糊并淡出（优雅的渐变模糊） */
+		/* 内层渐出：清晰 → 迅速加深到深模糊 → 回落一点并淡出（退场时是糊的）。
+	   模糊峰值放在 30%（原来主题是 40%），让「糊起来」来得更快一点；
+	   峰值也略增到 18px，在 2s 的退场里更容易看清这段渐变。 */
 	@keyframes argon-preloader-out{
-		0%   {opacity:1;   filter:blur(0);   transform:none;}
-		40%  {opacity:1;   filter:blur(16px);transform:scale(1.04);}  /* 深模糊 */
-		100% {opacity:0;   filter:blur(4px); transform:scale(1.05);}  /* 渐变转浅模糊后淡出 */
+		0%   {opacity:1; filter:blur(0);    transform:scale(1);}
+		30%  {opacity:1; filter:blur(18px); transform:scale(1.03);}
+		100% {opacity:0; filter:blur(4px);  transform:scale(1.05);}
 	}
 	/* 加载文字动态省略号 */
 	@keyframes argon-dots{0%{content:'';}25%{content:'.';}50%{content:'..';}75%{content:'...';}100%{content:'';}}
+
+	/* ============================================================
+	   首屏内容：四行（欢迎语 / 站点名 / 进度条 / 加载提示）
+	   ------------------------------------------------------------
+	   尺寸全部由一个基准 --argon-lds 派生，随视口缩放：
+	     手机 48~60px，桌面 60~120px，超宽屏 132px
+	   三行字号各自独立缩放，且断点两侧连续（手机段上限 = 桌面段下限），
+	   避免「屏幕变大、组件反而变小」这种回缩。
+
+	   关于标签：这里用 div + h1/h2 的【字号样式】，不是真的 <h1>/<h2>。
+	   预加载器在 header.php 里，页面本身已经有 h1（文章标题或站点名），
+	   再加一个重复的 h1 会伤 SEO —— 所以刻意不用真标签。
+	   ============================================================ */
+	#argon-preloader{
+		--argon-lds:clamp(60px,7vw,120px);
+		--argon-ld-h2:clamp(12px,1.05vw,17px);
+		--argon-ld-h1:clamp(24px,2.9vw,46px);
+		--argon-ld-txt:clamp(11px,.95vw,14px);
+	}
+	@media (max-width:560px){#argon-preloader{--argon-lds:clamp(48px,12vw,60px);}}
+	@media (min-width:2000px){#argon-preloader{--argon-lds:132px;}}
+	/* 背景柔光：让首屏不至于太空，但不抢主体 */
+	.argon-preloader__glow{position:absolute;left:50%;top:44%;width:calc(var(--argon-lds) * 5.4);height:calc(var(--argon-lds) * 5.4);margin:calc(var(--argon-lds) * -2.7) 0 0 calc(var(--argon-lds) * -2.7);border-radius:50%;pointer-events:none;z-index:-1;background:radial-gradient(circle,rgba(94,114,228,.15) 0%,rgba(94,114,228,.05) 42%,transparent 70%);animation:argon-glow-breathe 3.6s ease-in-out infinite;}
+	@keyframes argon-glow-breathe{0%,100%{transform:scale(.92);opacity:.7;}50%{transform:scale(1.06);opacity:1;}}
+	/* ① 欢迎语 —— h2 字号：小、灰、字距宽（text-indent 抵消末字字距，视觉居中） */
+	.argon-preloader__welcome{font-size:var(--argon-ld-h2);font-weight:600;letter-spacing:.34em;text-indent:.34em;color:#9aa0b4;margin-bottom:calc(var(--argon-lds) * .1);}
+	.darkmode .argon-preloader__welcome{color:#767d95;}
+	/* ② 站点名 —— h1 字号：大、粗、深色、字距收紧 */
+	.argon-preloader__sitename{font-size:var(--argon-ld-h1);font-weight:800;letter-spacing:-.01em;line-height:1.18;color:#1f2333;max-width:min(86vw,720px);}
+	.darkmode .argon-preloader__sitename{color:#eef1f8;}
+	/* ③ 进度条 */
+	.argon-preloader__bar{position:relative;margin-top:calc(var(--argon-lds) * .3);width:min(46vw,320px);height:max(3px,calc(var(--argon-lds) * .032));border-radius:99px;background:rgba(94,114,228,.14);overflow:hidden;}
+	.darkmode .argon-preloader__bar{background:rgba(255,255,255,.1);}
+	.argon-preloader__bar i{position:absolute;top:0;bottom:0;width:38%;border-radius:99px;background:var(--themecolor,#5e72e4);animation:argon-bar-sweep 1.5s cubic-bezier(.65,0,.35,1) infinite;}
+	@keyframes argon-bar-sweep{0%{left:-38%;}100%{left:100%;}}
+	/* ④ 加载提示 —— 小字、主题色 */
+	.argon-preloader__hint{margin-top:calc(var(--argon-lds) * .16);font-size:var(--argon-ld-txt);font-weight:500;letter-spacing:.18em;text-indent:.18em;color:var(--themecolor,#5e72e4);opacity:.78;}
+	.argon-preloader__hint::after{content:'';animation:argon-dots 1.6s steps(1,end) infinite;}
+	@media (max-width:560px){
+		.argon-preloader__bar{width:min(62vw,240px);margin-top:calc(var(--argon-lds) * .24);}
+		.argon-preloader__welcome{letter-spacing:.26em;text-indent:.26em;}
+		.argon-preloader__hint{letter-spacing:.12em;text-indent:.12em;}
+	}
+
+	/* ============================================================
+	   退场：遮罩从中心「化开」+ 内容从模糊收敛到清晰
+	   ------------------------------------------------------------
+	   为什么不用 clip-path 把内容「擦」出来：
+	     clip-path 保留的是圆内，加在遮罩上会变成「遮罩从中心长出来盖住内容」，
+	     方向正好相反；而把内容抬到遮罩之上，遮罩里转圈的模糊淡出又会被整个盖住，
+	     于是既没有模糊过渡、也不连贯。
+	     现在让遮罩【留在上层不动】，自己带一个「中心透明、向外不透明」的圆形遮罩，
+	     半径从 0 长到 110% —— 遮罩从中心化开，转圈淡出全程可见。
+
+	   两个数值上的坑（都实测过）：
+	     · radial-gradient 里百分比圆是相对【最远角】的，写 150% 是它的 1.5 倍，
+	       视觉上过渡跑到约 2/3 就完全揭示完了，后面一段看不出来。取 110% 刚好。
+	     · cubic-bezier 的 y1 是「起步速度」，写 .8 是起步极快 ——
+	       半径 0.8 秒就冲到 95%，剩下时间几乎静止，观感仍然「太快」。y1 取 0。
+	   ============================================================ */
+	@property --argon-reveal{syntax:'<percentage>';inherits:false;initial-value:0%;}
+	
+			#argon-preloader.ar--hidden,#argon-preloader.argon-preloader--hidden{
+		--argon-reveal:110%;
+		/* 退场只做 mask 化开：遮罩从中心「挖」开，2s。
+		   不要再叠 opacity 淡出 —— 那会让遮罩提前淡没、化开只走一半。 */
+		transition:--argon-reveal 2s cubic-bezier(.55,0,.3,1);
+	}
+	/* ============================================================
+	   模糊层（层级：圆环 → 模糊 → 博客内容）
+	   ------------------------------------------------------------
+	   之前是直接给 #toolbar / #content 加 filter:blur() —— 两个问题：
+	     · 层级不对：模糊成了内容自身的属性，而不是夹在圆环与内容之间的一层；
+	     · 不同步：内容整体均匀变清，跟圆环扩散没有空间上的对应。
+	   现在改成独立的 backdrop-filter 层，夹在两者中间：
+
+	     最上  #argon-preloader        圆环（带 mask，从中心化开）
+	     中间  .argon-preloader__blur  只负责模糊它后面的东西
+	     最下  #content                博客内容（本身不动、不加 filter）
+
+	   关键点：这一层【不需要自己的 mask】。上面的遮罩是不透明的，
+	   只在中心留出一个透明圆，所以模糊层天然只在「被揭示出来的那块」可见 ——
+	   圆扩到哪儿，哪儿才露出模糊，天然同步。
+
+	   顺带解决两个隐患：不再给内容加 filter，所以
+	     · filter 创建包含块、导致 fixed 浮动按钮错位的风险消失；
+	     · 整页反复重栅格化带来的文字抖动也消失。
+	   ============================================================ */
+	.argon-preloader__blur{
+		position:fixed;inset:0;z-index:99998;pointer-events:none;
+		/* 平时不做任何模糊，零开销 */
+		-webkit-backdrop-filter:none;backdrop-filter:none;
+	}
+	/* 用 animation 而不是 transition：元素从首屏就在 DOM 里，
+	   而动画在「元素首次匹配到规则」时一定会从头播，不依赖前一帧的样式，
+	   也就天然与遮罩化开同步（两者都由 html.argon-revealing 触发、同时长同缓动）。 */
+	html.argon-revealing .argon-preloader__blur{
+		animation:argon-blur-out 2s cubic-bezier(.55,0,.3,1) forwards;
+	}
+	@keyframes argon-blur-out{
+		0%  {-webkit-backdrop-filter:blur(8px) saturate(1.06);backdrop-filter:blur(8px) saturate(1.06);}
+		60% {-webkit-backdrop-filter:blur(3px) saturate(1.02);backdrop-filter:blur(3px) saturate(1.02);}
+		100%{-webkit-backdrop-filter:blur(0)   saturate(1);   backdrop-filter:blur(0)   saturate(1);}
+	}
+	/* 不支持 backdrop-filter 的浏览器：没有模糊层，遮罩化开照常 */
+	@supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
+		.argon-preloader__blur{display:none;}
+	}
+	/* 不支持 @property 的老浏览器：遮罩直接淡出，不会卡住 */
+	/* 降级分支的探测条件要真的针对 @property。
+	   【不能用 @supports not (background:paint(x))】—— paint() 是 CSS Painting API
+	   （只有 Chromium 支持），而 Firefox/Safari 不支持它却【支持 @property】，
+	   于是这条「老浏览器降级」恰好会在支持 @property 的新浏览器上生效：
+	   它把 opacity 压成 0.8s 淡出，而 mask 化开是 1.5s —— 0.8 秒时遮罩已经淡没、
+	   化开只走了一半，正是「扩散看不见」那个 bug 在非 Chromium 上复现。
+	   改成由内联脚本按 CSS.registerProperty 是否存在来打标记，语义明确。 */
+	html.argon-no-at-property.ar-revealing #argon-preloader{opacity:0;transition:opacity .8s ease;}
+	}
+	@media (prefers-reduced-motion:reduce){
+		#argon-preloader,#argon-preloader *,#argon-preloader.ar--hidden,
+		.argon-preloader__blur,html.argon-revealing .argon-preloader__blur{
+			animation-duration:.01s !important;transition-duration:.01s !important;
+		}
+	}
 	</style>
 	<noscript><style>#argon-preloader{display:none!important;}</style></noscript>
 	<script>
@@ -236,7 +379,7 @@
 	<?php } ?>
 
 	<meta name="twitter:card" content="summary_large_image">
-	<meta name="twitter:title" content="<?php echo wp_get_document_title();?>">
+	<meta name="twitter:title" content="<?php echo esc_attr(wp_get_document_title());?>">
 	<?php } ?>
 
 	<meta name="theme-color" content="<?php echo esc_attr($themecolor); ?>">
@@ -503,22 +646,52 @@
 <body <?php body_class(); ?>>
 <?php /*wp_body_open();*/ ?>
 <?php if (get_option('argon_enable_preloader') != 'false') { ?>
-<div id="argon-preloader" aria-hidden="true">
-	<div class="argon-preloader__inner">
-		<div class="argon-preloader__spinner"></div>
-		<div class="argon-preloader__text"><?php _e('加载中', 'argon'); ?></div>
+<?php /* 模糊层：夹在圆环与博客内容之间（层级 圆环 → 模糊 → 内容）。
+         平时 backdrop-filter:none，零开销；只在退场时由 argon-revealing 触发模糊收敛。
+         放在遮罩【之前】，靠 z-index 99998 < 99999 保证在遮罩下面。 */ ?>
+<div class="argon-preloader__blur" aria-hidden="true"></div>
+  <div id="argon-preloader" aria-hidden="true">
+  	<?php /* 圆环层：只有遮罩色 + mask。加载内容【不在】它里面 ——
+  	         否则 mask 会把转圈与四行一起裁掉。 */ ?>
+  	<div class="argon-preloader__bg" aria-hidden="true"></div>
+  	<div class="argon-preloader__inner">
+		<div class="argon-preloader__glow"></div>
+		<?php /* 四行：欢迎语 / 站点名 / 进度条 / 加载提示。
+		         站点名走 esc_html 转义；欢迎语与加载提示可翻译。
+		         刻意不用 <h1>/<h2> 真标签 —— 页面本身已有 h1，重复会伤 SEO。 */ ?>
+		<div class="argon-preloader__welcome"><?php echo esc_html(apply_filters('argon_preloader_welcome', __('欢迎光临', 'argon'))); ?></div>
+		<div class="argon-preloader__sitename"><?php echo esc_html(get_bloginfo('name')); ?></div>
+		<div class="argon-preloader__bar"><i></i></div>
+		<div class="argon-preloader__hint"><?php echo esc_html(apply_filters('argon_preloader_hint', __('正在加载', 'argon'))); ?></div>
 	</div>
 </div>
 <script>
 (function(){
 	var el = document.getElementById('argon-preloader');
 	if (!el) return;
+	/* 不支持 @property 的浏览器：--argon-reveal 不会插值，遮罩会瞬跳。
+	   给它打个标记走淡出降级（而不是用 @supports 探测 paint()，那个特性不对）。 */
+	if (!(window.CSS && CSS.registerProperty)) {
+		document.documentElement.classList.add('argon-no-at-property');
+	}
+	var blurEl = document.querySelector('.argon-preloader__blur');
 	var hidden = false;
 	function hide(){
 		if (hidden) return; hidden = true;
+		/* argon-revealing 加在 <html> 上：它同时驱动三件事，所以天然同步 ——
+		   ① 遮罩的圆形化开（--argon-reveal 过渡）
+		   ② 模糊层的 backdrop-filter 收敛（argon-blur-out 动画）
+		   ③ 转圈的模糊淡出（argon-preloader-out，由 --hidden 触发）
+		   注意不能加在 body 上：那里一旦有 filter 就会创建包含块，
+		   内部 position:fixed 的浮动按钮会因此错位（实测差 254px）。 */
+		document.documentElement.classList.add('argon-revealing');
 		el.classList.add('argon-preloader--hidden');
-		// 退出动画(内层模糊 2s)播完后再移除节点
-		setTimeout(function(){ if (el && el.parentNode) el.parentNode.removeChild(el); }, 2100);
+		/* 等化开（1.5s）与内层模糊淡出（2s）都走完再摘掉节点 */
+		setTimeout(function(){
+			if (el && el.parentNode) el.parentNode.removeChild(el);
+			if (blurEl && blurEl.parentNode) blurEl.parentNode.removeChild(blurEl);
+			document.documentElement.classList.remove('argon-revealing');
+		}, 2700);
 	}
 	var start = Date.now();
 	/* 字体就绪 —— 但必须【加超时】。
@@ -533,7 +706,11 @@
 	   关闭的主条件已经变成「骨架屏已就位（DOMContentLoaded + 样式表就绪） + 字体就绪」，
 	   不再固定等 600ms —— 快网下那 600ms 会把骨架屏 / LQIP 白白压住，
 	   而它们正是用来填补「遮罩退场之后、图片还没下完」那段时间的。 */
-	var minVisible = 150;
+	/* 最短可见时长 550ms：入场动画 0.5s 必须跑完再退场。
+	   否则退场会用 animation 简写整体替换入场动画，从它自己的 0%（blur(0)）起步，
+	   文字会「从模糊突然变清晰」再变模糊 —— 比不加模糊更难看。
+	   550ms 只比 0.5s 多一点余量，不会明显拖慢首屏。 */
+	var minVisible = 550;
 	function minDelay(){ return new Promise(function(res){ setTimeout(res, Math.max(0, minVisible - (Date.now() - start))); }); }
 	// 等待所有样式表加载完成（合并 JS 为解析阻塞脚本，已在 DOMContentLoaded 前执行完毕）
 	function stylesheetsReady(){
@@ -710,7 +887,12 @@
 		   而文章页的 h1 是文章标题，banner 再出 h1 就会有两个。
 		   注意 banner_size 设为 hide 时本区块【仍然渲染】（只是 <html> 多了 no-banner 类，
 		   由 CSS 隐藏），所以首页在任何配置下都恰好有一个 h1。 */
-		$argon_banner_tag = (is_home() || is_front_page()) ? 'h1' : 'div';
+	/* 用 is_home() 单独判断，不要加 && !is_front_page()：
+	   · 博客首页（is_home() 为真）：没有页面标题，h1 必须由 banner 承担；
+	     若排除 is_front_page() 就会变成【一个 h1 都没有】（实测首页 h1=0）。
+	   · 静态首页（is_front_page() 为真、is_home() 为假）：h1 由
+	     template-parts/content-page.php 的页面标题承担，banner 用 div 才对。 */
+	$argon_banner_tag = is_home() ? 'h1' : 'div';
 	?>
 	<div id="banner_container" class="banner-container container text-center">
 		<?php if ($enable_banner_title_typing_effect != "true"){?>

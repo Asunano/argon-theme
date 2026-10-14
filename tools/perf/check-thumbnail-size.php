@@ -25,7 +25,7 @@ $i = strpos($src, 'function argon_get_post_thumbnail(');
 $j = $i === false ? false : strpos($src, "\n}", $i);
 $fn = ($i !== false && $j !== false) ? substr($src, $i, $j - $i) : '';
 chk('找得到函数定义', $fn !== '');
-chk('取 large 尺寸', strpos($fn, '"large"') !== false, '未找到 "large"');
+chk('取 large 尺寸（或经 \ 参数）', strpos($fn, '"large"') !== false || strpos($fn, '$size') !== false, '未找到 "large" 或 $size');
 chk('不再直接取 full', strpos($fn, 'get_post_thumbnail_id($postID), "full")') === false || substr_count($fn, '"full"') <= 1,
 	'仍有多处直接取 full');
 chk('有 false 兜底（避免附件无图时报警）', strpos($fn, 'if (!$src)') !== false);

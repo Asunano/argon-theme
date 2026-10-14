@@ -35,8 +35,19 @@
 						?>
 					</div>
 					<script>
+					/* 必须包 ready 判定：argon_js_merged 已改 defer，
+					   解析期执行到这里时 jQuery 还没定义，会抛 $ is not defined。
+					   三态判定不可省略 —— 若脚本注入时文档已就绪，只挂 DOMContentLoaded 会永不触发。 */
+					(function(fn){
+						if (document.readyState === "loading"){
+							document.addEventListener("DOMContentLoaded", fn);
+						}else{
+							fn();
+						}
+					})(function(){
 						$(".search-filter").prop("checked", false);
 						$("<?php echo "#search_filter_" . implode(",#search_filter_", $current_filters_type); ?>").prop("checked", true);
+					});
 					</script>
 			<?php } ?>
 			<p class="text-black mt-3 mb-0 opacity-8">

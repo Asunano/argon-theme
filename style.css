@@ -3,7 +3,7 @@ Theme Name: argon (Enhanced By Asunano)
 Author: solstice23, Enhanced By Asunano
 Author URI: https://solstice23.top/
 Description: 轻盈、简洁、美观的 Wordpress 主题 (Enhanced By Asunano)
-Version: 1.3.30
+Version: 1.4.0
 License: GNU General Public License v3.0
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 Tags: 简约, 两栏, 侧栏在左边, 浮动侧栏, 文章目录, 自适应, 夜间模式, 可自定义
@@ -223,12 +223,14 @@ article .post-content p {
 	line-height: 1.8;
 	word-wrap: break-word;
 }
-article h1,
-article h2,
-article h3,
-article h4,
-article h5,
-article h6,
+/* 排除 .post-title：它改动前是 <a class="post-title">，不会命中这条；
+   改成 h1/h2 后若不加排除，卡片标题与文章主标题会一起被加粗（全站性的视觉变化）。 */
+article h1:not(.post-title),
+article h2:not(.post-title),
+article h3:not(.post-title),
+article h4:not(.post-title),
+article h5:not(.post-title),
+article h6:not(.post-title),
 article strong {
 	font-weight: 600;
 }
@@ -592,9 +594,11 @@ html.use-big-shadow *.shadow-sm {
 .article-header-style-1 article h3 {
 	position: relative;
 }
-.article-header-style-1 article h1:after,
-.article-header-style-1 article h2:after,
-.article-header-style-1 article h3:after {
+/* 同样排除 .post-title：改动前它是 <a>，不会命中这两组装饰条规则，
+   改成 h1/h2 后会让标题多出一条主题色装饰（仅非默认 header style 下可见，自查容易漏）。 */
+.article-header-style-1 article h1:not(.post-title):after,
+.article-header-style-1 article h2:not(.post-title):after,
+.article-header-style-1 article h3:not(.post-title):after {
 	content: "";
 	display: block;
 	position: absolute;
@@ -647,9 +651,9 @@ html.use-big-shadow *.shadow-sm {
 	left: unset;
 	right: -2px;
 }
-.article-header-style-2 article h1:before,
-.article-header-style-2 article h2:before,
-.article-header-style-2 article h3:before {
+.article-header-style-2 article h1:not(.post-title):before,
+.article-header-style-2 article h2:not(.post-title):before,
+.article-header-style-2 article h3:not(.post-title):before {
 	content: "";
 	display: inline-block;
 	background: var(--themecolor);
@@ -2107,7 +2111,10 @@ html.filter-grayscale {
 	background-size: cover;
 	background-position: center center;
 	background-repeat: no-repeat;
-	transition: filter 0.5s ease, transform 0.5s ease, opacity 0.35s ease;
+	/* 取消模糊要【等图片真正加载完】再慢慢做（时序由 argontheme.js 的 argonWhenImageReady 控制）。
+	这里把时长从 0.5s 放到 0.9s，并换成两端平缓的缓动 ——
+	模糊散去的过程才是「慢慢变清晰」，而不是一下子锐化。 */
+	transition: filter 0.9s cubic-bezier(.22,.61,.36,1), transform 0.9s cubic-bezier(.22,.61,.36,1), opacity 0.35s ease;
 	transform-origin: center center;
 }
 /* 加载中：叠一层模糊。scale 稍微放大，把 blur 在边缘留下的半透明羽化推出可视区
@@ -2149,21 +2156,21 @@ html.darkmode .post-thumbnail.no-lqip {
 
    尺寸稳定性靠两件事（都在 functions.php 里写进内联样式）：
    · aspect-ratio 锁定真实比例（占位图是 1×1 的 SVG，其固有比例会盖掉 width/height 属性）；
-   · width: min(100%, 自然宽) 让占位阶段的宽度精确等于最终宽度。 */
-article img.lazyload.has-lqip,
-.wp-block-image img.lazyload.has-lqip {
+   · width:100% + max-width:自然宽 让占位阶段的宽度精确等于最终宽度。 */
+article img.lazyload.has-lqip:not(.post-thumbnail),
+.wp-block-image img.lazyload.has-lqip:not(.post-thumbnail) {
 	background-size: cover;
 	background-position: center center;
 	background-repeat: no-repeat;
-	transition: filter 0.45s ease;
+	transition: filter 0.8s cubic-bezier(.22,.61,.36,1);
 }
-article img.lazyload.has-lqip:not(.lazyload-loaded),
-.wp-block-image img.lazyload.has-lqip:not(.lazyload-loaded) {
+article img.lazyload.has-lqip:not(.post-thumbnail):not(.lazyload-loaded),
+.wp-block-image img.lazyload.has-lqip:not(.post-thumbnail):not(.lazyload-loaded) {
 	filter: blur(8px);
 }
 @media (prefers-reduced-motion: reduce) {
-	article img.lazyload.has-lqip,
-	.wp-block-image img.lazyload.has-lqip {
+	article img.lazyload.has-lqip:not(.post-thumbnail),
+	.wp-block-image img.lazyload.has-lqip:not(.post-thumbnail) {
 		transition: none;
 		filter: none;
 	}
@@ -2205,7 +2212,10 @@ html.darkmode .wp-block-image img.lazyload.no-lqip:not(.lazyload-loaded) {
 	background-color: rgba(255, 255, 255, 0.06);
 }
 .post-thumbnail.lazyload {
-	transition: filter 0.5s ease, transform 0.5s ease, opacity 0.35s ease;
+	/* 取消模糊要【等图片真正加载完】再慢慢做（时序由 argontheme.js 的 argonWhenImageReady 控制）。
+	这里把时长从 0.5s 放到 0.9s，并换成两端平缓的缓动 ——
+	模糊散去的过程才是「慢慢变清晰」，而不是一下子锐化。 */
+	transition: filter 0.9s cubic-bezier(.22,.61,.36,1), transform 0.9s cubic-bezier(.22,.61,.36,1), opacity 0.35s ease;
 }
 .post-thumbnail.lazyload.lazyload-loaded {
 	opacity: 1 !important;

@@ -107,13 +107,19 @@
 	/* 仅当深浅开关真正打开(.darkmode)时用深色(纯黑)，amoled-dark 只是纯黑变体修饰，不能单独生效 */
 	.darkmode{--argon-preloader-bg:#000;}
 	.darkmode.amoled-dark{--argon-preloader-bg:#000;}
-	.argon-preloader__inner{position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;text-align:center;animation:argon-preloader-in 1.2s ease both;}
-	#argon-preloader.ar--hidden .argon-preloader__inner,#argon-preloader.argon-preloader--hidden .argon-preloader__inner{animation:argon-preloader-out 2.5s ease forwards;}
+	/* 入场动画只有 0.45s。
+	   原来是 1.2s —— 但退场的触发条件是「样式表就绪 + 字体就绪（超时 1.5s）+ 最短 150ms」，
+	   快网下大约 300ms 就会开始，于是 1.2s 的入场被【拦腰截断】：
+	   加载内容还没淡入完就开始退场，观感很突兀。
+	   缩短到 0.45s 后，入场总能跑完，退场再接手，两段衔接得上。 */
+	.argon-preloader__inner{position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;text-align:center;animation:argon-preloader-in 0.45s ease both;}
+	#argon-preloader.ar--hidden .argon-preloader__inner,#argon-preloader.argon-preloader--hidden .argon-preloader__inner{animation:argon-preloader-out 2s ease forwards;}
 		/* 内层渐入：只淡入 + 轻微放大收束，【不做模糊】。
-	   理由同下：加载文字应该始终清晰 —— 模糊是模糊层的职责，只作用于博客内容。 */
+	   理由同下：加载文字应该始终清晰 —— 模糊是模糊层的职责，只作用于博客内容。
+	   时长 0.45s（见上面的 animation）：要短到退场接手之前能跑完。 */
 	@keyframes argon-preloader-in{
-		0%   {opacity:0; transform:scale(1.03);}
-		60%  {opacity:1; transform:scale(1.01);}
+		0%   {opacity:0; transform:scale(1.04);}
+		55%  {opacity:1; transform:scale(1.01);}
 		100% {opacity:1; transform:scale(1);}
 	}
 		/* 内层渐出：只淡出，【不做模糊】。
@@ -193,9 +199,9 @@
 	
 			#argon-preloader.ar--hidden,#argon-preloader.argon-preloader--hidden{
 		--argon-reveal:110%;
-		/* 退场只做 mask 化开：遮罩从中心「挖」开，2.5s。
+		/* 退场只做 mask 化开：遮罩从中心「挖」开，2s。
 		   不要再叠 opacity 淡出 —— 那会让遮罩提前淡没、化开只走一半。 */
-		transition:--argon-reveal 2.5s cubic-bezier(.55,0,.3,1);
+		transition:--argon-reveal 2s cubic-bezier(.55,0,.3,1);
 	}
 	/* ============================================================
 	   模糊层（层级：圆环 → 模糊 → 博客内容）
@@ -226,7 +232,7 @@
 	   而动画在「元素首次匹配到规则」时一定会从头播，不依赖前一帧的样式，
 	   也就天然与遮罩化开同步（两者都由 html.argon-revealing 触发、同时长同缓动）。 */
 	html.argon-revealing .argon-preloader__blur{
-		animation:argon-blur-out 2.5s cubic-bezier(.55,0,.3,1) forwards;
+		animation:argon-blur-out 2s cubic-bezier(.55,0,.3,1) forwards;
 	}
 	@keyframes argon-blur-out{
 		0%  {-webkit-backdrop-filter:blur(8px) saturate(1.06);backdrop-filter:blur(8px) saturate(1.06);}
@@ -685,7 +691,7 @@
 			if (el && el.parentNode) el.parentNode.removeChild(el);
 			if (blurEl && blurEl.parentNode) blurEl.parentNode.removeChild(blurEl);
 			document.documentElement.classList.remove('argon-revealing');
-		}, 3200);
+		}, 2700);
 	}
 	var start = Date.now();
 	/* 字体就绪 —— 但必须【加超时】。

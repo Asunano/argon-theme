@@ -107,31 +107,31 @@
 	/* 仅当深浅开关真正打开(.darkmode)时用深色(纯黑)，amoled-dark 只是纯黑变体修饰，不能单独生效 */
 	.darkmode{--argon-preloader-bg:#000;}
 	.darkmode.amoled-dark{--argon-preloader-bg:#000;}
-	/* 入场动画只有 0.45s。
+	/* 入场动画 0.5s。
 	   原来是 1.2s —— 但退场的触发条件是「样式表就绪 + 字体就绪（超时 1.5s）+ 最短 150ms」，
 	   快网下大约 300ms 就会开始，于是 1.2s 的入场被【拦腰截断】：
 	   加载内容还没淡入完就开始退场，观感很突兀。
-	   缩短到 0.45s 后，入场总能跑完，退场再接手，两段衔接得上。 */
-	.argon-preloader__inner{position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;text-align:center;animation:argon-preloader-in 0.45s ease both;}
+	   0.5s 配合下面 JS 里 550ms 的最短可见时长，入场总能跑完，退场再接手。 */
+	.argon-preloader__inner{position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;text-align:center;animation:argon-preloader-in 0.5s ease both;}
 	#argon-preloader.ar--hidden .argon-preloader__inner,#argon-preloader.argon-preloader--hidden .argon-preloader__inner{animation:argon-preloader-out 2s ease forwards;}
-		/* 内层渐入：只淡入 + 轻微放大收束，【不做模糊】。
-	   理由同下：加载文字应该始终清晰 —— 模糊是模糊层的职责，只作用于博客内容。
-	   时长 0.45s（见上面的 animation）：要短到退场接手之前能跑完。 */
+		/* 内层渐入：从深模糊浮现 → 浅模糊 → 清晰（进场前是糊的）。
+	   时长 0.5s（见上面的 animation）。
+	   注意：退场动画会用 animation 简写【整体替换】这条入场动画，
+	   所以入场必须在退场开始之前跑完，否则退场会从它自己的 0%（blur(0)）起步，
+	   文字会「从模糊突然变清晰」再变模糊 —— 比不加模糊更难看。
+	   为此把下面 JS 里的最短可见时长提到了 550ms（> 0.5s）。 */
 	@keyframes argon-preloader-in{
-		0%   {opacity:0; transform:scale(1.04);}
-		55%  {opacity:1; transform:scale(1.01);}
-		100% {opacity:1; transform:scale(1);}
+		0%   {opacity:0; filter:blur(16px); transform:scale(1.04);}
+		60%  {opacity:1; filter:blur(4px);  transform:scale(1.02);}
+		100% {opacity:1; filter:blur(0);    transform:scale(1);}
 	}
-		/* 内层渐出：只淡出，【不做模糊】。
-	   层级分工是「圆环 → 模糊 → 博客内容」—— 模糊层只负责模糊博客内容，
-	   加载文字（欢迎语 / 站点名 / 进度条 / 加载提示）应该始终清晰地在最上面。
-	   原来这里沿用了主题的渐变模糊（blur 0 → 16px → 4px），
-	   于是退场时加载文字自己也被糊掉，看起来像「文字也被模糊了」。
-	   保留一点点 scale 收束，让消失不那么生硬。 */
+		/* 内层渐出：清晰 → 迅速加深到深模糊 → 回落一点并淡出（退场时是糊的）。
+	   模糊峰值放在 30%（原来主题是 40%），让「糊起来」来得更快一点；
+	   峰值也略增到 18px，在 2s 的退场里更容易看清这段渐变。 */
 	@keyframes argon-preloader-out{
-		0%   {opacity:1; transform:scale(1);}
-		60%  {opacity:1; transform:scale(1.015);}
-		100% {opacity:0; transform:scale(1.03);}
+		0%   {opacity:1; filter:blur(0);    transform:scale(1);}
+		30%  {opacity:1; filter:blur(18px); transform:scale(1.03);}
+		100% {opacity:0; filter:blur(4px);  transform:scale(1.05);}
 	}
 	/* 加载文字动态省略号 */
 	@keyframes argon-dots{0%{content:'';}25%{content:'.';}50%{content:'..';}75%{content:'...';}100%{content:'';}}
@@ -706,7 +706,11 @@
 	   关闭的主条件已经变成「骨架屏已就位（DOMContentLoaded + 样式表就绪） + 字体就绪」，
 	   不再固定等 600ms —— 快网下那 600ms 会把骨架屏 / LQIP 白白压住，
 	   而它们正是用来填补「遮罩退场之后、图片还没下完」那段时间的。 */
-	var minVisible = 150;
+	/* 最短可见时长 550ms：入场动画 0.5s 必须跑完再退场。
+	   否则退场会用 animation 简写整体替换入场动画，从它自己的 0%（blur(0)）起步，
+	   文字会「从模糊突然变清晰」再变模糊 —— 比不加模糊更难看。
+	   550ms 只比 0.5s 多一点余量，不会明显拖慢首屏。 */
+	var minVisible = 550;
 	function minDelay(){ return new Promise(function(res){ setTimeout(res, Math.max(0, minVisible - (Date.now() - start))); }); }
 	// 等待所有样式表加载完成（合并 JS 为解析阻塞脚本，已在 DOMContentLoaded 前执行完毕）
 	function stylesheetsReady(){

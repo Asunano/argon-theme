@@ -116,6 +116,59 @@
 	}
 	/* 加载文字动态省略号 */
 	@keyframes argon-dots{0%{content:'';}25%{content:'.';}50%{content:'..';}75%{content:'...';}100%{content:'';}}
+
+	/* ============================================================
+	   退场：遮罩从中心「化开」+ 内容从模糊收敛到清晰
+	   ------------------------------------------------------------
+	   为什么不用 clip-path 把内容「擦」出来：
+	     clip-path 保留的是圆内，加在遮罩上会变成「遮罩从中心长出来盖住内容」，
+	     方向正好相反；而把内容抬到遮罩之上，遮罩里转圈的模糊淡出又会被整个盖住，
+	     于是既没有模糊过渡、也不连贯。
+	     现在让遮罩【留在上层不动】，自己带一个「中心透明、向外不透明」的圆形遮罩，
+	     半径从 0 长到 110% —— 遮罩从中心化开，转圈淡出全程可见。
+
+	   两个数值上的坑（都实测过）：
+	     · radial-gradient 里百分比圆是相对【最远角】的，写 150% 是它的 1.5 倍，
+	       视觉上过渡跑到约 2/3 就完全揭示完了，后面一段看不出来。取 110% 刚好。
+	     · cubic-bezier 的 y1 是「起步速度」，写 .8 是起步极快 ——
+	       半径 0.8 秒就冲到 95%，剩下时间几乎静止，观感仍然「太快」。y1 取 0。
+	   ============================================================ */
+	@property --argon-reveal{syntax:'<percentage>';inherits:false;initial-value:0%;}
+	#argon-preloader{
+		--argon-reveal:0%;
+		-webkit-mask-image:radial-gradient(circle at 50% 50%,transparent calc(var(--argon-reveal) - 7%),#000 var(--argon-reveal));
+		mask-image:radial-gradient(circle at 50% 50%,transparent calc(var(--argon-reveal) - 7%),#000 var(--argon-reveal));
+	}
+	#argon-preloader.ar--hidden,#argon-preloader.argon-preloader--hidden{
+		--argon-reveal:110%;
+		transition:--argon-reveal 1.5s cubic-bezier(.55,0,.3,1),opacity .6s ease;
+	}
+	/* 内容同时从模糊收敛到清晰。
+	   注意【不能加 transform: scale()】—— 实测整页会因此产生 108 种位置、166 种尺寸，
+	   所有元素都在动，观感就是「界面元素抖动」。blur 也从 14px 收到 8px：
+	   整页含大量文字，模糊越大越会反复重栅格化，文字边缘会持续闪。
+	   作用对象是 #toolbar / #content 而【不是 body】：filter 会创建包含块，
+	   给 body 加会让它内部那些 position:fixed 的浮动按钮改基准、错位（实测差 254px）。
+	   这两个容器实测安全（fixed 后代错位 0 个）。 */
+	html.argon-revealing #toolbar,html.argon-revealing #content{
+		animation:argon-content-focus 1.5s cubic-bezier(.55,0,.3,1) forwards;
+	}
+	@keyframes argon-content-focus{
+		0%  {filter:blur(8px) saturate(1.06);}
+		60% {filter:blur(3px) saturate(1.02);}
+		100%{filter:blur(0)   saturate(1);}
+	}
+	/* 不支持 @property 的老浏览器：遮罩直接淡出，不会卡住 */
+	@supports not (background:paint(x)){
+		html.argon-revealing #argon-preloader{opacity:0;transition:opacity .8s ease;}
+		html.argon-revealing #toolbar,html.argon-revealing #content{animation:none;}
+	}
+	@media (prefers-reduced-motion:reduce){
+		#argon-preloader,#argon-preloader *,#argon-preloader.ar--hidden,
+		html.argon-revealing #toolbar,html.argon-revealing #content{
+			animation-duration:.01s !important;transition-duration:.01s !important;
+		}
+	}
 	</style>
 	<noscript><style>#argon-preloader{display:none!important;}</style></noscript>
 	<script>
@@ -516,9 +569,18 @@
 	var hidden = false;
 	function hide(){
 		if (hidden) return; hidden = true;
+		/* argon-revealing 加在 <html> 上：它同时驱动两件事 ——
+		   遮罩的圆形化开（--argon-reveal 过渡）与内容的模糊收敛
+		   （#toolbar / #content 的 argon-content-focus）。
+		   注意不能加在 body 上：filter 会创建包含块，
+		   body 内部那些 position:fixed 的浮动按钮会因此错位（实测差 254px）。 */
+		document.documentElement.classList.add('argon-revealing');
 		el.classList.add('argon-preloader--hidden');
-		// 退出动画(内层模糊 2s)播完后再移除节点
-		setTimeout(function(){ if (el && el.parentNode) el.parentNode.removeChild(el); }, 2100);
+		/* 等化开（1.5s）与内层模糊淡出（2s）都走完再摘掉节点 */
+		setTimeout(function(){
+			if (el && el.parentNode) el.parentNode.removeChild(el);
+			document.documentElement.classList.remove('argon-revealing');
+		}, 2200);
 	}
 	var start = Date.now();
 	/* 字体就绪 —— 但必须【加超时】。

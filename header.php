@@ -94,7 +94,11 @@
 	/* 圆环层：只有遮罩色 + mask，负责从中心化开 */
 	.argon-preloader__bg{position:absolute;inset:0;background:var(--argon-preloader-bg,#fff);}
 	/* 退出：遮罩整体淡出；模糊作用在内层内容(纯色遮罩模糊不可见) */
-	#argon-preloader.ar--hidden,#argon-preloader.argon-preloader--hidden{opacity:0;pointer-events:none;}
+	/* 退场【只靠背景层的 mask 化开】，容器整体不再淡出。
+	   原来这里是 opacity:0 —— 拆层之后基础规则里已经没有 opacity 的过渡了，
+	   于是容器会瞬间变透明、连背景层一起消失，化开动画根本来不及显示，
+	   看起来就「只有模糊、没有化开」。这里只保留 pointer-events。 */
+	#argon-preloader.ar--hidden,#argon-preloader.argon-preloader--hidden{pointer-events:none;}
 	/* 仅当深浅开关真正打开(.darkmode)时用深色(纯黑)，amoled-dark 只是纯黑变体修饰，不能单独生效 */
 	.darkmode{--argon-preloader-bg:#000;}
 	.darkmode.amoled-dark{--argon-preloader-bg:#000;}

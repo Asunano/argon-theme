@@ -87,13 +87,18 @@
 	<?php if (get_option('argon_enable_preloader') != 'false') { ?>
 	<style>
 	/* 背景跟随主题深浅：浅色白(#fff)，深色统一用有设计的深灰(非纯黑) */
-	#argon-preloader{position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:var(--argon-preloader-bg,#fff);transition:opacity .6s ease;will-change:opacity;}
+	/* 容器只负责定位与层级，【不带背景、不带 mask】——
+	   mask 必须只作用在背景层上：如果留在容器上，转圈与四行内容会被一起裁掉，
+	   遮罩从中心化开时加载内容就被「吃掉」，看起来像被模糊了。 */
+	#argon-preloader{position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:none;}
+	/* 圆环层：只有遮罩色 + mask，负责从中心化开 */
+	.argon-preloader__bg{position:absolute;inset:0;background:var(--argon-preloader-bg,#fff);}
 	/* 退出：遮罩整体淡出；模糊作用在内层内容(纯色遮罩模糊不可见) */
 	#argon-preloader.ar--hidden,#argon-preloader.argon-preloader--hidden{opacity:0;pointer-events:none;}
 	/* 仅当深浅开关真正打开(.darkmode)时用深色(纯黑)，amoled-dark 只是纯黑变体修饰，不能单独生效 */
 	.darkmode{--argon-preloader-bg:#000;}
 	.darkmode.amoled-dark{--argon-preloader-bg:#000;}
-	.argon-preloader__inner{position:relative;display:flex;flex-direction:column;align-items:center;text-align:center;animation:argon-preloader-in 1.2s ease both;}
+	.argon-preloader__inner{position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;text-align:center;animation:argon-preloader-in 1.2s ease both;}
 	#argon-preloader.ar--hidden .argon-preloader__inner,#argon-preloader.argon-preloader--hidden .argon-preloader__inner{animation:argon-preloader-out 2s ease forwards;}
 	/* 内层渐入：从深模糊浮现，渐变转浅模糊再清晰（与消失动画同款渐变模糊） */
 	@keyframes argon-preloader-in{
@@ -170,12 +175,14 @@
 	       半径 0.8 秒就冲到 95%，剩下时间几乎静止，观感仍然「太快」。y1 取 0。
 	   ============================================================ */
 	@property --argon-reveal{syntax:'<percentage>';inherits:false;initial-value:0%;}
-	#argon-preloader{
+		/* mask 加在【背景层】上，不加在容器上 —— 这样加载内容（转圈 / 四行）不参与裁切。 */
+	.argon-preloader__bg{
 		--argon-reveal:0%;
 		-webkit-mask-image:radial-gradient(circle at 50% 50%,transparent calc(var(--argon-reveal) - 7%),#000 var(--argon-reveal));
 		mask-image:radial-gradient(circle at 50% 50%,transparent calc(var(--argon-reveal) - 7%),#000 var(--argon-reveal));
 	}
-	#argon-preloader.ar--hidden,#argon-preloader.argon-preloader--hidden{
+		#argon-preloader.ar--hidden .argon-preloader__bg,
+	#argon-preloader.argon-preloader--hidden .argon-preloader__bg{
 		--argon-reveal:110%;
 		/* opacity 必须显式压回 1：上面那条原有规则写的是 opacity:0，
 		   它的过渡只有 .6s —— 遮罩会在 .6 秒内淡没，1.5s 的圆形化开还没看出形状就结束了，
@@ -631,8 +638,11 @@
          平时 backdrop-filter:none，零开销；只在退场时由 argon-revealing 触发模糊收敛。
          放在遮罩【之前】，靠 z-index 99998 < 99999 保证在遮罩下面。 */ ?>
 <div class="argon-preloader__blur" aria-hidden="true"></div>
-<div id="argon-preloader" aria-hidden="true">
-	<div class="argon-preloader__inner">
+  <div id="argon-preloader" aria-hidden="true">
+  	<?php /* 圆环层：只有遮罩色 + mask。加载内容【不在】它里面 ——
+  	         否则 mask 会把转圈与四行一起裁掉。 */ ?>
+  	<div class="argon-preloader__bg" aria-hidden="true"></div>
+  	<div class="argon-preloader__inner">
 		<div class="argon-preloader__glow"></div>
 		<?php /* 四行：欢迎语 / 站点名 / 进度条 / 加载提示。
 		         站点名走 esc_html 转义；欢迎语与加载提示可翻译。
@@ -861,9 +871,12 @@
 		   而文章页的 h1 是文章标题，banner 再出 h1 就会有两个。
 		   注意 banner_size 设为 hide 时本区块【仍然渲染】（只是 <html> 多了 no-banner 类，
 		   由 CSS 隐藏），所以首页在任何配置下都恰好有一个 h1。 */
-	/* 只有【文章列表首页】的 banner 才是 h1。静态首页（is_front_page）的 h1 由
-	   template-parts/content-page.php 里的页面标题承担，这里再用 h1 就会出现两个 h1。 */
-	$argon_banner_tag = (is_home() && !is_front_page()) ? 'h1' : 'div';
+	/* 用 is_home() 单独判断，不要加 && !is_front_page()：
+	   · 博客首页（is_home() 为真）：没有页面标题，h1 必须由 banner 承担；
+	     若排除 is_front_page() 就会变成【一个 h1 都没有】（实测首页 h1=0）。
+	   · 静态首页（is_front_page() 为真、is_home() 为假）：h1 由
+	     template-parts/content-page.php 的页面标题承担，banner 用 div 才对。 */
+	$argon_banner_tag = is_home() ? 'h1' : 'div';
 	?>
 	<div id="banner_container" class="banner-container container text-center">
 		<?php if ($enable_banner_title_typing_effect != "true"){?>

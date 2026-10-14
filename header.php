@@ -87,11 +87,16 @@
 	<?php if (get_option('argon_enable_preloader') != 'false') { ?>
 	<style>
 	/* 背景跟随主题深浅：浅色白(#fff)，深色统一用有设计的深灰(非纯黑) */
-	/* 容器只负责定位与层级，【不带背景、不带 mask】——
-	   mask 必须只作用在背景层上：如果留在容器上，转圈与四行内容会被一起裁掉，
-	   遮罩从中心化开时加载内容就被「吃掉」，看起来像被模糊了。 */
-	#argon-preloader{position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:none;}
-	/* 圆环层：只有遮罩色 + mask，负责从中心化开 */
+	/* 容器负责定位、层级与【mask 化开】。
+	   mask 放在容器上而不是只放背景层：这样遮罩色与加载内容会【一起】从中心化开、
+	   一起消失 —— 加载内容不会在遮罩散开之后还孤零零留在屏幕上。
+	   （加载内容自身不做模糊，见下面的关键帧；模糊只由 .argon-preloader__blur 负责。） */
+	#argon-preloader{position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:none;
+		--argon-reveal:0%;
+		-webkit-mask-image:radial-gradient(circle at 50% 50%,transparent calc(var(--argon-reveal) - 7%),#000 var(--argon-reveal));
+		mask-image:radial-gradient(circle at 50% 50%,transparent calc(var(--argon-reveal) - 7%),#000 var(--argon-reveal));
+	}
+	/* 遮罩色单独一层，便于深浅色变量与将来替换 */
 	.argon-preloader__bg{position:absolute;inset:0;background:var(--argon-preloader-bg,#fff);}
 	/* 退出：遮罩整体淡出；模糊作用在内层内容(纯色遮罩模糊不可见) */
 	/* 退场【只靠背景层的 mask 化开】，容器整体不再淡出。
@@ -103,7 +108,7 @@
 	.darkmode{--argon-preloader-bg:#000;}
 	.darkmode.amoled-dark{--argon-preloader-bg:#000;}
 	.argon-preloader__inner{position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;text-align:center;animation:argon-preloader-in 1.2s ease both;}
-	#argon-preloader.ar--hidden .argon-preloader__inner,#argon-preloader.argon-preloader--hidden .argon-preloader__inner{animation:argon-preloader-out 2s ease forwards;}
+	#argon-preloader.ar--hidden .argon-preloader__inner,#argon-preloader.argon-preloader--hidden .argon-preloader__inner{animation:argon-preloader-out 2.5s ease forwards;}
 		/* 内层渐入：只淡入 + 轻微放大收束，【不做模糊】。
 	   理由同下：加载文字应该始终清晰 —— 模糊是模糊层的职责，只作用于博客内容。 */
 	@keyframes argon-preloader-in{
@@ -185,21 +190,12 @@
 	       半径 0.8 秒就冲到 95%，剩下时间几乎静止，观感仍然「太快」。y1 取 0。
 	   ============================================================ */
 	@property --argon-reveal{syntax:'<percentage>';inherits:false;initial-value:0%;}
-		/* mask 加在【背景层】上，不加在容器上 —— 这样加载内容（转圈 / 四行）不参与裁切。 */
-	.argon-preloader__bg{
-		--argon-reveal:0%;
-		-webkit-mask-image:radial-gradient(circle at 50% 50%,transparent calc(var(--argon-reveal) - 7%),#000 var(--argon-reveal));
-		mask-image:radial-gradient(circle at 50% 50%,transparent calc(var(--argon-reveal) - 7%),#000 var(--argon-reveal));
-	}
-		#argon-preloader.ar--hidden .argon-preloader__bg,
-	#argon-preloader.argon-preloader--hidden .argon-preloader__bg{
+	
+			#argon-preloader.ar--hidden,#argon-preloader.argon-preloader--hidden{
 		--argon-reveal:110%;
-		/* opacity 必须显式压回 1：上面那条原有规则写的是 opacity:0，
-		   它的过渡只有 .6s —— 遮罩会在 .6 秒内淡没，1.5s 的圆形化开还没看出形状就结束了，
-		   观感就是「扩散效果缺失」（demo 里那版没有这条 opacity 规则，所以没暴露出来）。
-		   这里让退场【只靠 mask 化开】，不要再叠一层淡出。 */
-		opacity:1;
-		transition:--argon-reveal 1.5s cubic-bezier(.55,0,.3,1);
+		/* 退场只做 mask 化开：遮罩从中心「挖」开，2.5s。
+		   不要再叠 opacity 淡出 —— 那会让遮罩提前淡没、化开只走一半。 */
+		transition:--argon-reveal 2.5s cubic-bezier(.55,0,.3,1);
 	}
 	/* ============================================================
 	   模糊层（层级：圆环 → 模糊 → 博客内容）
@@ -230,7 +226,7 @@
 	   而动画在「元素首次匹配到规则」时一定会从头播，不依赖前一帧的样式，
 	   也就天然与遮罩化开同步（两者都由 html.argon-revealing 触发、同时长同缓动）。 */
 	html.argon-revealing .argon-preloader__blur{
-		animation:argon-blur-out 1.5s cubic-bezier(.55,0,.3,1) forwards;
+		animation:argon-blur-out 2.5s cubic-bezier(.55,0,.3,1) forwards;
 	}
 	@keyframes argon-blur-out{
 		0%  {-webkit-backdrop-filter:blur(8px) saturate(1.06);backdrop-filter:blur(8px) saturate(1.06);}
@@ -689,7 +685,7 @@
 			if (el && el.parentNode) el.parentNode.removeChild(el);
 			if (blurEl && blurEl.parentNode) blurEl.parentNode.removeChild(blurEl);
 			document.documentElement.classList.remove('argon-revealing');
-		}, 2200);
+		}, 3200);
 	}
 	var start = Date.now();
 	/* 字体就绪 —— 但必须【加超时】。

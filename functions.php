@@ -544,8 +544,16 @@ function argon_generate_lqip($attachment_id){
 	if (is_wp_error($editor)){
 		return '';
 	}
-	/* 等比缩到 32px 宽 */
-	$editor->resize(32, null, false);
+	/* 等比缩到 32px 宽。
+	   resize() 的返回值必须检查 —— 失败时（GD 内存不足、格式不支持等）
+	   编辑器里的图像【仍是原图】，后面的 save() 会把原图按 q45 存成 LQIP，
+	   并写进附件元数据。之后每次渲染都直接用这张「假 LQIP」：
+	   占位图不再是 32px 的模糊图，而是一张几 KB~几百 KB 的清晰图 ——
+	   线上实测就有两张是这样（128x71 / 5.1KB），观感正是「模糊错误」。 */
+	$resized = $editor->resize(32, null, false);
+	if (is_wp_error($resized)) {
+		return '';
+	}
 	if (method_exists($editor, 'set_quality')){
 		$editor->set_quality(45);
 	}
@@ -598,7 +606,16 @@ function argon_get_lqip_data_uri($attachment_id){
 		if ($attached){
 			$candidate = dirname($attached) . '/' . $meta['sizes']['argon-lqip']['file'];
 			if (@file_exists($candidate)){
-				$path = $candidate;
+				/* 不能只看文件在不在 —— 还要看它是不是真的缩到了 32px。
+				   历史版本或异常路径可能留下「原图尺寸的 LQIP」（见上面 resize 的说明），
+				   这种文件一旦写进元数据就会被一直复用，占位图永远不对。
+				   宽度超过 64px 一律当作坏文件，重新生成。 */
+				$info = @getimagesize($candidate);
+				if (is_array($info) && !empty($info[0]) && (int) $info[0] > 64){
+					$path = argon_generate_lqip($attachment_id);
+				}else{
+					$path = $candidate;
+				}
 			}
 		}
 	}

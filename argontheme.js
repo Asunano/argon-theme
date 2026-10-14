@@ -2415,8 +2415,21 @@ function argonLightboxInit(){
 			var obs = new MutationObserver(function () { argonLightboxWatch(); });
 			obs.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
 		}
-		argonLightboxBound = true;
-	} catch (err) {
+  		argonLightboxBound = true;
+  		/* 暴露给 head 里的点击守卫（见 header.php）：它就绪后不再拦点击 */
+  		window.__argonLightboxBound = true;
+  		/* 重放守卫拦下来的那次点击 —— 用户点得比 fancybox 加载还快时，
+  		   守卫先 preventDefault 并记下锚点，这里补上真正的打开动作。 */
+  		if (window.__argonPendingLightbox) {
+  			var pendingAnchor = window.__argonPendingLightbox;
+  			window.__argonPendingLightbox = null;   /* 先清掉，免得守卫的超时兜底又跳一次 */
+  			try {
+  				pendingAnchor.dispatchEvent(new MouseEvent("click", {
+  					bubbles: true, cancelable: true, view: window, button: 0
+  				}));
+  			} catch (e) {}
+  		}
+  	} catch (err) {
 		/* 第三方库异常不应阻断 Pjax 初始化链（pangu / tippy 等） */
 		argonLightboxBound = true;
 		if (window.console){ console.warn('Fancybox init failed:', err); }
@@ -2463,12 +2476,28 @@ function argonLightboxReload(){
 	$(document).on('pointerover touchstart focusin', '[data-fancybox]', function(){
 		ensure();
 	});
+	/* head 里的守卫（见 header.php）会把「fancybox 就绪之前的点击」拦下来并记在
+	   window.__argonPendingLightbox 上。这里启动时主动把 fancybox 拉起来 ——
+	   否则那次点击既没打开灯箱（默认跳转被拦了），也没人触发加载，
+	   会变成「点了没反应」，最后只能靠守卫的 8s 兜底跳走。
+	   ensure() 内部会加载资源 → 调 argonLightboxInit() → 由它重放这次点击。 */
+	if (window.__argonPendingLightbox){
+		ensure();
+	}
 	document.addEventListener('click', function(e){
 		var a = e.target && e.target.closest && e.target.closest('[data-fancybox]');
 		if (!a){ return; }
 		if (e.__argonLazyReplay){ return; }        /* 自己重放的事件，放行 */
 		if (ready()){ return; }                    /* 已就绪，交给 Fancybox */
-		if (e.defaultPrevented){ return; }
+		if (e.defaultPrevented){
+			/* head 里的守卫（见 header.php）已经抢先把这次点击拦下并 preventDefault 了 ——
+			   它必须在浏览器跳转之前动手，所以必然早于这里。这里不能再重放（交给
+			   argonLightboxInit 统一处理），但【必须把 fancybox 拉起来】：
+			   否则这次点击既没打开灯箱、也没人触发加载，就变成「点了没反应」，
+			   最后只能靠守卫的 8s 兜底跳走。 */
+			if (window.__argonPendingLightbox){ ensure(); }
+			return;
+		}
 		/* 清单里没有 fancybox（例如开了 zoomify 选项）时【不拦截】：
 		   此时锚点是普通链接，保持与改动前一致的默认行为（浏览器自行跳转）。
 		   否则会变成「点了没反应」，比原来更糟。 */

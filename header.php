@@ -617,6 +617,36 @@
 	<?php }else if (get_option('argon_enable_smoothscroll_type') != 'disabled'){?>
 		<script defer src="<?php echo $GLOBALS['assets_path']; ?>/assets/vendor/smoothscroll/smoothscroll1.js"></script>
 	<?php }?>
+	<?php /* 灯箱点击守卫（极小、无依赖，必须内联在 head）——
+	         fancybox 已改为按需加载：在它就绪之前，[data-fancybox] 就是一个普通
+	         <a href="图片URL">，点击会让浏览器【直接跳转到图片】把用户带离文章。
+	         argontheme.js 是 defer，绑定点击拦截要等它执行；而 HTML 是边下边渲染的，
+	         这中间有一段窗口（慢网下可达数秒；移动端没有 hover 预热，首次点击必中）。
+	         这里用最小的一段守住这个窗口：拦住默认行为、把这次点击记下来，
+	         等 argontheme.js 就绪后重放（见 argonLightboxInit 末尾）。
+	         若 8 秒内没人接手（脚本加载失败等），放行跳转 ——
+	         绝不把「跳转」变成「点了没反应」。 */ ?>
+	<script>
+	(function () {
+		if (window.__argonLightboxGuard) { return; }
+		window.__argonLightboxGuard = true;
+		document.addEventListener("click", function (e) {
+			var a = e.target && e.target.closest && e.target.closest("[data-fancybox]");
+			if (!a) { return; }
+			if (typeof window.Fancybox !== "undefined" && window.__argonLightboxBound) { return; }
+			if (e.defaultPrevented) { return; }
+			if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) { return; }
+			e.preventDefault();
+			window.__argonPendingLightbox = a;
+			setTimeout(function () {
+				if (window.__argonPendingLightbox !== a) { return; }
+				window.__argonPendingLightbox = null;
+				var href = a.getAttribute("href");
+				if (href) { window.location.href = href; }
+			}, 8000);
+		}, true);
+	})();
+	</script>
 </head>
 
 <?php echo get_option('argon_custom_html_head'); ?>

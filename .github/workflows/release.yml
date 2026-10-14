@@ -44,25 +44,8 @@ jobs:
           npm install
           npm run build
 
-      - name: Package theme zip
-        run: |
-          THEME=argon-theme
-          rm -rf dist-tmp "$THEME.zip"
-          mkdir -p "dist-tmp/$THEME"
-          # tools/ 是构建工具链（字体子集化、CSS 裁剪、图标码点生成），仅开发期需要，
-          # 含 FA6 原始字体与全量 CSS 作为构建输入，不进发布包。
-          for item in $(ls -A); do
-            case "$item" in
-              .git|.github|node_modules|.gitignore|tools|CODE_REVIEW.md|CODEBUDDY.md|README.md|README_en.md|dist-tmp|$THEME.zip)
-                continue ;;
-            esac
-            cp -a "$item" "dist-tmp/$THEME/"
-          done
-          ( cd dist-tmp && zip -r "../$THEME.zip" "$THEME" )
-          rm -rf dist-tmp
-          echo "=== 打包内容 ==="
-          unzip -l "$THEME.zip" | head -n 20
-
+      # 必须先同步 version.json 再打包：否则发布包里带的是【上一个版本】的 version.json
+      # （原顺序是先打包后同步，实测 v1.4.0 的包里 version.json 还写着 1.3.30）。
       - name: Sync version.json
         run: |
           TAG="${GITHUB_REF_NAME#v}"
@@ -74,6 +57,27 @@ jobs:
           }
           EOF
           echo "version.json -> $TAG"
+
+      - name: Package theme zip
+        run: |
+          THEME=argon-theme
+          rm -rf dist-tmp "$THEME.zip"
+          mkdir -p "dist-tmp/$THEME"
+          # tools/ 是构建工具链（字体子集化、CSS 裁剪、图标码点生成），仅开发期需要，
+          # 含 FA6 原始字体与全量 CSS 作为构建输入，不进发布包。
+          for item in $(ls -A); do
+            case "$item" in
+              .git|.github|node_modules|.gitignore|tools|CODE_REVIEW.md|CODEBUDDY.md|README.md|README_en.md|CHANGELOG.md|dist-tmp|$THEME.zip)
+                continue ;;
+            esac
+            cp -a "$item" "dist-tmp/$THEME/"
+          done
+          ( cd dist-tmp && zip -r "../$THEME.zip" "$THEME" )
+          rm -rf dist-tmp
+          echo "=== 打包内容 ==="
+          unzip -l "$THEME.zip" | head -n 20
+          echo "=== 包内 version.json（应为当前 tag 的版本） ==="
+          unzip -p "$THEME.zip" "$THEME/version.json"
 
       - name: Commit version.json back to default branch
         run: |
@@ -154,7 +158,7 @@ jobs:
           # 含 FA6 原始字体与全量 CSS 作为构建输入，不进发布包。
           for item in $(ls -A); do
             case "$item" in
-              .git|.github|node_modules|.gitignore|tools|CODE_REVIEW.md|CODEBUDDY.md|README.md|README_en.md|dist-tmp|$THEME.zip)
+              .git|.github|node_modules|.gitignore|tools|CODE_REVIEW.md|CODEBUDDY.md|README.md|README_en.md|CHANGELOG.md|dist-tmp|$THEME.zip)
                 continue ;;
             esac
             cp -a "$item" "dist-tmp/$THEME/"

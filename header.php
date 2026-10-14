@@ -134,10 +134,10 @@
 	.argon-preloader__glow{position:absolute;left:50%;top:44%;width:calc(var(--argon-lds) * 5.4);height:calc(var(--argon-lds) * 5.4);margin:calc(var(--argon-lds) * -2.7) 0 0 calc(var(--argon-lds) * -2.7);border-radius:50%;pointer-events:none;z-index:-1;background:radial-gradient(circle,rgba(94,114,228,.15) 0%,rgba(94,114,228,.05) 42%,transparent 70%);animation:argon-glow-breathe 3.6s ease-in-out infinite;}
 	@keyframes argon-glow-breathe{0%,100%{transform:scale(.92);opacity:.7;}50%{transform:scale(1.06);opacity:1;}}
 	/* ① 欢迎语 —— h2 字号：小、灰、字距宽（text-indent 抵消末字字距，视觉居中） */
-	.argon-preloader__welcome{font-size:var(--argon-ld-h2);font-weight:500;letter-spacing:.34em;text-indent:.34em;color:#9aa0b4;margin-bottom:calc(var(--argon-lds) * .1);}
+	.argon-preloader__welcome{font-size:var(--argon-ld-h2);font-weight:600;letter-spacing:.34em;text-indent:.34em;color:#9aa0b4;margin-bottom:calc(var(--argon-lds) * .1);}
 	.darkmode .argon-preloader__welcome{color:#767d95;}
 	/* ② 站点名 —— h1 字号：大、粗、深色、字距收紧 */
-	.argon-preloader__sitename{font-size:var(--argon-ld-h1);font-weight:700;letter-spacing:-.01em;line-height:1.18;color:#1f2333;max-width:min(86vw,720px);}
+	.argon-preloader__sitename{font-size:var(--argon-ld-h1);font-weight:800;letter-spacing:-.01em;line-height:1.18;color:#1f2333;max-width:min(86vw,720px);}
 	.darkmode .argon-preloader__sitename{color:#eef1f8;}
 	/* ③ 进度条 */
 	.argon-preloader__bar{position:relative;margin-top:calc(var(--argon-lds) * .3);width:min(46vw,320px);height:max(3px,calc(var(--argon-lds) * .032));border-radius:99px;background:rgba(94,114,228,.14);overflow:hidden;}
@@ -145,7 +145,7 @@
 	.argon-preloader__bar i{position:absolute;top:0;bottom:0;width:38%;border-radius:99px;background:var(--themecolor,#5e72e4);animation:argon-bar-sweep 1.5s cubic-bezier(.65,0,.35,1) infinite;}
 	@keyframes argon-bar-sweep{0%{left:-38%;}100%{left:100%;}}
 	/* ④ 加载提示 —— 小字、主题色 */
-	.argon-preloader__hint{margin-top:calc(var(--argon-lds) * .16);font-size:var(--argon-ld-txt);letter-spacing:.18em;text-indent:.18em;color:var(--themecolor,#5e72e4);opacity:.78;}
+	.argon-preloader__hint{margin-top:calc(var(--argon-lds) * .16);font-size:var(--argon-ld-txt);font-weight:500;letter-spacing:.18em;text-indent:.18em;color:var(--themecolor,#5e72e4);opacity:.78;}
 	.argon-preloader__hint::after{content:'';animation:argon-dots 1.6s steps(1,end) infinite;}
 	@media (max-width:560px){
 		.argon-preloader__bar{width:min(62vw,240px);margin-top:calc(var(--argon-lds) * .24);}

@@ -223,12 +223,14 @@ article .post-content p {
 	line-height: 1.8;
 	word-wrap: break-word;
 }
-article h1,
-article h2,
-article h3,
-article h4,
-article h5,
-article h6,
+/* 排除 .post-title：它改动前是 <a class="post-title">，不会命中这条；
+   改成 h1/h2 后若不加排除，卡片标题与文章主标题会一起被加粗（全站性的视觉变化）。 */
+article h1:not(.post-title),
+article h2:not(.post-title),
+article h3:not(.post-title),
+article h4:not(.post-title),
+article h5:not(.post-title),
+article h6:not(.post-title),
 article strong {
 	font-weight: 600;
 }
@@ -592,9 +594,11 @@ html.use-big-shadow *.shadow-sm {
 .article-header-style-1 article h3 {
 	position: relative;
 }
-.article-header-style-1 article h1:after,
-.article-header-style-1 article h2:after,
-.article-header-style-1 article h3:after {
+/* 同样排除 .post-title：改动前它是 <a>，不会命中这两组装饰条规则，
+   改成 h1/h2 后会让标题多出一条主题色装饰（仅非默认 header style 下可见，自查容易漏）。 */
+.article-header-style-1 article h1:not(.post-title):after,
+.article-header-style-1 article h2:not(.post-title):after,
+.article-header-style-1 article h3:not(.post-title):after {
 	content: "";
 	display: block;
 	position: absolute;
@@ -647,9 +651,9 @@ html.use-big-shadow *.shadow-sm {
 	left: unset;
 	right: -2px;
 }
-.article-header-style-2 article h1:before,
-.article-header-style-2 article h2:before,
-.article-header-style-2 article h3:before {
+.article-header-style-2 article h1:not(.post-title):before,
+.article-header-style-2 article h2:not(.post-title):before,
+.article-header-style-2 article h3:not(.post-title):before {
 	content: "";
 	display: inline-block;
 	background: var(--themecolor);
@@ -2149,7 +2153,7 @@ html.darkmode .post-thumbnail.no-lqip {
 
    尺寸稳定性靠两件事（都在 functions.php 里写进内联样式）：
    · aspect-ratio 锁定真实比例（占位图是 1×1 的 SVG，其固有比例会盖掉 width/height 属性）；
-   · width: min(100%, 自然宽) 让占位阶段的宽度精确等于最终宽度。 */
+   · width:100% + max-width:自然宽 让占位阶段的宽度精确等于最终宽度。 */
 article img.lazyload.has-lqip,
 .wp-block-image img.lazyload.has-lqip {
 	background-size: cover;

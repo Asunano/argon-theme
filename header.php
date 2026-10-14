@@ -225,8 +225,14 @@
 		.argon-preloader__blur{display:none;}
 	}
 	/* 不支持 @property 的老浏览器：遮罩直接淡出，不会卡住 */
-	@supports not (background:paint(x)){
-		html.argon-revealing #argon-preloader{opacity:0;transition:opacity .8s ease;}
+	/* 降级分支的探测条件要真的针对 @property。
+	   【不能用 @supports not (background:paint(x))】—— paint() 是 CSS Painting API
+	   （只有 Chromium 支持），而 Firefox/Safari 不支持它却【支持 @property】，
+	   于是这条「老浏览器降级」恰好会在支持 @property 的新浏览器上生效：
+	   它把 opacity 压成 0.8s 淡出，而 mask 化开是 1.5s —— 0.8 秒时遮罩已经淡没、
+	   化开只走了一半，正是「扩散看不见」那个 bug 在非 Chromium 上复现。
+	   改成由内联脚本按 CSS.registerProperty 是否存在来打标记，语义明确。 */
+	html.argon-no-at-property.ar-revealing #argon-preloader{opacity:0;transition:opacity .8s ease;}
 	}
 	@media (prefers-reduced-motion:reduce){
 		#argon-preloader,#argon-preloader *,#argon-preloader.ar--hidden,
@@ -354,7 +360,7 @@
 	<?php } ?>
 
 	<meta name="twitter:card" content="summary_large_image">
-	<meta name="twitter:title" content="<?php echo wp_get_document_title();?>">
+	<meta name="twitter:title" content="<?php echo esc_attr(wp_get_document_title());?>">
 	<?php } ?>
 
 	<meta name="theme-color" content="<?php echo esc_attr($themecolor); ?>">
@@ -641,6 +647,11 @@
 (function(){
 	var el = document.getElementById('argon-preloader');
 	if (!el) return;
+	/* 不支持 @property 的浏览器：--argon-reveal 不会插值，遮罩会瞬跳。
+	   给它打个标记走淡出降级（而不是用 @supports 探测 paint()，那个特性不对）。 */
+	if (!(window.CSS && CSS.registerProperty)) {
+		document.documentElement.classList.add('argon-no-at-property');
+	}
 	var blurEl = document.querySelector('.argon-preloader__blur');
 	var hidden = false;
 	function hide(){
@@ -850,7 +861,9 @@
 		   而文章页的 h1 是文章标题，banner 再出 h1 就会有两个。
 		   注意 banner_size 设为 hide 时本区块【仍然渲染】（只是 <html> 多了 no-banner 类，
 		   由 CSS 隐藏），所以首页在任何配置下都恰好有一个 h1。 */
-		$argon_banner_tag = (is_home() || is_front_page()) ? 'h1' : 'div';
+	/* 只有【文章列表首页】的 banner 才是 h1。静态首页（is_front_page）的 h1 由
+	   template-parts/content-page.php 里的页面标题承担，这里再用 h1 就会出现两个 h1。 */
+	$argon_banner_tag = (is_home() && !is_front_page()) ? 'h1' : 'div';
 	?>
 	<div id="banner_container" class="banner-container container text-center">
 		<?php if ($enable_banner_title_typing_effect != "true"){?>

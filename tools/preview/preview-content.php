@@ -1,4 +1,15 @@
 <?php
+/* LQIP 失败标记现在还会走 post meta 兜底（附件元数据缺失时用），
+   桩里必须补上这几个函数，否则会 Fatal。 */
+if (!function_exists('get_post_meta')) {
+	function get_post_meta($id, $key = '', $single = false){ return isset($GLOBALS['__post_meta'][$id][$key]) ? $GLOBALS['__post_meta'][$id][$key] : ''; }
+}
+if (!function_exists('update_post_meta')) {
+	function update_post_meta($id, $key, $value){ $GLOBALS['__post_meta'][$id][$key] = $value; return true; }
+}
+if (!function_exists('delete_post_meta')) {
+	function delete_post_meta($id, $key){ unset($GLOBALS['__post_meta'][$id][$key]); return true; }
+}
 /**
  * preview-content.php —— 只渲染【正文图片】那一段（argon_lazyload 的产物），
  *                       用来单独验证正文图的占位与尺寸预留

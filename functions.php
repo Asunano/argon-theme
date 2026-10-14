@@ -3260,7 +3260,14 @@ function argon_lazyload($content){
 				   最终宽度正好是 min(容器宽, 自然宽)，所以这里用 CSS min() 精确表达，
 				   占位阶段与最终状态逐像素一致。 */
 				if ($meta[1] > 0 && $meta[2] > 0){
-					$style .= 'width:min(100%,' . (int) $meta[1] . 'px);'
+					/* 注意：这里【不能】写 width:min(100%, Npx)。
+					   min() 里的百分比在 shrink-to-fit 上下文（图片常被放在这样的父元素里）
+					   是「不确定的」，min() 会退化成 auto，而替换元素的 auto 宽度就是
+					   占位图的内在宽度 —— 1px。于是占位阶段图只有 1px 宽，
+					   真实图到达后才撑到 810px，文章高度实测连跳两次（6248→6675→7102）。
+					   拆成 width:100% + max-width:Npx：百分比有确定基准，效果完全一样，
+					   而且比容器窄的图仍然不会被拉伸。 */
+					$style .= 'width:100%;max-width:' . (int) $meta[1] . 'px;'
 						. 'aspect-ratio:' . (int) $meta[1] . ' / ' . (int) $meta[2] . ';';
 					if ($img->getAttribute('width') == ''){
 						$img->setAttribute('width', (string) $meta[1]);
@@ -3303,7 +3310,14 @@ function argon_lazyload($content){
 				if ($meta[1] > 0 && $meta[2] > 0){
 					if (!preg_match('/\swidth=/i', $m[1])){ $wh .= ' width="' . (int) $meta[1] . '"'; }
 					if (!preg_match('/\sheight=/i', $m[1])){ $wh .= ' height="' . (int) $meta[2] . '"'; }
-					$style .= 'width:min(100%,' . (int) $meta[1] . 'px);'
+					/* 注意：这里【不能】写 width:min(100%, Npx)。
+					   min() 里的百分比在 shrink-to-fit 上下文（图片常被放在这样的父元素里）
+					   是「不确定的」，min() 会退化成 auto，而替换元素的 auto 宽度就是
+					   占位图的内在宽度 —— 1px。于是占位阶段图只有 1px 宽，
+					   真实图到达后才撑到 810px，文章高度实测连跳两次（6248→6675→7102）。
+					   拆成 width:100% + max-width:Npx：百分比有确定基准，效果完全一样，
+					   而且比容器窄的图仍然不会被拉伸。 */
+					$style .= 'width:100%;max-width:' . (int) $meta[1] . 'px;'
 						. 'aspect-ratio:' . (int) $meta[1] . ' / ' . (int) $meta[2] . ';';
 				}
 				$ph = 'data:image/svg+xml;base64,PCEtLUFyZ29uTG9hZGluZy0tPgo8c3ZnIHdpZHRoPSIxIiBoZWlnaHQ9IjEiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PC9zdmc+';

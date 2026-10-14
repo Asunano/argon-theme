@@ -141,7 +141,12 @@
 	}
 	#argon-preloader.ar--hidden,#argon-preloader.argon-preloader--hidden{
 		--argon-reveal:110%;
-		transition:--argon-reveal 1.5s cubic-bezier(.55,0,.3,1),opacity .6s ease;
+		/* opacity 必须显式压回 1：上面那条原有规则写的是 opacity:0，
+		   它的过渡只有 .6s —— 遮罩会在 .6 秒内淡没，1.5s 的圆形化开还没看出形状就结束了，
+		   观感就是「扩散效果缺失」（demo 里那版没有这条 opacity 规则，所以没暴露出来）。
+		   这里让退场【只靠 mask 化开】，不要再叠一层淡出。 */
+		opacity:1;
+		transition:--argon-reveal 1.5s cubic-bezier(.55,0,.3,1);
 	}
 	/* 内容同时从模糊收敛到清晰。
 	   注意【不能加 transform: scale()】—— 实测整页会因此产生 108 种位置、166 种尺寸，

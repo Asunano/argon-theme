@@ -6,6 +6,7 @@
 >
 > - 原版倉庫：https://github.com/solstice23/argon-theme
 > - 本分支：https://github.com/Asunano/argon-theme
+> - **實際效果請前往我的部落格查看：<https://blog.losn.cc/>**
 
 ---
 
@@ -44,6 +45,10 @@ Argon - 壹個輕盈、簡潔、美觀的 WordPress 主題
 [Argon-Theme 文檔 : https://argon-docs.solstice23.top](https://argon-docs.solstice23.top/)
 
 # Demo
+
+**本分支的實際效果：<https://blog.losn.cc/>** —— 維護者自己的部落格，本分支的所有改動都在上面實際運行。
+
+上游示例站：
 
 主題效果預覽
 

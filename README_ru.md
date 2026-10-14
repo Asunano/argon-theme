@@ -6,6 +6,7 @@
 >
 > - Оригинальный репозиторий: https://github.com/solstice23/argon-theme
 > - Этот форк: https://github.com/Asunano/argon-theme
+> - **Живой пример — блог автора: <https://blog.losn.cc/>**
 
 ---
 
@@ -44,6 +45,10 @@ Argon - Легкая, простая и красивая тема WordPress
 [Argon-Theme Document : https://argon-docs.solstice23.top](https://argon-docs.solstice23.top/) (Chinese version)
 
 # Демо
+
+**Этот форк в действии: <https://blog.losn.cc/>** — блог автора, где реально работает всё из этого форка.
+
+Демо оригинала:
 
 [solstice23.top](https://solstice23.top)
 

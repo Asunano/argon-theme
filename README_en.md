@@ -6,6 +6,7 @@
 >
 > - Original repo: https://github.com/solstice23/argon-theme
 > - This fork: https://github.com/Asunano/argon-theme
+> - **See it live on the maintainer's blog: <https://blog.losn.cc/>**
 
 ---
 
@@ -44,6 +45,10 @@ Download the .zip file on the [Release](https://github.com/solstice23/argon-them
 [Argon-Theme Document : https://argon-docs.solstice23.top](https://argon-docs.solstice23.top/) (Chinese version)
 
 # Demo
+
+**This fork in action: <https://blog.losn.cc/>** — the maintainer's blog, where every change in this fork actually runs.
+
+Upstream demos:
 
 Theme preview
 

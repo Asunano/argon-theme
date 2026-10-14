@@ -104,17 +104,23 @@
 	.darkmode.amoled-dark{--argon-preloader-bg:#000;}
 	.argon-preloader__inner{position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;text-align:center;animation:argon-preloader-in 1.2s ease both;}
 	#argon-preloader.ar--hidden .argon-preloader__inner,#argon-preloader.argon-preloader--hidden .argon-preloader__inner{animation:argon-preloader-out 2s ease forwards;}
-	/* 内层渐入：从深模糊浮现，渐变转浅模糊再清晰（与消失动画同款渐变模糊） */
+		/* 内层渐入：只淡入 + 轻微放大收束，【不做模糊】。
+	   理由同下：加载文字应该始终清晰 —— 模糊是模糊层的职责，只作用于博客内容。 */
 	@keyframes argon-preloader-in{
-		0%   {opacity:0;   filter:blur(16px);transform:scale(1.04);}  /* 深模糊浮现 */
-		60%  {opacity:1;   filter:blur(4px); transform:scale(1.02);}  /* 渐变转浅模糊 */
-		100% {opacity:1;   filter:blur(0);   transform:scale(1);}     /* 清晰 */
+		0%   {opacity:0; transform:scale(1.03);}
+		60%  {opacity:1; transform:scale(1.01);}
+		100% {opacity:1; transform:scale(1);}
 	}
-	/* 内层渐出：先迅速加深到深模糊，再渐变回落到浅模糊并淡出（优雅的渐变模糊） */
+		/* 内层渐出：只淡出，【不做模糊】。
+	   层级分工是「圆环 → 模糊 → 博客内容」—— 模糊层只负责模糊博客内容，
+	   加载文字（欢迎语 / 站点名 / 进度条 / 加载提示）应该始终清晰地在最上面。
+	   原来这里沿用了主题的渐变模糊（blur 0 → 16px → 4px），
+	   于是退场时加载文字自己也被糊掉，看起来像「文字也被模糊了」。
+	   保留一点点 scale 收束，让消失不那么生硬。 */
 	@keyframes argon-preloader-out{
-		0%   {opacity:1;   filter:blur(0);   transform:none;}
-		40%  {opacity:1;   filter:blur(16px);transform:scale(1.04);}  /* 深模糊 */
-		100% {opacity:0;   filter:blur(4px); transform:scale(1.05);}  /* 渐变转浅模糊后淡出 */
+		0%   {opacity:1; transform:scale(1);}
+		60%  {opacity:1; transform:scale(1.015);}
+		100% {opacity:0; transform:scale(1.03);}
 	}
 	/* 加载文字动态省略号 */
 	@keyframes argon-dots{0%{content:'';}25%{content:'.';}50%{content:'..';}75%{content:'...';}100%{content:'';}}

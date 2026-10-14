@@ -2111,7 +2111,10 @@ html.filter-grayscale {
 	background-size: cover;
 	background-position: center center;
 	background-repeat: no-repeat;
-	transition: filter 0.5s ease, transform 0.5s ease, opacity 0.35s ease;
+	/* 取消模糊要【等图片真正加载完】再慢慢做（时序由 argontheme.js 的 argonWhenImageReady 控制）。
+	这里把时长从 0.5s 放到 0.9s，并换成两端平缓的缓动 ——
+	模糊散去的过程才是「慢慢变清晰」，而不是一下子锐化。 */
+	transition: filter 0.9s cubic-bezier(.22,.61,.36,1), transform 0.9s cubic-bezier(.22,.61,.36,1), opacity 0.35s ease;
 	transform-origin: center center;
 }
 /* 加载中：叠一层模糊。scale 稍微放大，把 blur 在边缘留下的半透明羽化推出可视区
@@ -2154,20 +2157,20 @@ html.darkmode .post-thumbnail.no-lqip {
    尺寸稳定性靠两件事（都在 functions.php 里写进内联样式）：
    · aspect-ratio 锁定真实比例（占位图是 1×1 的 SVG，其固有比例会盖掉 width/height 属性）；
    · width:100% + max-width:自然宽 让占位阶段的宽度精确等于最终宽度。 */
-article img.lazyload.has-lqip,
-.wp-block-image img.lazyload.has-lqip {
+article img.lazyload.has-lqip:not(.post-thumbnail),
+.wp-block-image img.lazyload.has-lqip:not(.post-thumbnail) {
 	background-size: cover;
 	background-position: center center;
 	background-repeat: no-repeat;
-	transition: filter 0.45s ease;
+	transition: filter 0.8s cubic-bezier(.22,.61,.36,1);
 }
-article img.lazyload.has-lqip:not(.lazyload-loaded),
-.wp-block-image img.lazyload.has-lqip:not(.lazyload-loaded) {
+article img.lazyload.has-lqip:not(.post-thumbnail):not(.lazyload-loaded),
+.wp-block-image img.lazyload.has-lqip:not(.post-thumbnail):not(.lazyload-loaded) {
 	filter: blur(8px);
 }
 @media (prefers-reduced-motion: reduce) {
-	article img.lazyload.has-lqip,
-	.wp-block-image img.lazyload.has-lqip {
+	article img.lazyload.has-lqip:not(.post-thumbnail),
+	.wp-block-image img.lazyload.has-lqip:not(.post-thumbnail) {
 		transition: none;
 		filter: none;
 	}
@@ -2209,7 +2212,10 @@ html.darkmode .wp-block-image img.lazyload.no-lqip:not(.lazyload-loaded) {
 	background-color: rgba(255, 255, 255, 0.06);
 }
 .post-thumbnail.lazyload {
-	transition: filter 0.5s ease, transform 0.5s ease, opacity 0.35s ease;
+	/* 取消模糊要【等图片真正加载完】再慢慢做（时序由 argontheme.js 的 argonWhenImageReady 控制）。
+	这里把时长从 0.5s 放到 0.9s，并换成两端平缓的缓动 ——
+	模糊散去的过程才是「慢慢变清晰」，而不是一下子锐化。 */
+	transition: filter 0.9s cubic-bezier(.22,.61,.36,1), transform 0.9s cubic-bezier(.22,.61,.36,1), opacity 0.35s ease;
 }
 .post-thumbnail.lazyload.lazyload-loaded {
 	opacity: 1 !important;

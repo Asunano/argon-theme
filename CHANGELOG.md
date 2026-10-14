@@ -4,7 +4,7 @@
 > （[Asunano/argon-theme](https://github.com/Asunano/argon-theme)）。
 > 版本号与上游保持同一序列。
 
-## v1.4.0
+## v1.3.31
 
 这一版集中在三件事：**首屏观感**、**图片加载不跳**、**首屏体积**。
 

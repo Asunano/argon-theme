@@ -148,29 +148,53 @@
 		opacity:1;
 		transition:--argon-reveal 1.5s cubic-bezier(.55,0,.3,1);
 	}
-	/* 内容同时从模糊收敛到清晰。
-	   注意【不能加 transform: scale()】—— 实测整页会因此产生 108 种位置、166 种尺寸，
-	   所有元素都在动，观感就是「界面元素抖动」。blur 也从 14px 收到 8px：
-	   整页含大量文字，模糊越大越会反复重栅格化，文字边缘会持续闪。
-	   作用对象是 #toolbar / #content 而【不是 body】：filter 会创建包含块，
-	   给 body 加会让它内部那些 position:fixed 的浮动按钮改基准、错位（实测差 254px）。
-	   这两个容器实测安全（fixed 后代错位 0 个）。 */
-	html.argon-revealing #toolbar,html.argon-revealing #content{
-		animation:argon-content-focus 1.5s cubic-bezier(.55,0,.3,1) forwards;
+	/* ============================================================
+	   模糊层（层级：圆环 → 模糊 → 博客内容）
+	   ------------------------------------------------------------
+	   之前是直接给 #toolbar / #content 加 filter:blur() —— 两个问题：
+	     · 层级不对：模糊成了内容自身的属性，而不是夹在圆环与内容之间的一层；
+	     · 不同步：内容整体均匀变清，跟圆环扩散没有空间上的对应。
+	   现在改成独立的 backdrop-filter 层，夹在两者中间：
+
+	     最上  #argon-preloader        圆环（带 mask，从中心化开）
+	     中间  .argon-preloader__blur  只负责模糊它后面的东西
+	     最下  #content                博客内容（本身不动、不加 filter）
+
+	   关键点：这一层【不需要自己的 mask】。上面的遮罩是不透明的，
+	   只在中心留出一个透明圆，所以模糊层天然只在「被揭示出来的那块」可见 ——
+	   圆扩到哪儿，哪儿才露出模糊，天然同步。
+
+	   顺带解决两个隐患：不再给内容加 filter，所以
+	     · filter 创建包含块、导致 fixed 浮动按钮错位的风险消失；
+	     · 整页反复重栅格化带来的文字抖动也消失。
+	   ============================================================ */
+	.argon-preloader__blur{
+		position:fixed;inset:0;z-index:99998;pointer-events:none;
+		/* 平时不做任何模糊，零开销 */
+		-webkit-backdrop-filter:none;backdrop-filter:none;
 	}
-	@keyframes argon-content-focus{
-		0%  {filter:blur(8px) saturate(1.06);}
-		60% {filter:blur(3px) saturate(1.02);}
-		100%{filter:blur(0)   saturate(1);}
+	/* 用 animation 而不是 transition：元素从首屏就在 DOM 里，
+	   而动画在「元素首次匹配到规则」时一定会从头播，不依赖前一帧的样式，
+	   也就天然与遮罩化开同步（两者都由 html.argon-revealing 触发、同时长同缓动）。 */
+	html.argon-revealing .argon-preloader__blur{
+		animation:argon-blur-out 1.5s cubic-bezier(.55,0,.3,1) forwards;
+	}
+	@keyframes argon-blur-out{
+		0%  {-webkit-backdrop-filter:blur(8px) saturate(1.06);backdrop-filter:blur(8px) saturate(1.06);}
+		60% {-webkit-backdrop-filter:blur(3px) saturate(1.02);backdrop-filter:blur(3px) saturate(1.02);}
+		100%{-webkit-backdrop-filter:blur(0)   saturate(1);   backdrop-filter:blur(0)   saturate(1);}
+	}
+	/* 不支持 backdrop-filter 的浏览器：没有模糊层，遮罩化开照常 */
+	@supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
+		.argon-preloader__blur{display:none;}
 	}
 	/* 不支持 @property 的老浏览器：遮罩直接淡出，不会卡住 */
 	@supports not (background:paint(x)){
 		html.argon-revealing #argon-preloader{opacity:0;transition:opacity .8s ease;}
-		html.argon-revealing #toolbar,html.argon-revealing #content{animation:none;}
 	}
 	@media (prefers-reduced-motion:reduce){
 		#argon-preloader,#argon-preloader *,#argon-preloader.ar--hidden,
-		html.argon-revealing #toolbar,html.argon-revealing #content{
+		.argon-preloader__blur,html.argon-revealing .argon-preloader__blur{
 			animation-duration:.01s !important;transition-duration:.01s !important;
 		}
 	}
@@ -561,6 +585,10 @@
 <body <?php body_class(); ?>>
 <?php /*wp_body_open();*/ ?>
 <?php if (get_option('argon_enable_preloader') != 'false') { ?>
+<?php /* 模糊层：夹在圆环与博客内容之间（层级 圆环 → 模糊 → 内容）。
+         平时 backdrop-filter:none，零开销；只在退场时由 argon-revealing 触发模糊收敛。
+         放在遮罩【之前】，靠 z-index 99998 < 99999 保证在遮罩下面。 */ ?>
+<div class="argon-preloader__blur" aria-hidden="true"></div>
 <div id="argon-preloader" aria-hidden="true">
 	<div class="argon-preloader__inner">
 		<div class="argon-preloader__spinner"></div>
@@ -571,19 +599,22 @@
 (function(){
 	var el = document.getElementById('argon-preloader');
 	if (!el) return;
+	var blurEl = document.querySelector('.argon-preloader__blur');
 	var hidden = false;
 	function hide(){
 		if (hidden) return; hidden = true;
-		/* argon-revealing 加在 <html> 上：它同时驱动两件事 ——
-		   遮罩的圆形化开（--argon-reveal 过渡）与内容的模糊收敛
-		   （#toolbar / #content 的 argon-content-focus）。
-		   注意不能加在 body 上：filter 会创建包含块，
-		   body 内部那些 position:fixed 的浮动按钮会因此错位（实测差 254px）。 */
+		/* argon-revealing 加在 <html> 上：它同时驱动三件事，所以天然同步 ——
+		   ① 遮罩的圆形化开（--argon-reveal 过渡）
+		   ② 模糊层的 backdrop-filter 收敛（argon-blur-out 动画）
+		   ③ 转圈的模糊淡出（argon-preloader-out，由 --hidden 触发）
+		   注意不能加在 body 上：那里一旦有 filter 就会创建包含块，
+		   内部 position:fixed 的浮动按钮会因此错位（实测差 254px）。 */
 		document.documentElement.classList.add('argon-revealing');
 		el.classList.add('argon-preloader--hidden');
 		/* 等化开（1.5s）与内层模糊淡出（2s）都走完再摘掉节点 */
 		setTimeout(function(){
 			if (el && el.parentNode) el.parentNode.removeChild(el);
+			if (blurEl && blurEl.parentNode) blurEl.parentNode.removeChild(blurEl);
 			document.documentElement.classList.remove('argon-revealing');
 		}, 2200);
 	}

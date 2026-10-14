@@ -118,7 +118,13 @@ chk('背景铺满（background-size:cover）', strpos($out, 'background-size:cov
 chk('背景居中（background-position:center）', strpos($out, 'background-position:center') !== false);
 /* 尺寸锁定：占位阶段就要与最终一致，否则图片一到会跳 */
 chk('用 aspect-ratio 锁定真实比例', strpos($out, 'aspect-ratio:1200 / 675') !== false, substr($out, 0, 240));
-chk('宽度用 min(100%,自然宽) 锁定', strpos($out, 'width:min(100%,1200px)') !== false);
+  /* 尺寸锁定：占位阶段就要与最终一致，否则图片一到会跳。
+     注意不能写 width:min(100%,Npx) —— min() 里的百分比在 shrink-to-fit 上下文
+     （正文图常被放在这样的父元素里）是「不确定的」，min() 会退化成 auto，
+     而替换元素的 auto 宽度就是占位图的内在宽度 1px，图一到就跳。
+     所以拆成 width:100% + max-width:Npx：百分比有确定基准，效果一样。 */
+  chk('宽度用 width:100% + max-width 锁定', strpos($out, 'width:100%;max-width:1200px') !== false, substr($out, 0, 240));
+  chk('没有用会退化的 min(100%,Npx)', strpos($out, 'width:min(100%') === false);
 
 echo "\n=== 3b. 拿不到 LQIP 时退回 no-lqip（中性底色兜底） ===\n";
 $GLOBALS['__lqip_on'] = false;

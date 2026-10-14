@@ -87,21 +87,14 @@
 	<?php if (get_option('argon_enable_preloader') != 'false') { ?>
 	<style>
 	/* 背景跟随主题深浅：浅色白(#fff)，深色统一用有设计的深灰(非纯黑) */
-	#argon-preloader{position:fixed;inset:0;z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--argon-preloader-bg,#fff);transition:opacity .6s ease;will-change:opacity;}
+	#argon-preloader{position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:var(--argon-preloader-bg,#fff);transition:opacity .6s ease;will-change:opacity;}
 	/* 退出：遮罩整体淡出；模糊作用在内层内容(纯色遮罩模糊不可见) */
 	#argon-preloader.ar--hidden,#argon-preloader.argon-preloader--hidden{opacity:0;pointer-events:none;}
 	/* 仅当深浅开关真正打开(.darkmode)时用深色(纯黑)，amoled-dark 只是纯黑变体修饰，不能单独生效 */
 	.darkmode{--argon-preloader-bg:#000;}
 	.darkmode.amoled-dark{--argon-preloader-bg:#000;}
-	.argon-preloader__inner{display:flex;flex-direction:column;align-items:center;animation:argon-preloader-in 1.2s ease both;}
+	.argon-preloader__inner{position:relative;display:flex;flex-direction:column;align-items:center;text-align:center;animation:argon-preloader-in 1.2s ease both;}
 	#argon-preloader.ar--hidden .argon-preloader__inner,#argon-preloader.argon-preloader--hidden .argon-preloader__inner{animation:argon-preloader-out 2s ease forwards;}
-	/* 旋转圈：主题色弧 + 主题色浅轨道，浅底深底都清晰可见 */
-	.argon-preloader__spinner{width:56px;height:56px;border:5px solid rgba(94,114,228,.25);border-top-color:var(--themecolor,#5e72e4);border-radius:50%;animation:argon-spin 1s linear infinite,argon-glow 2.4s ease-in-out infinite;}
-	.argon-preloader__text{margin-top:18px;color:var(--themecolor,#5e72e4);font-size:15px;letter-spacing:.2em;}
-	.argon-preloader__text::after{content:'';animation:argon-dots 1.8s steps(1,end) infinite;}
-	@keyframes argon-spin{to{transform:rotate(360deg);}}
-	/* 旋转圈外发光脉冲 */
-	@keyframes argon-glow{0%,100%{box-shadow:0 0 0 0 rgba(94,114,228,0);}50%{box-shadow:0 0 16px 2px rgba(94,114,228,.4);}}
 	/* 内层渐入：从深模糊浮现，渐变转浅模糊再清晰（与消失动画同款渐变模糊） */
 	@keyframes argon-preloader-in{
 		0%   {opacity:0;   filter:blur(16px);transform:scale(1.04);}  /* 深模糊浮现 */
@@ -116,6 +109,49 @@
 	}
 	/* 加载文字动态省略号 */
 	@keyframes argon-dots{0%{content:'';}25%{content:'.';}50%{content:'..';}75%{content:'...';}100%{content:'';}}
+
+	/* ============================================================
+	   首屏内容：四行（欢迎语 / 站点名 / 进度条 / 加载提示）
+	   ------------------------------------------------------------
+	   尺寸全部由一个基准 --argon-lds 派生，随视口缩放：
+	     手机 48~60px，桌面 60~120px，超宽屏 132px
+	   三行字号各自独立缩放，且断点两侧连续（手机段上限 = 桌面段下限），
+	   避免「屏幕变大、组件反而变小」这种回缩。
+
+	   关于标签：这里用 div + h1/h2 的【字号样式】，不是真的 <h1>/<h2>。
+	   预加载器在 header.php 里，页面本身已经有 h1（文章标题或站点名），
+	   再加一个重复的 h1 会伤 SEO —— 所以刻意不用真标签。
+	   ============================================================ */
+	#argon-preloader{
+		--argon-lds:clamp(60px,7vw,120px);
+		--argon-ld-h2:clamp(12px,1.05vw,17px);
+		--argon-ld-h1:clamp(24px,2.9vw,46px);
+		--argon-ld-txt:clamp(11px,.95vw,14px);
+	}
+	@media (max-width:560px){#argon-preloader{--argon-lds:clamp(48px,12vw,60px);}}
+	@media (min-width:2000px){#argon-preloader{--argon-lds:132px;}}
+	/* 背景柔光：让首屏不至于太空，但不抢主体 */
+	.argon-preloader__glow{position:absolute;left:50%;top:44%;width:calc(var(--argon-lds) * 5.4);height:calc(var(--argon-lds) * 5.4);margin:calc(var(--argon-lds) * -2.7) 0 0 calc(var(--argon-lds) * -2.7);border-radius:50%;pointer-events:none;z-index:-1;background:radial-gradient(circle,rgba(94,114,228,.15) 0%,rgba(94,114,228,.05) 42%,transparent 70%);animation:argon-glow-breathe 3.6s ease-in-out infinite;}
+	@keyframes argon-glow-breathe{0%,100%{transform:scale(.92);opacity:.7;}50%{transform:scale(1.06);opacity:1;}}
+	/* ① 欢迎语 —— h2 字号：小、灰、字距宽（text-indent 抵消末字字距，视觉居中） */
+	.argon-preloader__welcome{font-size:var(--argon-ld-h2);font-weight:500;letter-spacing:.34em;text-indent:.34em;color:#9aa0b4;margin-bottom:calc(var(--argon-lds) * .1);}
+	.darkmode .argon-preloader__welcome{color:#767d95;}
+	/* ② 站点名 —— h1 字号：大、粗、深色、字距收紧 */
+	.argon-preloader__sitename{font-size:var(--argon-ld-h1);font-weight:700;letter-spacing:-.01em;line-height:1.18;color:#1f2333;max-width:min(86vw,720px);}
+	.darkmode .argon-preloader__sitename{color:#eef1f8;}
+	/* ③ 进度条 */
+	.argon-preloader__bar{position:relative;margin-top:calc(var(--argon-lds) * .3);width:min(46vw,320px);height:max(3px,calc(var(--argon-lds) * .032));border-radius:99px;background:rgba(94,114,228,.14);overflow:hidden;}
+	.darkmode .argon-preloader__bar{background:rgba(255,255,255,.1);}
+	.argon-preloader__bar i{position:absolute;top:0;bottom:0;width:38%;border-radius:99px;background:var(--themecolor,#5e72e4);animation:argon-bar-sweep 1.5s cubic-bezier(.65,0,.35,1) infinite;}
+	@keyframes argon-bar-sweep{0%{left:-38%;}100%{left:100%;}}
+	/* ④ 加载提示 —— 小字、主题色 */
+	.argon-preloader__hint{margin-top:calc(var(--argon-lds) * .16);font-size:var(--argon-ld-txt);letter-spacing:.18em;text-indent:.18em;color:var(--themecolor,#5e72e4);opacity:.78;}
+	.argon-preloader__hint::after{content:'';animation:argon-dots 1.6s steps(1,end) infinite;}
+	@media (max-width:560px){
+		.argon-preloader__bar{width:min(62vw,240px);margin-top:calc(var(--argon-lds) * .24);}
+		.argon-preloader__welcome{letter-spacing:.26em;text-indent:.26em;}
+		.argon-preloader__hint{letter-spacing:.12em;text-indent:.12em;}
+	}
 
 	/* ============================================================
 	   退场：遮罩从中心「化开」+ 内容从模糊收敛到清晰
@@ -591,8 +627,14 @@
 <div class="argon-preloader__blur" aria-hidden="true"></div>
 <div id="argon-preloader" aria-hidden="true">
 	<div class="argon-preloader__inner">
-		<div class="argon-preloader__spinner"></div>
-		<div class="argon-preloader__text"><?php _e('加载中', 'argon'); ?></div>
+		<div class="argon-preloader__glow"></div>
+		<?php /* 四行：欢迎语 / 站点名 / 进度条 / 加载提示。
+		         站点名走 esc_html 转义；欢迎语与加载提示可翻译。
+		         刻意不用 <h1>/<h2> 真标签 —— 页面本身已有 h1，重复会伤 SEO。 */ ?>
+		<div class="argon-preloader__welcome"><?php echo esc_html(apply_filters('argon_preloader_welcome', __('欢迎光临', 'argon'))); ?></div>
+		<div class="argon-preloader__sitename"><?php echo esc_html(get_bloginfo('name')); ?></div>
+		<div class="argon-preloader__bar"><i></i></div>
+		<div class="argon-preloader__hint"><?php echo esc_html(apply_filters('argon_preloader_hint', __('正在加载', 'argon'))); ?></div>
 	</div>
 </div>
 <script>

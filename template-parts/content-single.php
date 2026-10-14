@@ -4,10 +4,10 @@
 		<?php
 			if (argon_has_post_thumbnail() && get_option('argon_show_thumbnail_in_banner_in_content_page') != 'true'){
 				$thumbnail_url = argon_get_post_thumbnail();
-				echo "<img class='post-thumbnail' src='" . $thumbnail_url . "'></img>";
+				argon_render_post_thumbnail($thumbnail_url, false);
 			}
 			if (argon_has_post_thumbnail() && get_option('argon_show_thumbnail_in_banner_in_content_page') == 'true'){
-				$thumbnail_url = argon_get_post_thumbnail();
+				$thumbnail_url = argon_get_post_thumbnail(0, 'full');
 				echo "
 				<style>
 					body section.banner {
@@ -16,7 +16,12 @@
 				</style>";
 			}
 		?>
-		<a class="post-title" href="<?php the_permalink(); ?>"><?php the_title(); ?></a>
+		<?php /* 文章主标题用 h1。去掉原来的 <a>：href 是自链接，对用户无意义。
+		         连带影响已配套改 CSS（style.css 的 .post-title）：
+		           · 颜色原先由 a 规则提供，现改由 .post-title 提供（浅色/暗色各一条）
+		           · 把 .post-title 从 article h1..h6 的 !important 外边距规则里排除
+		         有特色图时标题仍是白色 —— 那条 !important 规则特异性最高，不受影响。 */ ?>
+		<h1 class="post-title"><?php the_title(); ?></h1>
 		<div class="post-meta">
 			<?php
 				$metaList = explode('|', get_option('argon_article_meta', 'time|views|comments|categories'));

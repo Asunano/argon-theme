@@ -26,6 +26,20 @@ CODEBUDDY.md
 .workbuddy/
 docs/
 # 本地翻译工具（含腾讯云 API 调用逻辑，仅本地使用，不提交防泄露）
-tools/
+# 注意：下面两条 ! 例外放行的是「不含任何凭据的构建工具链」，用于复现字体子集化
+#       与 CSS 裁剪（见 docs/字体子集化与CSS裁剪计划.md）。今后往 tools/ 加内容时，
+#       请先确认不含密钥，再决定是否开例外。
+#       整目录排除无法用 ! 反向放行，故写成 tools/* 再逐个开洞。
+tools/*
+!tools/font-subset/
+!tools/perf/
+!tools/emoji/
+# 本地预览（用桩函数跑真实模板，不依赖 WordPress、不需要部署）—— 纯代码，不含任何凭据。
+# 价值：浏览器验证可以直接跑【当前代码渲染出来的页面】，
+#       而不是拿线上已部署版本渲染的 HTML 去凑（那样根本验不到新模板）。
+# 生成物（.work/、preview.html、.preview-meta.json）由 tools/preview/.gitignore 排除。
+!tools/preview/
+# emoji 素材拉取缓存（可重新从 CDN 取，不入库）
+tools/emoji/cache/
 # JS 构建基线（切分产物 + 中间产物，由 tools/split-merged.js 从线上产物生成，可复现）
 build/

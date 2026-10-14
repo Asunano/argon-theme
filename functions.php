@@ -32,18 +32,25 @@ define('ARGON_PRIVATE_COMMENT_CACHE', true);
 
 /**
  * 带请求内静态缓存的 get_option 封装，避免同一请求中重复读取同一选项造成的多次数据库查询。
- * 仅当选项确实存在（返回值不等于默认值）时才写入缓存，避免不同默认值的调用相互污染。
+ *
+ * 缓存 key 必须【同时包含选项名与默认值】：
+ *   get_option($option, $default) 的返回值在「选项不存在」时就是 $default，
+ *   即结果依赖调用方传的默认值。若只按选项名缓存，就会出现
+ *   「用 A 默认值填出来的值被喂给用 B 默认值的调用方」。
+ *
+ * 原实现靠「值 ≠ 默认值才写缓存」来规避（值来自数据库时才与默认值无关），
+ * 代价是【未设置的选项永远不缓存】。而代码里确实存在同一选项用不同默认值调用的地方：
+ *   functions.php 的 gravatar_cdn()：argon_get_option('argon_gravatar_cdn', 'gravatar.pho.ink/avatar/')
+ *   functions.php 的过滤器注册处：  argon_get_option('argon_gravatar_cdn', '')
+ * 把默认值编进 key 后，既能真正 memoize，又保留那层保护。
  */
 function argon_get_option($option, $default = false) {
 	static $argon_option_cache = array();
-	if (!array_key_exists($option, $argon_option_cache)) {
-		$value = get_option($option, $default);
-		if ($value !== $default) {
-			$argon_option_cache[$option] = $value;
-		}
-		return $value;
+	$key = $option . "\0" . var_export($default, true);
+	if (!array_key_exists($key, $argon_option_cache)) {
+		$argon_option_cache[$key] = get_option($option, $default);
 	}
-	return $argon_option_cache[$option];
+	return $argon_option_cache[$key];
 }
 function theme_slug_setup() {
 	add_theme_support('title-tag');
@@ -147,9 +154,18 @@ add_filter('script_loader_tag', function ($tag, $handle) {
 	if ($handle === 'argon_js_merged') {
 		return str_replace(' src=', ' defer src=', $tag);
 	}
-	// ② 条件加载的 vendor 脚本：均在 argontheme.js(pjax:complete) 中按需调用，
-	//    延迟至文档解析后执行无副作用。
-	if (in_array($handle, array('fancybox5', 'highlight', 'highlight-ln', 'nouislider', 'pickr'), true)) {
+	// ② argonjs（Argon Design System）：虽在 footer 输出，但原本是同步执行 ——
+	//    合并包改为 defer 后执行时点后移，若 argonjs 仍保持同步，会先于
+	//    jQuery 就绪的时刻执行，其顶层的 $(document).ready(...) 直接抛
+	//    「$ is not defined」（实测于测试站，pageerror 指向 argon.min.js:18）。
+	//    两者的执行顺序由 defer 在文档中的先后决定，故必须同为 defer。
+	if ($handle === 'argonjs') {
+		return str_replace(' src=', ' defer src=', $tag);
+	}
+	// ③ 条件加载的 vendor 脚本：均在 argontheme.js 中按需调用，延迟至文档解析后执行无副作用。
+	//    注意：fancybox5 / nouislider / pickr 已进一步改为【JS 按需加载】（首次交互时才注入），
+	//    不再出现在 enqueue 列表里，故已从下面数组中移除。详见 docs/fancybox与pickr懒加载方案.md
+	if (in_array($handle, array('highlight', 'highlight-ln'), true)) {
 		return str_replace(' src=', ' defer src=', $tag);
 	}
 	return $tag;
@@ -159,19 +175,29 @@ add_filter('script_loader_tag', function ($tag, $handle) {
 // 保证首屏必定已样式化、绝不出现整页无样式(空白/异常)。预加载遮罩的瞬时出现由
 // 内联样式 + 遮罩自身不依赖外部 CSS 来保证；关键 CSS 渲染阻塞可彻底避免无样式闪烁。
 add_filter('style_loader_tag', function ($tag, $handle) {
-	// ① 字体与图标：首屏主题图标由合并包内 FA4（同步）保证，FA6 仅覆盖/补充
-	//    文章正文用到的更多图标，异步延迟渲染无感知，可省去 ~130KB 首屏阻塞 CSS。
-	if (in_array($handle, array('googlefont', 'font-awesome-full', 'font-awesome-shims'), true)) {
+	// ① 字体：仅 Google Fonts 异步（图标字体已改同步，见下）
+	if (in_array($handle, array('googlefont'), true)) {
 		$deferred = str_replace("media='all'", "media='print' onload=\"this.media='all'\"", $tag);
 		return $deferred . '<noscript>' . $tag . '</noscript>';
 	}
+	// ①b Font Awesome 6 子集（font-awesome-subset）保持【同步】：
+	//     原先 FA6 全量 CSS（all.min.css 100.6KB + v4-shims 27KB）异步，靠合并包内嵌的
+	//     FA4 同步兜底首屏图标。FA4 已整体移除，该兜底不复存在；
+	//     而 FA6 子集裁剪后只有 22.5KB（gzip 3.8KB），同步的代价远小于首屏图标闪烁的风险。
 	// ② 交互态才用到的样式：首屏完全看不到它们负责的内容，同步加载只会白等一个往返。
 	//    实测（archives/873）这三个原本各阻塞 927~1153ms：
-	//      fancybox5       24.7KB 文章灯箱，点击图片时才用到
-	//      pickr-style      9.2KB 后台取色器，点主题色按钮时才用到（体积小但同样触发完整往返）
 	//      highlight-style  1.3KB 代码高亮主题，滚动到代码块时才用到
 	//    它们都只有几十 KB，异步后到达前的窗口极短（<200ms），视觉上无感知。
-	if (in_array($handle, array('fancybox5', 'pickr-style', 'highlight-style'), true)) {
+	//    注意：fancybox5 与 pickr-style 已进一步改为【JS 按需加载】（首次交互时才注入 link），
+	//    不再出现在 enqueue 列表里，故已从下面数组中移除。见 docs/fancybox与pickr懒加载方案.md
+	if (in_array($handle, array('highlight-style'), true)) {
+		$deferred = str_replace("media='all'", "media='print' onload=\"this.media='all'\"", $tag);
+		return $deferred . '<noscript>' . $tag . '</noscript>';
+	}
+	// ③ iziToast 弹窗样式（56KB）：原被打包进 argon_css_merged，现已拆为独立文件。
+	//    它只在交互回调里触发（argontheme.js 35 处调用），首屏无任何提示气泡出现。
+	//    实测拆出后合并包 297.3KB -> 241.2KB，首屏渲染阻塞减少 18.8%。
+	if ($handle === 'argon-izitoast') {
 		$deferred = str_replace("media='all'", "media='print' onload=\"this.media='all'\"", $tag);
 		return $deferred . '<noscript>' . $tag . '</noscript>';
 	}
@@ -470,13 +496,253 @@ function argon_has_post_thumbnail($postID = 0){
 	}
 	return false;
 }
-function argon_get_post_thumbnail($postID = 0){
+//不再生成 srcset 专用的三档尺寸
+/* 主题在 argon_lazyload() 里会【移除正文图片的 srcset】（懒加载需要，避免浏览器提前拉图），
+   而 WordPress 5.3 起额外生成的 768 / 1536 / 2048 三档，基本只为 srcset 服务 ——
+   在「永远不带 srcset」的本主题下它们从设计上就不会被请求，纯属白占磁盘。
+   这里把它们从待生成的尺寸里摘掉。
+   注意：
+     · 只影响【之后上传】的图片，已存在的文件不会被删除，也不会被回填；
+       想清理历史文件需要另外跑一次缩略图重建（或手动清理）。
+     · medium_large(768) 虽然本主题不用，但编辑器与部分插件可能按名字取用；
+       若站上有这类依赖，把 'medium_large' 从下面的数组里去掉即可。
+     · 这里只做减法，不新增任何尺寸；也不动 thumbnail(150) ——
+       argon_ajax_live_search 正在用它。 */
+add_filter('intermediate_image_sizes_advanced', function($sizes){
+	foreach (array('medium_large', '1536x1536', '2048x2048') as $unused){
+		unset($sizes[$unused]);
+	}
+	return $sizes;
+});
+
+/* —— LQIP（低清占位图）——
+   目的：首页卡片头图在「文字已渲染、原图还没下完」这段时间里不再是一片空白，
+        而是显示【该图自己的】模糊版本；原图到达后交叉过渡为清晰。
+
+   为什么自己生成、不能直接用现成尺寸：
+     实测生产站同一批图里，有的有 thumbnail(150) 变体、有的没有 ——
+     149087630_p0.webp 的 -150x87 是 404，而 b_88f475…jpg 的 -150x150 是 200。
+     所以不能依赖现成尺寸；150×150 本身也有 10~20KB，做占位偏大。
+
+   做法：注册一个 32px 宽的极小尺寸；新上传由 WP 自动生成，
+        已有图片在【首次渲染时按需生成】并写回附件元数据 —— 不需要预先重建。
+
+   输出为 data URI 内联（不是独立文件）：
+     慢网下 RTT 比字节数更贵；32px JPEG 约 0.7~1.2KB，首屏 6 张约 5~8KB。 */
+add_image_size('argon-lqip', 32, 0, false);
+
+/* 生成（或复用）某附件的 LQIP 文件，返回绝对路径；失败返回 '' */
+function argon_generate_lqip($attachment_id){
+	$file = get_attached_file($attachment_id);
+	if (!$file || !@file_exists($file)){
+		return '';
+	}
+	if (!function_exists('wp_get_image_editor')){
+		return '';
+	}
+	$editor = wp_get_image_editor($file);
+	if (is_wp_error($editor)){
+		return '';
+	}
+	/* 等比缩到 32px 宽 */
+	$editor->resize(32, null, false);
+	if (method_exists($editor, 'set_quality')){
+		$editor->set_quality(45);
+	}
+	$dir = dirname($file);
+	$base = pathinfo($file, PATHINFO_FILENAME);
+	$saved = $editor->save($dir . '/' . $base . '-argon-lqip.jpg');
+	if (is_wp_error($saved) || empty($saved['path']) || !@file_exists($saved['path'])){
+		return '';
+	}
+	/* 写回附件元数据，下次直接读，不再跑图像处理 */
+	$meta = wp_get_attachment_metadata($attachment_id);
+	if (is_array($meta)){
+		if (!isset($meta['sizes']) || !is_array($meta['sizes'])){
+			$meta['sizes'] = array();
+		}
+		$meta['sizes']['argon-lqip'] = array(
+			'file'      => basename($saved['path']),
+			'width'     => isset($saved['width']) ? (int) $saved['width'] : 0,
+			'height'    => isset($saved['height']) ? (int) $saved['height'] : 0,
+			'mime-type' => isset($saved['mime-type']) ? $saved['mime-type'] : 'image/jpeg',
+		);
+		wp_update_attachment_metadata($attachment_id, $meta);
+	}
+	return $saved['path'];
+}
+
+/* 取某附件的 LQIP data URI；取不到返回 ''（调用方据此退回骨架块） */
+function argon_get_lqip_data_uri($attachment_id){
+	static $cache = array();
+	$attachment_id = (int) $attachment_id;
+	if ($attachment_id <= 0){
+		return '';
+	}
+	if (isset($cache[$attachment_id])){
+		return $cache[$attachment_id];
+	}
+	$cache[$attachment_id] = '';   /* 先占位，避免同一请求内重复生成 */
+
+	/* 生成失败过就不再重试 —— 否则附件不在本地（CDN-only）、编辑器不可用等情况
+	   会让【每次页面渲染】都跑一遍图像处理，是实打实的性能坑。
+	   失败标记写在附件元数据里，与 lqip 尺寸名同一处，便于排查。 */
+	$meta = wp_get_attachment_metadata($attachment_id);
+	if ((is_array($meta) && !empty($meta['argon_lqip_failed'])) || get_post_meta($attachment_id, 'argon_lqip_failed', true)){
+		return '';
+	}
+
+	$path = '';
+	if (is_array($meta) && !empty($meta['sizes']['argon-lqip']['file'])){
+		$attached = get_attached_file($attachment_id);
+		if ($attached){
+			$candidate = dirname($attached) . '/' . $meta['sizes']['argon-lqip']['file'];
+			if (@file_exists($candidate)){
+				$path = $candidate;
+			}
+		}
+	}
+	if ($path == ''){
+		$path = argon_generate_lqip($attachment_id);
+	}
+	if ($path == '' || !@file_exists($path)){
+		/* 记下失败，下次直接跳过 */
+		/* 失败标记不能只依赖附件元数据 —— 元数据缺失（FTP/Add-From-Server 导入、
+		    wp_generate_attachment_metadata 失败）时它不是数组，标记就写不进去，
+		    于是每次页面渲染都会重跑一遍图像处理并写盘。用 post meta 兜底。 */
+		if (is_array($meta)){
+			$meta['argon_lqip_failed'] = 1;
+			wp_update_attachment_metadata($attachment_id, $meta);
+		}else{
+			update_post_meta($attachment_id, 'argon_lqip_failed', 1);
+		}
+		return '';
+	}
+	$data = @file_get_contents($path);
+	if ($data === false || $data === ''){
+		return '';
+	}
+	$ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+	$mimes = array('jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg', 'png' => 'image/png', 'webp' => 'image/webp', 'gif' => 'image/gif');
+	$mime = isset($mimes[$ext]) ? $mimes[$ext] : 'image/jpeg';
+	$cache[$attachment_id] = 'data:' . $mime . ';base64,' . base64_encode($data);
+	return $cache[$attachment_id];
+}
+
+/* 取某篇文章特色图的 LQIP data URI；没有特色图或取不到则返回 '' */
+function argon_get_post_lqip($postID = 0){
+	if ($postID == 0){
+		global $post;
+		$postID = $post -> ID;
+	}
+	if (!has_post_thumbnail($postID)){
+		return '';
+	}
+	return argon_get_lqip_data_uri(get_post_thumbnail_id($postID));
+}
+
+/* 输出缩略图标记。
+   占位做法：把 LQIP 直接作为 <img> 自己的 background-image，加载中再给元素
+   加一层 filter: blur()。这样只需要【一个元素】，而且换 src 时不会闪白 ——
+   浏览器在换 src 时会清空图片内容，但元素背景不受影响，所以底下始终有东西垫着。
+
+   （早先用的是「包裹层 + 两层 <img> 交叉淡入淡出」，但那样在换 src 的瞬间
+     会露出卡片白底，观感是「闪一下白色」。背景方案没有这个问题，也更简单。）
+
+   $lazyload = true  → 卡片列表：走懒加载（1×1 占位 + data-original）
+   $lazyload = false → 文章/页面头图、时间线：直接 src
+
+   没有 LQIP 时只给一块中性底色，不再扫光（扫光会和懒加载的逐个加载叠在一起，
+   看起来像一直在闪）。 */
+function argon_render_post_thumbnail($thumbnail_url, $lazyload = true){
+	static $placeholder = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAGXRFWHRTb2Z0d2FyZQBBZG9iZSBJbWFnZVJlYWR5ccllPAAAABBJREFUeNpi+P//PwNAgAEACPwC/tuiTRYAAAAASUVORK5CYII=';
+	$lqip = argon_get_post_lqip();
+	/* 刻意【不设 opacity: 0】——
+	   LQIP 是挂在元素自身的 background-image 上，而 opacity 会连背景一起隐藏，
+	   那样加载中就什么都看不到了。这里让元素始终可见：
+	   加载中显示的是透明 1×1 占位 + 底下的 LQIP 背景（外面再叠一层 blur），
+	   清晰图到位后自然盖住背景。 */
+	$style = '';
+	if ($lqip != ''){
+		$style = "background-image:url('" . esc_attr($lqip) . "');";
+	}
+	if ($lazyload){
+		echo "<img class='post-thumbnail lazyload" . ($lqip != '' ? ' has-lqip' : ' no-lqip') . "' src='" . $placeholder . "' data-original='" . esc_url($thumbnail_url) . "' alt='thumbnail'" . ($style != '' ? " style=\"" . $style . "\"" : '') . ">";
+	}else{
+		echo "<img class='post-thumbnail" . ($lqip != '' ? ' has-lqip' : ' no-lqip') . "' src='" . esc_url($thumbnail_url) . "' alt='thumbnail'" . ($style != '' ? " style=\"" . $style . "\"" : '') . ">";
+	}
+}
+
+/* 给正文里的一张 <img> 找对应的附件，返回 array(lqip, width, height)。
+   正文图片是用户上传的，src 可能是任意尺寸变体，所以先按 URL 反查附件 ID；
+   attachment_url_to_postid 自带查询缓存，代价可控。
+
+   为什么要一并拿宽高：正文图尺寸五花八门，若没有宽高，浏览器在图片到达前
+   按占位图（1×1）算高度，图片一到就整段重排 —— 观感就是「正文抽搐」。
+   补上 width/height 后，浏览器能按宽高比【提前预留】正确的空间，
+   不同尺寸的图都能稳住，这是通用解。 */
+function argon_get_img_meta_for_src($src){
+	if ($src == '' || strpos($src, 'data:') === 0){
+		return array('', 0, 0);
+	}
+	static $cache = array();
+	/* 去掉 -1024x576 这类尺寸后缀，拿原图 URL 去查 */
+	$base = preg_replace('/-\d+x\d+(\.[a-zA-Z0-9]+)$/', '$1', $src);
+	if (isset($cache[$base])){
+		return $cache[$base];
+	}
+	$cache[$base] = array('', 0, 0);
+	if (!function_exists('attachment_url_to_postid')){
+		return $cache[$base];
+	}
+	$id = attachment_url_to_postid($base);
+	if (!$id){
+		$id = attachment_url_to_postid($src);
+	}
+	if (!$id){
+		return $cache[$base];
+	}
+	$w = 0; $h = 0;
+	$meta = wp_get_attachment_metadata($id);
+	if (is_array($meta) && !empty($meta['width']) && !empty($meta['height'])){
+		$w = (int) $meta['width'];
+		$h = (int) $meta['height'];
+		/* 正文里用的往往是某个尺寸变体，宽高比一致，但用变体的实际像素更准确 */
+		if (preg_match('/-(\d+)x(\d+)\.[a-zA-Z0-9]+$/', $src, $m)){
+			$w = (int) $m[1];
+			$h = (int) $m[2];
+		}
+	}
+	$cache[$base] = array(argon_get_lqip_data_uri($id), $w, $h);
+	return $cache[$base];
+}
+
+/* 兼容旧调用点：只要 LQIP */
+function argon_get_lqip_for_img_src($src){
+	$m = argon_get_img_meta_for_src($src);
+	return $m[0];
+}
+
+
+function argon_get_post_thumbnail($postID = 0, $size = 'large'){
 	if ($postID == 0){
 		global $post;
 		$postID = $post -> ID;
 	}
 	if (has_post_thumbnail()){
-		return apply_filters("argon_post_thumbnail", wp_get_attachment_image_src(get_post_thumbnail_id($postID), "full")[0]);
+		/* 用 large（1024 宽）而不是 full。
+		   这个函数服务于卡片、时间线、文章头图、页面头图与相关文章 ——
+		   它们最宽也只显示到约 941px，取 full 等于让浏览器下载原始大图：
+		   实测首页 11 张卡片头图合计 6.27 MiB，其中 #1535 那张
+		   149087630_p0.webp 是 4000×2333 / 6.01 MiB，而卡片只显示 941px 宽。
+		   改 large 后单张降到 1024 宽，首页头图体积降到 1~2 MiB 量级。
+		   wp_get_attachment_image_src 在 large 不存在时会自动回退到 full，
+		   所以小图不受影响；这里再兜一层，避免附件无图时 false[0] 报警。 */
+		$src = wp_get_attachment_image_src(get_post_thumbnail_id($postID), $size);
+		if (!$src){
+			$src = wp_get_attachment_image_src(get_post_thumbnail_id($postID), "full");
+		}
+		return apply_filters("argon_post_thumbnail", $src ? $src[0] : "");
 	}
 	return apply_filters("argon_post_thumbnail", argon_get_first_image_of_article());
 }
@@ -593,14 +859,22 @@ function set_user_token_cookie(){
    set_user_token_cookie() 补发，Token 生命周期与用途不变，仅触发时机收窄。
    同时悄悄话可见性判定已加 ?? '' 兜底，匿名访客不再持有该 Cookie 亦不报错。 */
 //页面 Description Meta
+/* 职责分离：本函数只负责【取内容】，一律【不做 HTML 转义】——
+   转义统一由输出端用 esc_attr() 完成（header.php 的 description / og:description /
+   twitter:description 三处）。
+   原先两支行为不一致：摘要那支不转义、正文截取那支转了 htmlspecialchars，
+   而输出端又完全没有转义 —— 摘要里出现一个 " 就能把 content="…" 属性截断。
+   注意不要在这里转义：否则 esc_attr() 会二次转义（& 变 &amp;amp;）。 */
 function get_seo_description(){
 	global $post;
 	if (is_single() || is_page()){
 		if (get_the_excerpt() != ""){
-			return preg_replace('/ \[&hellip;]$/', '&hellip;', get_the_excerpt());
+			/* 用真正的省略号字符而不是 &hellip; 实体 —— 输出端会 esc_attr()，
+			   实体里的 & 会被二次转义成 &amp;hellip; 显示为字面量。 */
+			return preg_replace('/\s*\[(?:&hellip;|…)\]$/', '…', get_the_excerpt());
 		}
 		if (!post_password_required()){
-			return htmlspecialchars(mb_substr(str_replace("\n", '', strip_tags($post -> post_content)), 0, 50)) . "...";
+			return mb_substr(str_replace("\n", '', strip_tags($post -> post_content)), 0, 50) . "...";
 		}else{
 			return __("这是一个加密页面，需要密码来查看", 'argon');
 		}
@@ -612,59 +886,17 @@ function get_seo_description(){
 		return $desc;
 	}
 }
-//结构化数据 (JSON-LD)
-function argon_output_structured_data(){
-	if (argon_get_option('argon_enable_structured_data') == 'false'){
-		return;
-	}
-	if (!is_singular('post')){
-		return;
-	}
-	global $post;
-	$schema = array(
-		'@context' => 'https://schema.org',
-		'@type' => 'Article',
-		'@id' => get_permalink($post -> ID) . '#article',
-		'headline' => get_the_title($post -> ID),
-		'datePublished' => get_the_date('c', $post -> ID),
-		'dateModified' => get_the_modified_date('c', $post -> ID),
-		'author' => array(
-			'@type' => 'Person',
-			'name' => get_the_author_meta('display_name', $post -> post_author),
-			'url' => get_author_posts_url($post -> post_author),
-		),
-		'publisher' => array(
-			'@type' => 'Organization',
-			'name' => get_bloginfo('name'),
-		),
-		'mainEntityOfPage' => array(
-			'@type' => 'WebPage',
-			'@id' => get_permalink($post -> ID),
-		),
-	);
-	$thumbnail_id = get_post_thumbnail_id($post -> ID);
-	if ($thumbnail_id){
-		$thumbnail_url = wp_get_attachment_image_url($thumbnail_id, 'full');
-		if ($thumbnail_url){
-			$schema['image'] = array(
-				'@type' => 'ImageObject',
-				'url' => $thumbnail_url,
-				'width' => 1200,
-				'height' => 800,
-			);
-			$schema['publisher']['logo'] = array(
-				'@type' => 'ImageObject',
-				'url' => $thumbnail_url,
-			);
-		}
-	}
-	$excerpt = get_the_excerpt($post -> ID);
-	if ($excerpt){
-		$schema['description'] = wp_strip_all_tags($excerpt);
-	}
-	echo '<script type="application/ld+json">' . wp_json_encode($schema, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . '</script>' . "\n";
-}
-add_action('wp_head', 'argon_output_structured_data');
+//结构化数据 (JSON-LD) —— 已移除
+/* 原先这里输出一个扁平的 Article，与 SEO 插件（Rank Math 等）的 @graph 重复，
+   而且有两处硬错误：
+     1) image 的 width/height 硬编码 1200x800，实测特色图是 4000x2333（声明与事实不符）；
+     2) publisher.logo.url 用的是【文章特色图】，而 Rank Math 用的是【站点 logo】——
+        同一页面出现两个互相冲突的 publisher.logo。
+   实测（/archives/1535）：两个 ld+json 块，Rank Math 的 @graph 3519B（含 BlogPosting）
+   + 本段 797B。Rank Math 的 @graph 已覆盖 BlogPosting / WebPage / WebSite / Person /
+   Organization，内容完整且正确，故本段整体删除。
+   注意：本改动依赖站点装有 SEO 插件。若停用 Rank Math，需另装插件或恢复本段。
+   背景见 docs/SEO与语义标签修复方案.md §1 */
 //页面 Keywords
 function get_seo_keywords(){
 	if (is_single()){
@@ -704,7 +936,8 @@ function get_og_image(){
 	$postID = $post -> ID;
 	$argon_first_image_as_thumbnail = get_post_meta($postID, 'argon_first_image_as_thumbnail', true);
 	if (has_post_thumbnail() || $argon_first_image_as_thumbnail == 'true'){
-		return argon_get_post_thumbnail($postID);
+		/* og:image 用 full：1024px 低于 Facebook/LinkedIn 推荐的 1200x630。 */
+		return argon_get_post_thumbnail($postID, 'full');
 	}
 	return '';
 }
@@ -768,7 +1001,23 @@ function argon_get_image_size($url){
 			$size = @getimagesize($path);
 		}
 	}
-	return $size ? $size : false;
+	if ($size){
+		return $size;
+	}
+	/* 上面两个分支都要求 URL 在本站域名下；启用「资源 CDN」或图片走外链时都进不去，
+	   于是 og:image:width/height 拿不到值，社交平台的大图卡片可能渲染不稳。
+	   这里补一条【零 HTTP 请求】的兜底：按 URL 反查附件，直接读附件元数据。
+	   刻意不做远程 getimagesize() —— 那会在每次页面渲染时发一个 HTTP 请求。 */
+	if (function_exists('attachment_url_to_postid')){
+		$attachment_id = attachment_url_to_postid($url);
+		if ($attachment_id){
+			$meta = wp_get_attachment_metadata($attachment_id);
+			if (!empty($meta['width']) && !empty($meta['height'])){
+				return array((int) $meta['width'], (int) $meta['height']);
+			}
+		}
+	}
+	return false;
 }
 
 //动态输出 Web App Manifest（复用站点名称、Description Meta 与主题色、站点图标）
@@ -2956,8 +3205,26 @@ function argon_lazyload($content){
 		if ($use_dom){
 			$dom = new DOMDocument();
 			$prev = libxml_use_internal_errors(true);
-			// 以 HTML 片段方式解析，避免回溯爆炸（ReDoS），并保留 UTF-8
-			@$dom->loadHTML(mb_convert_encoding($content, 'HTML-ENTITIES', 'UTF-8'), LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
+			/* 用 DOM 解析而非纯正则，是为了避免回溯爆炸（ReDoS）。
+			   但必须注意两点，否则会引入比 ReDoS 更大的问题：
+
+			   ① 【只给 libxml 一个根节点】
+			      LIBXML_HTML_NOIMPLIED 不让 libxml 自动补 <html>/<body>，
+			      而 libxml 需要一个唯一文档根 —— 于是它把【第一个元素】当成根，
+			      后面所有顶层节点全部挂成它的子节点，saveHTML() 再把这个错误结构
+			      原样吐出来。实测：正文以 <h2> 开头时，整篇正文都变成了那一个标题的
+			      子节点（5 个 <h2> / 5 个 </h2> 但配对整体错位一格，
+			      最后一个 </h2> 跑到正文最末尾）。以 <div>/<figure> 开头的文章同理。
+			      正文以 <p> 开头时浏览器会容错修好，所以以前没被发现。
+			      这里显式包一层临时根 div，解析完再逐个子节点输出、拆掉外层。
+
+			   ② 【不要用 mb_convert_encoding(…, 'HTML-ENTITIES', 'UTF-8')】
+			      那会把每个中日韩字符变成 &#NNNNN;（3 字节 UTF-8 → 7~8 字节），
+			      实测正文体积涨到 1.30~1.75 倍（整页 raw +4.1%，gzip 后 +2.1%）。
+			      改用 <?xml encoding="UTF-8"> 声明即可让 libxml 按 UTF-8 处理，
+			      中文原样保留。 */
+			@$dom->loadHTML('<?xml encoding="UTF-8"><div id="argon-lazyload-root">' . $content . '</div>',
+				LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
 			libxml_clear_errors();
 			libxml_use_internal_errors($prev);
 			$imgs = $dom->getElementsByTagName('img');
@@ -2973,16 +3240,118 @@ function argon_lazyload($content){
 				}
 				$img->removeAttribute('srcset'); // 移除 srcset，避免浏览器提前加载
 				$existing_class = $img->getAttribute('class');
-				$img->setAttribute('class', trim('lazyload ' . $lazyload_loading_style . ' ' . $existing_class));
+				/* 正文图片也给 LQIP 占位：拿 data-original 反查附件，取它的 32px 小图，
+				   作为元素自身的 background-image。加载中由 CSS 叠一层模糊，
+				   清晰图到位后 blur 归零 —— 与卡片缩略图完全同一套机制。 */
+				$lqip_src = $img->getAttribute('data-original');
+				$meta = $lqip_src != '' ? argon_get_img_meta_for_src($lqip_src) : array('', 0, 0);
+				$lqip = $meta[0];
+				$lqip_class = $lqip != '' ? ' has-lqip' : ' no-lqip';
+				/* $style 必须每张图【无条件重置】。
+				   它原来只在 $lqip != '' 分支里赋值，而写回却在 $meta 分支里 ——
+				   两个条件相互独立，于是「有 LQIP 的图」后面跟一张「没 LQIP 的图」时，
+				   后者会带着前者的 background-image 一起写回，显示成【上一张图的模糊图】；
+				   若第一张就没有 LQIP，还会触发 PHP 8 的 Undefined variable 警告。 */
+				$style = trim($img->getAttribute('style'));
+				if ($style != '' && substr($style, -1) != ';'){ $style .= ';'; }
+				if ($lqip != ''){
+					$style .= "background-image:url('" . esc_attr($lqip) . "');background-size:cover;background-position:center;";
+				}
+				/* 【通用解：给不同尺寸的正文图锁定真实宽高比】
+				   只写 width/height 属性是不够的 —— 那两个属性只在图片「不可用」时
+				   才用来推算比例；而这里的占位图是 1×1 的 SVG，一旦它加载完，
+				   浏览器就改用【它的固有比例 1:1】，框立刻变成正方形，
+				   再被主题的 max-height:60vh 一压，所有图都变成同一个高度；
+				   真实图到达、比例一变，整段就重排 —— 观感就是「正文抽搐」。
+				   aspect-ratio 优先于固有比例，所以显式写上它就锁住了。
+
+				   宽度也要一起锁：主题那条占位规则给的是 width:100%，
+				   而图片加载完之后该规则不再匹配（src 变了），宽度退回 auto ——
+				   比容器窄的图会突然缩回自然宽度，照样跳。
+				   最终宽度正好是 min(容器宽, 自然宽)，用 width:100% + max-width 表达，
+				   占位阶段与最终状态逐像素一致。 */
+				if ($meta[1] > 0 && $meta[2] > 0){
+					/* 注意：这里【不能】写 width:min(100%, Npx)。
+					   min() 里的百分比在 shrink-to-fit 上下文（图片常被放在这样的父元素里）
+					   是「不确定的」，min() 会退化成 auto，而替换元素的 auto 宽度就是
+					   占位图的内在宽度 —— 1px。于是占位阶段图只有 1px 宽，
+					   真实图到达后才撑到 810px，文章高度实测连跳两次（6248→6675→7102）。
+					   拆成 width:100% + max-width:Npx：百分比有确定基准，效果完全一样，
+					   而且比容器窄的图仍然不会被拉伸。 */
+					/* 只在图片【没有】显式尺寸时才写 width:100% ——
+					   否则会永久覆盖作者在编辑器里拖出来的宽度（Gutenberg 的 is-resized
+					   会带 width/height 属性），作者写了 height 时还会让 aspect-ratio 失效、图片变形。
+					   aspect-ratio 本身无害，无条件写。 */
+					$has_size = $img->getAttribute('width') != '' || $img->getAttribute('height') != ''
+						|| preg_match('/(^|;)\s*(width|height)\s*:/i', $style);
+					if (!$has_size){
+						$style .= 'width:100%;max-width:' . (int) $meta[1] . 'px;';
+					}
+					/* aspect-ratio 无条件写：它只锁比例，不覆盖任何作者设定的尺寸。 */
+					$style .= 'aspect-ratio:' . (int) $meta[1] . ' / ' . (int) $meta[2] . ';';
+					if ($img->getAttribute('width') == ''){
+						$img->setAttribute('width', (string) $meta[1]);
+					}
+					if ($img->getAttribute('height') == ''){
+						$img->setAttribute('height', (string) $meta[2]);
+					}
+					if ($style != ''){
+						$img->setAttribute('style', $style);
+					}
+				}
+				$img->setAttribute('class', trim('lazyload ' . $lazyload_loading_style . $lqip_class . ' ' . $existing_class));
 				$img->setAttribute('src', 'data:image/svg+xml;base64,PCEtLUFyZ29uTG9hZGluZy0tPgo8c3ZnIHdpZHRoPSIxIiBoZWlnaHQ9IjEiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIgc3Ryb2tlPSIjZmZmZmZmMDAiPjxnPjwvZz4KPC9zdmc+');
 			}
-			$content = $dom->saveHTML();
-			if ($content == ''){
+			/* 逐个子节点输出，拆掉临时根 —— 不留任何包裹层 */
+			$out = '';
+			if ($dom->documentElement){
+				foreach ($dom->documentElement->childNodes as $child){
+					$out .= $dom->saveHTML($child);
+				}
+			}
+			if ($out != ''){
+				$content = $out;
+			}else{
 				$use_dom = false; // 解析失败则回退正则
 			}
 		}
 		if (!$use_dom){
-			$content = preg_replace('/<img(.*?)src=[\'"](.*?)[\'"](.*?)((\/>)|(<\/img>))/i',"<img class=\"lazyload " . $lazyload_loading_style . "\" src=\"data:image/svg+xml;base64,PCEtLUFyZ29uTG0aG9hZGluZy8tPgo8c3ZnIHdpZHRoPSIxIiBoZWlnaHQ9IjEiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIgc3Ryb2tlPSIjZmZmZmZmMDAiPjxnPjwvZz4KPC9zdmc+\" \$1data-original=\"\$2\" src=\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsQAAA7EAZUrDhsAAAANSURBVBhXYzh8+PB/AAffA0nNPuCLAAAAAElFTkSuQmCC\"\$3$4" , $content);
+			/* 正则分支（DOMDocument 不可用时的兜底）也给 LQIP 占位，
+			   机制与 DOM 分支一致：拿 src 反查附件，把小图挂到元素背景上。 */
+			$content = preg_replace_callback('/<img(.*?)src=[\'"](.*?)[\'"](.*?)((\/>)|(<\/img>))/i', function($m) use ($lazyload_loading_style){
+				$src = $m[2];
+				$meta = argon_get_img_meta_for_src($src);
+				$lqip = $meta[0];
+				$cls = 'lazyload ' . $lazyload_loading_style . ($lqip != '' ? ' has-lqip' : ' no-lqip');
+				$style = $lqip != '' ? "background-image:url('" . esc_attr($lqip) . "');background-size:cover;background-position:center;" : '';
+				/* 与 DOM 分支一致：补宽高，并用 aspect-ratio 锁定真实比例
+				   （占位图是 1×1 的 SVG，它的固有比例会盖掉 width/height 属性）。 */
+				$wh = '';
+				if ($meta[1] > 0 && $meta[2] > 0){
+					if (!preg_match('/\swidth=/i', $m[1])){ $wh .= ' width="' . (int) $meta[1] . '"'; }
+					if (!preg_match('/\sheight=/i', $m[1])){ $wh .= ' height="' . (int) $meta[2] . '"'; }
+					/* 注意：这里【不能】写 width:min(100%, Npx)。
+					   min() 里的百分比在 shrink-to-fit 上下文（图片常被放在这样的父元素里）
+					   是「不确定的」，min() 会退化成 auto，而替换元素的 auto 宽度就是
+					   占位图的内在宽度 —— 1px。于是占位阶段图只有 1px 宽，
+					   真实图到达后才撑到 810px，文章高度实测连跳两次（6248→6675→7102）。
+					   拆成 width:100% + max-width:Npx：百分比有确定基准，效果完全一样，
+					   而且比容器窄的图仍然不会被拉伸。 */
+					/* 只在图片【没有】显式尺寸时才写 width:100% ——
+					   否则会永久覆盖作者在编辑器里拖出来的宽度（Gutenberg 的 is-resized
+					   会带 width/height 属性），作者写了 height 时还会让 aspect-ratio 失效、图片变形。
+					   aspect-ratio 本身无害，无条件写。 */
+					$has_size = $img->getAttribute('width') != '' || $img->getAttribute('height') != ''
+						|| preg_match('/(^|;)\s*(width|height)\s*:/i', $style);
+					if (!$has_size){
+						$style .= 'width:100%;max-width:' . (int) $meta[1] . 'px;';
+					}
+					/* aspect-ratio 无条件写：它只锁比例，不覆盖任何作者设定的尺寸。 */
+					$style .= 'aspect-ratio:' . (int) $meta[1] . ' / ' . (int) $meta[2] . ';';
+				}
+				$ph = 'data:image/svg+xml;base64,PCEtLUFyZ29uTG9hZGluZy0tPgo8c3ZnIHdpZHRoPSIxIiBoZWlnaHQ9IjEiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PC9zdmc+';
+				return '<img' . $m[1] . 'data-original="' . $src . '" class="' . $cls . '"' . $wh . ' src="' . $ph . '"' . $m[3] . ($style != '' ? ' style="' . $style . '"' : '') . ' ' . $m[4];
+			}, $content);
 			$content = preg_replace('/<img(.*?)data-full-url=[\'"]([^\'"]+)[\'"](.*)>/i',"<img$1data-full-url=\"$2\" data-original=\"$2\"$3>" , $content);
 			$content = preg_replace('/<img(.*?)srcset=[\'"](.*?)[\'"](.*?)>/i',"<img$1$3>" , $content);
 		}
@@ -2991,10 +3360,19 @@ function argon_lazyload($content){
 }
 function argon_fancybox($content){
 	if(!is_feed() && !is_robots() && !is_home()){
+		/* data-thumb：给 Fancybox 的缩略图条（Thumbs）与关闭动画指定图片源。
+		   为什么必须显式给：Fancybox 这样取缩略图源 ——
+		     r = img.currentSrc || img.src;
+		     !r && img.dataset && (r = img.dataset.lazySrc || img.dataset.src);
+		   而本站的正文图是懒加载的，未进入视口前 src 是 1x1 的 SVG 占位 data-URI。
+		   那个 data-URI 是【真值】，于是 !r 的兜底分支永远不会执行，
+		   Fancybox 就把占位图当成了缩略图 —— 表现是灯箱底部缩略图条大片空白
+		   （实测：滚到页面顶部后打开灯箱，15 个缩略图里 10 个是 1x1 占位图）。
+		   这里直接把真实地址写进 data-thumb，绕开对 img.src 的依赖。 */
 		if (argon_get_option('argon_enable_lazyload') != 'false'){
-			$content = preg_replace('/<img(.*?)data-original=[\'"](.*?)[\'"](.*?)((\/>)|>|(<\/img>))/i',"<a class='argon-lightbox-img' data-fancybox='post-images' href='$2'>$0</a>" , $content);
+			$content = preg_replace('/<img(.*?)data-original=[\'"](.*?)[\'"](.*?)((\/>)|>|(<\/img>))/i',"<a class='argon-lightbox-img' data-fancybox='post-images' data-thumb='$2' href='$2'>$0</a>" , $content);
 		}else{
-			$content = preg_replace('/<img(.*?)src=[\'"](.*?)[\'"](.*?)((\/>)|>|(<\/img>))/i',"<a class='argon-lightbox-img' data-fancybox='post-images' href='$2'>$0</a>" , $content);
+			$content = preg_replace('/<img(.*?)src=[\'"](.*?)[\'"](.*?)((\/>)|>|(<\/img>))/i',"<a class='argon-lightbox-img' data-fancybox='post-images' data-thumb='$2' href='$2'>$0</a>" , $content);
 		}
 	}
 	return $content;

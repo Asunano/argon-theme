@@ -22,7 +22,7 @@
 		<link href="https://fonts.googleapis.com/css?family=Open+Sans:300,400,600,700&display=swap" rel="stylesheet">
 	<?php } ?>
 	<link href="<?php echo get_template_directory_uri(); ?>/assets/vendor/nucleo/css/nucleo.css" rel="stylesheet">
-	<link href="<?php echo get_template_directory_uri(); ?>/assets/vendor/font-awesome/css/font-awesome.min.css" rel="stylesheet">
+	<link href="<?php echo get_template_directory_uri(); ?>/assets/css/argon-fontawesome.css" rel="stylesheet">
 	<link type="text/css" href="<?php echo get_template_directory_uri(); ?>/assets/argon_css_merged.css" rel="stylesheet">
 	<link type="text/css" href="<?php echo get_template_directory_uri(); ?>/style.css" rel="stylesheet">
 	<script>

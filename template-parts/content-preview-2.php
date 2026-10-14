@@ -3,17 +3,15 @@
 		<?php
 			if (argon_has_post_thumbnail()){
 				$thumbnail_url = argon_get_post_thumbnail();
-				if (get_option('argon_enable_lazyload') != 'false'){
-					echo "<img class='post-thumbnail lazyload' src='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAGXRFWHRTb2Z0d2FyZQBBZG9iZSBJbWFnZVJlYWR5ccllPAAAABBJREFUeNpi+P//PwNAgAEACPwC/tuiTRYAAAAASUVORK5CYII=' data-original='" . $thumbnail_url . "' alt='thumbnail' style='opacity: 0;'></img>";
-				}else{
-					echo "<img class='post-thumbnail' src='" . $thumbnail_url . "'></img>";
-				}				
+				argon_render_post_thumbnail($thumbnail_url, get_option('argon_enable_lazyload') != 'false');
 			}
 		?>
 	</header>
 
 	<div class="post-content-container">
-		<a class="post-title" href="<?php the_permalink(); ?>"><?php the_title(); ?></a>
+		<?php /* 列表标题用 h2 包裹：<a> 必须保留（它是整条列表的可点链接），
+		         且列表页不能出现多个 h1。 */ ?>
+		<h2 class="post-title"><a href="<?php the_permalink(); ?>"><?php the_title(); ?></a></h2>
 		<?php
 			$trim_words_count = get_option('argon_trim_words_count', 175);
 		?>

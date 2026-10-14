@@ -3,7 +3,7 @@
 		<?php
 			if (argon_has_post_thumbnail() && get_option('argon_show_thumbnail_in_banner_in_content_page') != 'true'){
 				$thumbnail_url = argon_get_post_thumbnail();
-				echo "<img class='post-thumbnail' src='" . $thumbnail_url . "'></img>";
+				argon_render_post_thumbnail($thumbnail_url, false);
 				echo "<div class='post-header-text-container'>";
 			}
 			if (argon_has_post_thumbnail() && get_option('argon_show_thumbnail_in_banner_in_content_page') == 'true'){
@@ -16,7 +16,9 @@
 				</style>";
 			}
 		?>
-		<a class="post-title" href="<?php the_permalink(); ?>"><?php the_title(); ?></a>
+		<?php /* 时间线是列表场景，标题用 h2 包裹：<a> 必须保留，
+		         且一页多条不能出现多个 h1。 */ ?>
+		<h2 class="post-title"><a href="<?php the_permalink(); ?>"><?php the_title(); ?></a></h2>
 		<div class="post-meta">
 			<?php
 				$metaList = explode('|', get_option('argon_article_meta', 'time|views|comments|categories'));

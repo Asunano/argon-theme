@@ -4,12 +4,17 @@ on:
   push:
     tags:
       - 'v*'
+    branches:
+      - 'dev'
 
 permissions:
   contents: write
 
 jobs:
   release:
+    # 仅 tag 推送走发版：校验版本号一致性 + 写 version.json 回默认分支 + 创建 Release。
+    # 分支推送（dev）由下面的 dev-package 负责，不会走到这里。
+    if: startsWith(github.ref, 'refs/tags/')
     name: Build & publish release
     runs-on: ubuntu-latest
     steps:
@@ -39,23 +44,8 @@ jobs:
           npm install
           npm run build
 
-      - name: Package theme zip
-        run: |
-          THEME=argon-theme
-          rm -rf dist-tmp "$THEME.zip"
-          mkdir -p "dist-tmp/$THEME"
-          for item in $(ls -A); do
-            case "$item" in
-              .git|.github|node_modules|.gitignore|CODE_REVIEW.md|CODEBUDDY.md|README.md|README_en.md|dist-tmp|$THEME.zip)
-                continue ;;
-            esac
-            cp -a "$item" "dist-tmp/$THEME/"
-          done
-          ( cd dist-tmp && zip -r "../$THEME.zip" "$THEME" )
-          rm -rf dist-tmp
-          echo "=== 打包内容 ==="
-          unzip -l "$THEME.zip" | head -n 20
-
+      # 必须先同步 version.json 再打包：否则发布包里带的是【上一个版本】的 version.json
+      # （原顺序是先打包后同步，实测 v1.4.0 的包里 version.json 还写着 1.3.30）。
       - name: Sync version.json
         run: |
           TAG="${GITHUB_REF_NAME#v}"
@@ -67,6 +57,30 @@ jobs:
           }
           EOF
           echo "version.json -> $TAG"
+
+      - name: Package theme zip
+        run: |
+          THEME=argon-theme
+          # gutenberg/node_modules 是 npm install 的产物：下面那个 case 只匹配顶层条目名，
+          # 匹配不到 gutenberg/node_modules，会被 cp -a 整个打进包（数百 MB）。先删掉。
+          rm -rf gutenberg/node_modules
+          rm -rf dist-tmp "$THEME.zip"
+          mkdir -p "dist-tmp/$THEME"
+          # tools/ 是构建工具链（字体子集化、CSS 裁剪、图标码点生成），仅开发期需要，
+          # 含 FA6 原始字体与全量 CSS 作为构建输入，不进发布包。
+          for item in $(ls -A); do
+            case "$item" in
+              .git|.github|node_modules|.gitignore|tools|CODE_REVIEW.md|CODEBUDDY.md|README.md|README_en.md|CHANGELOG.md|dist-tmp|$THEME.zip)
+                continue ;;
+            esac
+            cp -a "$item" "dist-tmp/$THEME/"
+          done
+          ( cd dist-tmp && zip -r "../$THEME.zip" "$THEME" )
+          rm -rf dist-tmp
+          echo "=== 打包内容 ==="
+          unzip -l "$THEME.zip" | head -n 20
+          echo "=== 包内 version.json（应为当前 tag 的版本） ==="
+          unzip -p "$THEME.zip" "$THEME/version.json"
 
       - name: Commit version.json back to default branch
         run: |
@@ -81,3 +95,114 @@ jobs:
         with:
           files: argon-theme.zip
           generate_release_notes: true
+
+  dev-package:
+    # dev 分支推送：仅打包为构建产物供下载测试，
+    # 不校验版本号（dev 上 style.css 可能仍写着上一个已发布版本）、
+    # 不创建 Release、不回写 version.json —— 三者都会污染正式发版线。
+    name: Build dev package (preview)
+    if: github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build Gutenberg blocks
+        continue-on-error: true
+        working-directory: gutenberg
+        run: |
+          npm install
+          npm run build
+
+      - name: PHP syntax check
+        run: |
+          # 开发分支是试验场，语法错误必须拦在这里——不要等装到线上才发现整页 fatal。
+          # （v1.3.30 就因 functions.php 一处块注释含 */ 导致生产环境 E_PARSE。）
+          fail=0
+          while IFS= read -r f; do
+            out=$(php -l "$f" 2>&1) || { echo "::error::$out"; fail=1; }
+          done < <(find . -name '*.php' \
+                     -not -path './gutenberg/*' \
+                     -not -path './node_modules/*' \
+                     -not -path './theme-update-checker/*')
+          [ "$fail" -eq 0 ] || { echo "PHP 语法检查未通过，已中止打包"; exit 1; }
+          echo "全部 PHP 文件语法通过"
+
+      - name: Package theme tree (with dev marker)
+        env:
+          # GitHub 表达式经 env 传入，不写进 shell 正文。
+          # 早期版本把表达式直接写在未加引号的 heredoc 内，
+          # 会被 bash 当作变量展开而报bad substitution，set -e 下整步失败。
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          # 打包与注入构建标记合并为一步。
+          # 每个 step 是独立进程、变量不跨 step 共享，
+          # 因此 THEME 必须在同一步内定义并使用。
+          THEME=argon-theme
+          # gutenberg/node_modules 是 npm install 的产物：下面那个 case 只匹配顶层条目名，
+          # 匹配不到 gutenberg/node_modules，会被 cp -a 整个打进包（数百 MB）。先删掉。
+          rm -rf gutenberg/node_modules
+          rm -rf dist-tmp "$THEME.zip"
+          {
+            printf 'DEV BUILD - DO NOT USE IN PRODUCTION\n\n'
+            printf 'branch    : dev\n'
+            printf 'commit    : %s\n' "$GITHUB_SHA"
+            printf 'short     : %s\n' "$(echo "$GITHUB_SHA" | cut -c1-7)"
+            printf 'built at  : %s\n' "$(date -u +'%Y-%m-%d %H:%M UTC')"
+            printf 'run       : https://github.com/%s/actions/runs/%s\n' "$REPO" "$RUN_ID"
+          } > DEV-BUILD.txt
+          mkdir -p "dist-tmp/$THEME"
+          # tools/ 是构建工具链（字体子集化、CSS 裁剪、图标码点生成），仅开发期需要，
+          # 含 FA6 原始字体与全量 CSS 作为构建输入，不进发布包。
+          for item in $(ls -A); do
+            case "$item" in
+              .git|.github|node_modules|.gitignore|tools|CODE_REVIEW.md|CODEBUDDY.md|README.md|README_en.md|CHANGELOG.md|dist-tmp|$THEME.zip)
+                continue ;;
+            esac
+            cp -a "$item" "dist-tmp/$THEME/"
+          done
+          cp DEV-BUILD.txt "dist-tmp/$THEME/DEV-BUILD.txt"
+          rm -f DEV-BUILD.txt
+          # 这里【不】再删 dist-tmp，也【不】生成 zip —— 下一步直接上传解包后的主题目录。
+          # actions/upload-artifact 一定会把上传内容再包一层 zip：
+          # 上传 argon-theme.zip，下载得到的就是「装着 zip 的 zip」，
+          # 直接交给 WordPress 安装会报 incompatible_archive_theme_no_style
+          #（表现为「主题缺少 style.css 样式表」）；
+          # 上传目录本身，下载得到的 zip 顶层就是 argon-theme/，可直接安装。
+          echo "=== 打包内容 ==="
+          ls -la "dist-tmp/$THEME/style.css" "dist-tmp/$THEME/DEV-BUILD.txt"
+          echo "文件数: $(find "dist-tmp/$THEME" -type f | wc -l)"
+          echo "=== 顶层条目 ==="
+          ls "dist-tmp/$THEME"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          # 必须叫 argon-theme，【不要】把 commit sha 拼进来。
+          #
+          # 原因：artifact 名字会成为下载得到的 zip 的文件名，而 WordPress 装主题时
+          # 目录名取自这个文件名 —— wp-admin 上传走 File_Upload_Upgrader，它保留
+          # 上传文件的原始文件名，随后 WP_Upgrader::unpack_package() 用
+          # basename($package, '.zip') 决定解包目录，install_package() 再拿它作为
+          # 目标目录名。所以 artifact 叫 argon-theme-dev-<sha>，装出来的主题目录
+          # 就是 wp-content/themes/argon-theme-dev-<sha>（实测确实如此）。
+          #
+          # 上传【解包后的主题目录】而不是 argon-theme.zip：
+          # upload-artifact 对目录参数会把目录内容放在 artifact 根下（不再多包一层），
+          # 配合上面的名字，下载得到的 argon-theme.zip 解压后顶层就是 argon-theme/，
+          # WordPress 可直接安装。
+          #
+          # 构建信息（commit / 时间 / run 链接）写在包内的 DEV-BUILD.txt 里，
+          # 不靠文件名区分，所以去掉 sha 不丢信息。
+          name: argon-theme
+          path: dist-tmp/argon-theme
+          retention-days: 14
+          if-no-files-found: error

@@ -72,6 +72,57 @@ var argonStore = {
 	}
 };
 
+/* ——— 按需加载 JS / CSS ———
+   用途：把「只在交互时才需要」的 vendor 从首屏移出去。
+   被 fancybox（点击图片灯箱）与 pickr/nouislider（打开设置面板）使用，
+   清单由 header.php 按当前选项下发到 argonConfig.lazy_assets，
+   URL 一律走 $GLOBALS['assets_path']（可能是 CDN 基址），不可在 JS 里硬编码主题路径。
+
+   约定：
+   - 同一 URL 只加载一次（argonAssetCache 缓存 Promise）
+   - 加载失败时【清掉缓存项】并 reject，调用方可重试
+   - argonLoadAssets 会等 JS 与 CSS 【全部】就绪才 resolve —— 避免
+     「JS 先到、CSS 后到」造成的样式闪动（灯箱/取色器都会明显可见） */
+var argonAssetCache = {};
+function argonLoadScript(url){
+	if (argonAssetCache[url]){ return argonAssetCache[url]; }
+	argonAssetCache[url] = new Promise(function(resolve, reject){
+		var s = document.createElement('script');
+		s.src = url;
+		s.async = true;
+		s.onload = function(){ resolve(); };
+		s.onerror = function(){
+			delete argonAssetCache[url];
+			reject(new Error('argonLoadScript failed: ' + url));
+		};
+		document.head.appendChild(s);
+	});
+	return argonAssetCache[url];
+}
+function argonLoadStyle(url){
+	if (argonAssetCache[url]){ return argonAssetCache[url]; }
+	argonAssetCache[url] = new Promise(function(resolve, reject){
+		var l = document.createElement('link');
+		l.rel = 'stylesheet';
+		l.href = url;
+		l.onload = function(){ resolve(); };
+		l.onerror = function(){
+			delete argonAssetCache[url];
+			reject(new Error('argonLoadStyle failed: ' + url));
+		};
+		document.head.appendChild(l);
+	});
+	return argonAssetCache[url];
+}
+/* spec: { js: [url...], css: [url...] }；两者都缺省时立即 resolve */
+function argonLoadAssets(spec){
+	spec = spec || {};
+	var jobs = [];
+	(spec.js || []).forEach(function(u){ jobs.push(argonLoadScript(u)); });
+	(spec.css || []).forEach(function(u){ jobs.push(argonLoadStyle(u)); });
+	return Promise.all(jobs);
+}
+
 /* HTML 转义：供搜索、表情面板等全局调用。
    原先仅定义于实时搜索闭包内，导致外层 argonRenderRecentEmotions 调用时
    报 ReferenceError: escapeHtml is not defined。提升为顶层函数声明后全局可用。 */
@@ -351,6 +402,46 @@ function __(text){
 	}
 	changeToolbarTransparency();
 	document.addEventListener("scroll", changeToolbarTransparency, {passive: true});
+}();
+
+/* —— LQIP 占位 ——
+   缩略图的 LQIP 是挂在 <img> 自身的 background-image 上，加载中由 CSS 叠一层
+   blur（.post-thumbnail.lazyload.has-lqip），清晰图到位后把 blur 归零 ——
+   全程同一个元素，所以不会闪白。
+
+   这里只做一件事：清理历史遗留的状态类。占位的显隐完全交给 CSS，
+   不再需要 JS 逐个标记「已加载」。
+   （之前那套「包裹层 + 两层 img + 光晕 + 60ms 错开」已按需求撤掉：
+     光晕与懒加载的逐个加载叠在一起会一直闪，两层方案在换 src 时会露白底。） */
+!function(){
+	function cleanup(){
+		var els = document.querySelectorAll(".post-thumbnail-wrap, .argon-sk, .post-thumbnail-lqip");
+		for (var i = 0; i < els.length; i++){
+			var el = els[i];
+			if (el.classList.contains("post-thumbnail-wrap")){
+				/* 把包裹层里的 img 提出来，去掉包裹层 —— 老版本渲染的页面在 Pjax 后可能残留 */
+				var img = el.querySelector("img.post-thumbnail");
+				if (img && el.parentNode){
+					el.parentNode.insertBefore(img, el);
+				}
+				el.parentNode && el.parentNode.removeChild(el);
+			}else{
+				el.parentNode && el.parentNode.removeChild(el);
+			}
+		}
+		var lists = document.querySelectorAll(".article-list.has-skeleton");
+		for (var j = 0; j < lists.length; j++){
+			lists[j].classList.remove("has-skeleton");
+		}
+	}
+	if (document.readyState === "complete"){
+		cleanup();
+	}else{
+		document.addEventListener("DOMContentLoaded", cleanup);
+	}
+	if (window.jQuery){
+		jQuery(document).on("pjax:complete pjax:end", cleanup);
+	}
 }();
 
 /*搜索*/
@@ -665,6 +756,7 @@ if (argonConfig.waterflow_columns != "1") {
 	//博客设置
 	$toggleBlogSettings.on("click" , function(){
 		$("#float_action_buttons").toggleClass("blog_settings_opened");
+		argonEnsureSettingsAssets();   /* 按需加载 pickr / nouislider */
 	});
 	$("#close_blog_settings").on("click" , function(){
 		$("#float_action_buttons").removeClass("blog_settings_opened");
@@ -766,7 +858,13 @@ if (argonConfig.waterflow_columns != "1") {
 	$fabtns.removeClass("fabtns-unloaded");
 }();
 
-/*卡片圆角大小调整*/
+/*卡片圆角大小调整
+  拆成两段：CSS 变量的写入【即时】执行（不依赖 noUiSlider），
+  控件本身延迟到打开设置面板时才创建。
+  原因：localStorage 恢复里除了设置滑块位置，还调 setCardRadius() 写 --card-radius ——
+  那才是访客看到的视觉效果。若整块延后，保存过圆角的访客在页面加载时会看到默认圆角。
+  另外原实现【无守卫】直接调 noUiSlider.create()，nouislider 未加载时会抛
+  ReferenceError 并中断整个 argontheme.js 的后续执行，故这里也补上守卫。 */
 !function(){
 	function setCardRadius(radius, persist){
 		document.documentElement.style.setProperty('--card-radius', radius + "px");
@@ -774,35 +872,45 @@ if (argonConfig.waterflow_columns != "1") {
 			argonStore.set("card_radius", radius);
 		}
 	}
-	let slider = document.getElementById('blog_setting_card_radius');
-	noUiSlider.create(slider, {
-		start: [$("meta[name='theme-card-radius']").attr("content")],
-		step: 0.5,
-		connect: [true, false],
-		range: {
-			'min': [0],
-			'max': [30]
-		}
-	});
-	slider.noUiSlider.on('update', function (values){
-		let value = values[0];
-		setCardRadius(value, false);
-	});
-	slider.noUiSlider.on('set', function (values){
-		let value = values[0];
-		setCardRadius(value, true);
-	});
-	$(document).on("click" , "#blog_setting_card_radius_to_default" , function(){
-		slider.noUiSlider.set($("meta[name='theme-card-radius-origin']").attr("content"));
-		setCardRadius($("meta[name='theme-card-radius-origin']").attr("content"), false);
-		argonStore.set("card_radius", "");
-	});
-	/* 从 localStorage 恢复本访客的圆角偏好（服务端不再按 Cookie 渲染） */
-	let savedRadius = argonStore.get("card_radius", "");
-	if (savedRadius !== "" && !isNaN(parseFloat(savedRadius))){
-		try{ slider.noUiSlider.set(parseFloat(savedRadius)); }catch(e){}
+	/* —— 第一段：即时生效（不依赖 noUiSlider） —— */
+	var savedRadius = argonStore.get("card_radius", "");
+	var hasSavedRadius = (savedRadius !== "" && !isNaN(parseFloat(savedRadius)));
+	var initialRadius = hasSavedRadius
+		? savedRadius
+		: $("meta[name='theme-card-radius']").attr("content");
+	if (hasSavedRadius){
 		setCardRadius(savedRadius, false);
 	}
+	/* —— 第二段：控件按需创建（由设置面板打开时调用） —— */
+	var sliderReady = false;
+	function argonInitCardRadiusSlider(){
+		if (sliderReady){ return; }
+		if (typeof(noUiSlider) == "undefined"){ return; }
+		var slider = document.getElementById('blog_setting_card_radius');
+		if (!slider){ return; }
+		sliderReady = true;
+		noUiSlider.create(slider, {
+			start: [initialRadius],
+			step: 0.5,
+			connect: [true, false],
+			range: {
+				'min': [0],
+				'max': [30]
+			}
+		});
+		slider.noUiSlider.on('update', function (values){
+			setCardRadius(values[0], false);
+		});
+		slider.noUiSlider.on('set', function (values){
+			setCardRadius(values[0], true);
+		});
+		$(document).on("click" , "#blog_setting_card_radius_to_default" , function(){
+			slider.noUiSlider.set($("meta[name='theme-card-radius-origin']").attr("content"));
+			setCardRadius($("meta[name='theme-card-radius-origin']").attr("content"), false);
+			argonStore.set("card_radius", "");
+		});
+	}
+	window.argonInitCardRadiusSlider = argonInitCardRadiusSlider;
 }();
 
 /*评论区 & 发送评论*/
@@ -2118,6 +2226,116 @@ function argonLightboxCleanupScrollLock(){
 		de.style.removeProperty("--fancybox-scrollbar-compensate");
 	}
 }
+/* 关闭灯箱后把焦点还给触发元素，但【绝不滚动页面】。
+   背景：Fancybox 的 placeFocusBack（默认开启）在关闭时执行
+     const r = slide.triggerEl || option("triggerEl");
+     r && (et(r) ? ot(r) : r.focus());
+   et() 是「元素有多少落在视口内」的百分比：
+     · 在视口内 → 走 ot()，那里用 focus({preventScroll:true})，安全
+     · 不在视口内 → 走【裸 r.focus()】，浏览器会把该元素滚进视口
+   实测：点第 1 张图、在画廊里翻到第 8 张再关闭，页面从 652 直接滚到 4941（+4289px），
+   焦点落在第 8 个锚点上。用户看到的就是「关掉灯箱后页面跳走」。
+   画廊翻页后「当前图的锚点」本来就可能远在视口之外，所以这个跳变很容易触发。
+
+   对策：关掉 placeFocusBack（见 argonLightboxInit），改用下面这个函数恢复焦点 ——
+   它始终走 preventScroll 路径。 */
+var argonLightboxFocusTarget = null;
+/* 记下用户点的是哪个锚点（捕获阶段，先于 Fancybox 的委托绑定） */
+document.addEventListener("click", function(e){
+	var a = e.target && e.target.closest && e.target.closest("[data-fancybox]");
+	if (a){
+		argonLightboxFocusTarget = a;
+	}
+}, true);
+function argonLightboxRestoreFocus(){
+	var el = argonLightboxFocusTarget;
+	argonLightboxFocusTarget = null;
+	if (!el || typeof el.focus != "function"){
+		return;
+	}
+	if (!document.documentElement.contains(el)){
+		return; /* Pjax 换页后旧元素已不在文档里 */
+	}
+	var x = window.scrollX || window.pageXOffset || 0;
+	var y = window.scrollY || window.pageYOffset || 0;
+	try {
+		el.focus({ preventScroll: true });
+	} catch (err) {
+		try { el.focus(); } catch (err2) { return; }
+	}
+	/* 老浏览器会忽略 preventScroll，这里兜底复位。
+	   必须用 window.scrollTo —— Fancybox 自己用的是 document.body.scrollTo，
+	   而标准模式下滚动容器是 <html>，那样复位是无效的。 */
+	if ((window.scrollX || 0) !== x || (window.scrollY || 0) !== y){
+		try {
+			window.scrollTo({ left: x, top: y, behavior: "instant" });
+		} catch (err3) {
+			window.scrollTo(x, y);
+		}
+	}
+}
+/* 打开灯箱时的「从缩略图放大」动画（FLIP）。
+   为什么自己实现：Fancybox 的 Images(Zoom) 插件确实有这个效果，但它的时长不可调 ——
+   插件内部写死了 panTo({ friction: … })，Panzoom 的时长由 friction 决定，
+   CSS 变量完全参与不进来（实测 --f-transition-duration 设 0.2s/0.42s/1.5s，耗时都是 130ms）。
+   改用 FLIP：先把内容层平移到缩略图位置并缩到缩略图大小（此时禁用 transition），
+   强制一次布局后移除该状态，由 CSS transition 补间回原位 ——
+   时长与曲线就完全由 --argon-lb-duration / --argon-lb-easing 控制。
+
+   触发元素取自 argonLightboxFocusTarget（点击时在捕获阶段记录）。 */
+function argonLightboxFlipIn(){
+	var container = document.querySelector(".fancybox__container");
+	if (!container){
+		return;
+	}
+	var content = container.querySelector(".fancybox__content");
+	if (!content){
+		return;
+	}
+	var trigger = argonLightboxFocusTarget;
+	if (!trigger){
+		return;
+	}
+	var thumb = trigger.querySelector("img") || trigger;
+
+	/* 两个必须注意的点（都踩过）：
+	   ① Fancybox / Panzoom 是用【内联】transform 控制内容层的，
+	      内联样式压过任何选择器 —— 所以这里也走内联，用类选择器是压不过的。
+	   ② reveal 触发时内容层还停在轮播轨道的屏幕外位置，此刻量到的 rect 是过期的
+	      （实测会算出 1506px 这种离谱位移），所以要等一帧、等它归位后再量。 */
+	var prevTransform = content.style.transform;   /* 通常是 matrix(1, 0, 0, 1, 0, 0) */
+	requestAnimationFrame(function(){
+		if (!document.documentElement.contains(content)){
+			return;
+		}
+		var t, c;
+		try {
+			t = thumb.getBoundingClientRect();
+			c = content.getBoundingClientRect();
+		} catch (err) {
+			return;
+		}
+		if (!t.width || !t.height || !c.width || !c.height){
+			return;
+		}
+		var scale = t.width / c.width;
+		/* 缩略图不比内容小就没必要 FLIP；数值异常也直接跳过，宁可不动画也不要错位 */
+		if (!(scale > 0.05) || !(scale < 0.98) || !isFinite(scale)){
+			return;
+		}
+		var tx = (t.left + t.width / 2) - (c.left + c.width / 2);
+		var ty = (t.top + t.height / 2) - (c.top + c.height / 2);
+		if (!isFinite(tx) || !isFinite(ty)){
+			return;
+		}
+		/* 先无过渡地跳到缩略图的位置与大小，强制一次布局，再还原 —— 由 CSS transition 补间 */
+		content.style.transition = "none";
+		content.style.transform = "translate(" + tx.toFixed(2) + "px, " + ty.toFixed(2) + "px) scale(" + scale.toFixed(4) + ")";
+		void content.offsetWidth;
+		content.style.transition = "";
+		content.style.transform = prevTransform || "";
+	});
+}
 /* 独立兜底：监听 <html> 的 with-fancybox 类。一旦灯箱关闭后该类仍残留
    （.fancybox__container 已不存在），强制复位。该机制不依赖 Fancybox 内部销毁
    流程，可覆盖其清理被中断/异常的场景；正常清理时零副作用。*/
@@ -2149,12 +2367,47 @@ function argonLightboxInit(){
 	var showThumbs = true;
 	try {
 		Fancybox.bind('[data-fancybox]', {
+			/* 关掉 Fancybox 自带的「关闭时把焦点还给触发元素」——
+			 它对【不在视口内】的锚点会走裸 focus()，浏览器随即把锚点滚进视口，
+			 表现为「关掉灯箱后页面跳走」（实测画廊翻页后关闭会跳 4289px）。
+			 焦点改由 argonLightboxRestoreFocus() 恢复，始终带 preventScroll。 */
+			placeFocusBack: false,
 			Thumbs: {
 				showOnStart: showThumbs,
 				type: "classic"
 			},
+			/* 关闭时 Fancybox 的 Images(Zoom) 插件会把容器缩放回缩略图的位置，
+			   但它的动画时长【不可调】：插件内部写死了
+			     panTo({ ..., friction: zoomOpacity ? .2 : .33, ignoreBounds: true })
+			   Panzoom 的时长完全由 friction 决定，CSS 变量不参与。
+			   实测把 --f-transition-duration 设为 0.2s / 0.42s / 1.5s，
+			   开关耗时都是 130ms 左右 —— 该变量对图片灯箱【毫无作用】。
+
+			   所以这里关掉 Zoom 的缩放，让动画交回 CSS 的 showClass / hideClass
+			   （argon-lb-in / argon-lb-out，见 style.css），
+			   时长与曲线才能真正可调。代价是不再「缩放回正文图的位置」，
+			   换来的是可控、更从容的淡入淡出。
+			   若想恢复缩放效果，把 zoom 改回 true 即可（那时 CSS 时长会失效）。 */
+			/* 打开时的「从缩略图放大」动画由主题自己实现（见 argonLightboxFlipIn）：
+			   用 FLIP —— 先把内容层平移到缩略图的位置并缩到缩略图大小，
+			   下一帧移除该状态，由 CSS transition 补间回原位。
+			   这样时长与曲线完全由 --argon-lb-duration / --argon-lb-easing 控制，
+			   而 Fancybox 自带的 Zoom 插件做不到（它的 panTo 把 friction 写死了）。 */
+			Images: {
+				zoom: false,
+				zoomOpacity: true
+			},
+			showClass: "argon-lb-in",
+			hideClass: "argon-lb-out",
 			on: {
-				destroy: function () { argonLightboxCleanupScrollLock(); }
+				/* reveal 在图片加载完、内容层已完成布局之后触发，正是做 FLIP 的时机 */
+				reveal: function () {
+					argonLightboxFlipIn();
+				},
+				destroy: function () {
+					argonLightboxCleanupScrollLock();
+					argonLightboxRestoreFocus();
+				}
 			}
 		});
 		/* 监听 with-fancybox 类，提供不依赖 Fancybox 内部销毁流程的兜底清理 */
@@ -2173,6 +2426,67 @@ function argonLightboxReload(){
 	/* 事件委托已覆盖 Pjax 新内容，无需重复绑定；仅确保首次加载时已完成绑定 */
 	argonLightboxInit();
 }
+
+/* —— fancybox 按需加载 ——
+   fancybox（gzip 47.9KB）原先每页都用 defer 加载，只是不阻塞、仍要下载一遍。
+   现改为首次需要时才注入 JS/CSS：
+     · 指针移入 / 触摸开始 / 键盘聚焦 [data-fancybox] → 预热，通常早于 click 数百毫秒
+     · 真的点了但还没就绪 → 拦住默认行为，加载完成后重放这次点击
+
+   为什么 click 必须拦：未绑定时 [data-fancybox] 就是一个普通的
+   <a href="图片URL">，浏览器会【直接跳转到图片】把用户带离文章。
+   已就绪后本段完全不再介入，全部交给 Fancybox 自己的委托绑定。 */
+!function(){
+	function ready(){
+		return typeof(Fancybox) != "undefined" && argonLightboxBound;
+	}
+	function spec(){
+		return argonConfig.lazy_assets && argonConfig.lazy_assets.fancybox;
+	}
+	var pending = null;
+	function ensure(){
+		if (ready()){ return Promise.resolve(); }
+		if (pending){ return pending; }
+		var s = spec();
+		if (!s){
+			return Promise.reject(new Error('fancybox assets not configured'));
+		}
+		pending = argonLoadAssets(s).then(function(){
+			/* argonLightboxInit 内部有 typeof 与幂等守卫，可安全重复调用 */
+			argonLightboxInit();
+		})['catch'](function(err){
+			pending = null;   /* 失败清缓存，允许下次点击重试 */
+			if (window.console){ console.warn('fancybox lazy load failed:', err); }
+		});
+		return pending;
+	}
+	$(document).on('pointerover touchstart focusin', '[data-fancybox]', function(){
+		ensure();
+	});
+	document.addEventListener('click', function(e){
+		var a = e.target && e.target.closest && e.target.closest('[data-fancybox]');
+		if (!a){ return; }
+		if (e.__argonLazyReplay){ return; }        /* 自己重放的事件，放行 */
+		if (ready()){ return; }                    /* 已就绪，交给 Fancybox */
+		if (e.defaultPrevented){ return; }
+		/* 清单里没有 fancybox（例如开了 zoomify 选项）时【不拦截】：
+		   此时锚点是普通链接，保持与改动前一致的默认行为（浏览器自行跳转）。
+		   否则会变成「点了没反应」，比原来更糟。 */
+		if (!spec()){ return; }
+		/* 修饰键 / 中键 / 右键：尊重浏览器默认行为（新标签打开等），不拦 */
+		if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey){ return; }
+		e.preventDefault();
+		e.stopPropagation();
+		ensure().then(function(){
+			if (typeof(Fancybox) == "undefined"){ return; }   /* 加载失败，放弃 */
+			var ev = new MouseEvent('click', {
+				bubbles: true, cancelable: true, view: window, button: 0
+			});
+			ev.__argonLazyReplay = true;
+			a.dispatchEvent(ev);
+		});
+	}, true);   /* 捕获阶段：必须早于 Fancybox 的 document 冒泡委托 */
+}();
 
 /* —— 浏览量异步打点 ——
    页面渲染期已不再计数（无 Set-Cookie、无写库），改为浏览器端上报 admin-ajax。
@@ -2321,6 +2635,46 @@ function argonCommentPrivInit(){
 argonLightboxInit();
 
 /*Lazyload*/
+/* 等图片【真正加载完成】再取消模糊。
+   jquery.lazyload 的 load 回调是在 attr("src", ...) 之后【立刻】触发的，
+   那时图片才刚开始下载 —— 直接加 lazyload-loaded 会让模糊在图片只下了一半时
+   就被取消，观感是「半张图慢慢变清晰」，很差。
+   这里改成监听图片自身的 load 事件（缓存命中时 complete 已为真，直接收尾）。
+   失败也要收尾，否则会永远停在模糊状态。
+   判据用 naturalWidth > 1：占位图是 1×1 的 SVG，不能被当成「已加载」。 */
+function argonWhenImageReady(img, done){
+	if (!img) { done(); return; }
+	/* 缓存命中：complete 为真且不是 1×1 占位图时，再等一次 decode() 就收尾。
+	   判据用 naturalWidth > 1 —— 占位图是 1×1 的 SVG，不能被当成「已加载」。 */
+	if (img.complete && img.naturalWidth > 1 && img.naturalHeight > 1) {
+		/* complete 只表示数据到齐，decode() 才保证「已解码、可立即绘制」。
+		   少这一步就会出现「模糊已经取消了，但图片还是糊的」。 */
+		if (img.decode) { img.decode().then(done).catch(done); } else { done(); }
+		return;
+	}
+	/* 两个条件都满足才收尾：
+	   ① load 事件（数据下载完成）
+	   ② decode()（解码完成，可立即绘制）
+	   只等 load 是不够的 —— naturalWidth 在文件头解析完就有了，那时图片数据还没下完，
+	   浏览器会边下边逐行画，于是「模糊已经取消、图还在一点点变清晰」，观感很差。 */
+	var pending = 2;
+	var fired = false;
+	function finish(){
+		pending--;
+		if (pending > 0 || fired) { return; }
+		fired = true;
+		img.removeEventListener("load", finish);
+		img.removeEventListener("error", finish);
+		done();
+	}
+	img.addEventListener("load", finish);
+	img.addEventListener("error", finish);
+	if (img.decode) {
+		img.decode().then(finish).catch(finish);
+	} else {
+		finish();
+	}
+}
 function lazyloadInit(){
 	if (argonConfig.lazyload == false){
 		return;
@@ -2334,28 +2688,47 @@ function lazyloadInit(){
 	if (lazyBaseOptions.effect == "none"){
 		delete lazyBaseOptions.effect;
 	}
-	$("article img.lazyload:not(.lazyload-loaded) , .related-post-thumbnail.lazyload:not(.lazyload-loaded) , .shuoshuo-preview-container img.lazyload:not(.lazyload-loaded)").lazyload(
-		Object.assign({}, lazyBaseOptions, {
-			load: function () {
-				$(this).addClass("lazyload-loaded");
-				$(this).parent().removeClass("lazyload-container-unload");
-				/*表格内懒加载图片加载后会使 border-collapse 重排变细，强制修复*/
-				if ($(this).closest("table, .wp-block-table").length){
-					tableReflow();
-				}
-			}
-		})
-	);
-	$(".post-thumbnail.lazyload:not(.lazyload-loaded)").lazyload(
-		Object.assign({}, lazyBaseOptions, {
-			threshold: argonConfig.lazyload.threshold,
-			load: function () {
-				$(this).addClass("lazyload-loaded");
-				$(this).parent().removeClass("lazyload-container-unload");
-				waterflowInit();
-			}
-		})
-	);
+	/* 正文图片也【不用 fadeIn】——
+	   jQuery 的 fadeIn 会把元素 display:none → block 并从 opacity:0 动画到 1，
+	   那段时间元素【连同它自己的 LQIP 背景】完全不可见 ——
+	   正文里就会露一下底色再淡入，观感是「抽搐/抖一下」。
+	   （只给缩略图关掉是不够的，正文图走的是同一个 lazyBaseOptions。）
+	   过渡交给 CSS：加载中 filter: blur()，到位后归零，从模糊变清晰。 */
+	var contentOptions = Object.assign({}, lazyBaseOptions, {
+		  		load: function () {
+  			var img = this;
+  			var $img = $(img);
+  			argonWhenImageReady(img, function () {
+  				$img.addClass("lazyload-loaded");
+  				$img.parent().removeClass("lazyload-container-unload");
+  				/*表格内懒加载图片加载后会使 border-collapse 重排变细，强制修复*/
+  				if ($img.closest("table, .wp-block-table").length){
+  					tableReflow();
+  				}
+  			});
+  		}
+	});
+	delete contentOptions.effect;
+	$("article img.lazyload:not(.lazyload-loaded) , .related-post-thumbnail.lazyload:not(.lazyload-loaded) , .shuoshuo-preview-container img.lazyload:not(.lazyload-loaded)").lazyload(contentOptions);
+	/* 缩略图【不用 fadeIn】——
+	   jQuery 的 fadeIn 会把元素 display:none → block 并从 opacity:0 动画到 1，
+	   那段时间元素完全不可见：既看不到 LQIP 背景，也看不到清晰图，
+	   露出来的是卡片白底 —— 观感就是「闪一下白色」。
+	   这里改用无效果的加载，过渡交给 CSS（filter/transform 从模糊到清晰）。 */
+	var thumbOptions = Object.assign({}, lazyBaseOptions, {
+		threshold: argonConfig.lazyload.threshold,
+		  		load: function () {
+  			var img = this;
+  			var $img = $(img);
+  			argonWhenImageReady(img, function () {
+  				$img.addClass("lazyload-loaded");
+  				$img.parent().removeClass("lazyload-container-unload");
+  				waterflowInit();
+  			});
+  		}
+	});
+	delete thumbOptions.effect;
+	$(".post-thumbnail.lazyload:not(.lazyload-loaded)").lazyload(thumbOptions);
 	$(".comment-item-text .comment-sticker.lazyload").lazyload(Object.assign({}, lazyBaseOptions, {load: function(){$(this).removeClass("lazyload")}}));
 }
 lazyloadInit();
@@ -2447,6 +2820,7 @@ if ($("html").hasClass("banner-as-cover")){
 
 /*Pjax*/
 var pjaxScrollTop = 0, pjaxLoading = false;
+/* FLIP 飞入用：换页前记下被点卡片的 id 与位置，换页后在新 DOM 里找到它再飞。
 /*Pjax 换页后表格 border-collapse 重排：懒加载图片加载或 Web 字体(FOUT)就绪都会使
   折叠边框按子像素重绘，偶发变细/缺失；强制一次同步重排可修复（纯 CSS 无法自愈）*/
 function tableReflow(){
@@ -2485,7 +2859,13 @@ $(document).pjax("a[href]:not([no-pjax]):not(.no-pjax):not([target='_blank']):no
 	NProgress.start();
 	pjaxLoading = true;
 }).on('pjax:afterGetContainers', function(e, f, g) {
-	if (g.is("#main article.post-preview a.post-title")){
+	/* 选择器必须同时匹配两种标记：
+	     · 现在的：<h2 class="post-title"><a href>…</a></h2>   —— 类在 h2 上，a 是后代
+	     · 上游的：<a class="post-title">…</a>                 —— 类在 a 上
+	   标题语义化（列表标题包进 <h2>，见 SEO 那批改动）把类从 <a> 移到了 <h2>，
+	   而这里原来只判 `a.post-title`，于是【进入动画从此完全不触发】。
+	   其余逻辑保持与上游一致 —— 不要在这里自己发明新的动画。 */
+	if (g.is("#main article.post-preview .post-title a") || g.is("#main article.post-preview a.post-title")){
 		let $card = $(g.parents("article.post-preview")[0]);
 		let waterflowOn = false;
 		if ($("#main").hasClass("waterflow")){
@@ -2499,6 +2879,12 @@ $(document).pjax("a[href]:not([no-pjax]):not(.no-pjax):not([target='_blank']):no
 		if ($("html").hasClass("is-home") && $("html").hasClass("banner-as-cover")){
 			offsetTop = $($card).offset().top - window.outerHeight * 0.418;
 		}
+		/* 这里的位移是【给旧卡片看的】：请求期间把被点的卡片挪到列表顶部，
+		   .post-list-pjax-loading 再把其余卡片压成透明 ——
+		   给用户的即时反馈就是「列表收拢 + 点动画」。
+		   新内容到位时整片 DOM 会被替换，所以不需要在这里收尾。
+		   注意：.card 上有 animation: card-show，CSS 动画会覆盖普通内联声明，
+		   所以这条 transform 实际上不会生效 —— 上游也是这个行为，保持不动。 */
 		$card.css("transform" , "translateY(-" + offsetTop + "px)");
 		if (waterflowOn){
 			$card.css("left", "10px");
@@ -2530,6 +2916,13 @@ $(document).pjax("a[href]:not([no-pjax]):not(.no-pjax):not([target='_blank']):no
 }).on('pjax:complete', function() {
 	pjaxLoading = false;
 	NProgress.inc();
+	/* 兜底清理：请求期间加在列表上的类。
+	   .post-list-pjax-loading .post-preview 是 opacity:0 + pointer-events:none，
+	   正常随 DOM 替换一起消失；但若某次替换没发生（请求失败、被中断等），
+	   留着会让整个列表永久隐身且点不动。上游没有这一步，属于防御性补充。 */
+	$("#main").removeClass("post-list-pjax-loading");
+	$("#main article.post-preview").removeClass("post-pjax-loading");
+	$("#main .loading-css-animation").remove();
 	try{
 		if (MathJax != undefined){
 			if (MathJax.Hub != undefined){
@@ -3014,8 +3407,21 @@ function hex2str(hex){
 	return rgb2str(hex2rgb(hex));
 }
 //颜色选择器 & 切换主题色
-if ($("meta[name='argon-enable-custom-theme-color']").attr("content") == 'true'){
-	let themeColorPicker = new Pickr({
+/* pickr（gzip 27KB 含 CSS）已改为【按需加载】：打开设置面板时才创建控件。
+   注意两点：
+   1) themeColorPicker 提升为模块级变量。原先是 let 声明在这个 if 块【内部】，
+      而 argonThemeColorPrivInit() 在块外引用它 —— 标识符不在作用域，typeof 得
+      "undefined"，导致「把控件同步成访客保存的颜色」那段从未生效（还被 try/catch 吞掉）。
+      表现为：保存过主题色后重开面板，取色器显示的是默认色。
+   2) 控件创建后要主动 setColor 同步当前生效色，否则面板里的取色器与实际颜色不一致。 */
+var themeColorPicker = null;
+function argonInitThemeColorPicker(){
+	if (themeColorPicker){ return; }
+	if (typeof(Pickr) == "undefined"){ return; }
+	if ($("meta[name='argon-enable-custom-theme-color']").attr("content") != 'true'){ return; }
+	if (!document.getElementById('theme-color-picker')){ return; }
+
+	themeColorPicker = new Pickr({
 		el: '#theme-color-picker',
 		container: 'body',
 		theme: 'monolith',
@@ -3100,7 +3506,43 @@ if ($("meta[name='argon-enable-custom-theme-color']").attr("content") == 'true')
 		_argonOrigReposition();
 		argonFixPickrPosition(themeColorPicker);
 	};
+
+	/* 同步成访客【当前生效】的颜色：有 localStorage 偏好用偏好，否则用站点默认色。
+	   原实现想做的正是这件事，但因作用域问题从未生效。 */
+	var saved = argonStore.get("theme_color", "");
+	var cur = (saved && /^#[0-9a-fA-F]{6}$/.test(saved))
+		? saved
+		: ($("meta[name='theme-color-origin']").attr("content") || "").toUpperCase();
+	if (cur){
+		try{ themeColorPicker.setColor(cur); }catch(e){}
+	}
 }
+
+/* —— 设置面板依赖的 vendor 按需加载 ——
+   面板里的「主题色」取色器（pickr）与「圆角」滑块（nouislider）都只在打开面板时才需要，
+   合计 gzip 35.3KB，原先每页都加载。现改为首次打开面板（或指针移入设置按钮时预热）才注入。
+   pending 缓存保证并发/快速开合时只加载一次；失败时清缓存允许重试。
+   argonInitThemeColorPicker / argonInitCardRadiusSlider 各自幂等，可安全重复调用。 */
+var argonSettingsAssetsPending = null;
+function argonEnsureSettingsAssets(){
+	if (argonSettingsAssetsPending){ return argonSettingsAssetsPending; }
+	var la = argonConfig.lazy_assets || {};
+	argonSettingsAssetsPending = Promise.all([
+		la.pickr      ? argonLoadAssets(la.pickr)      : Promise.resolve(),
+		la.nouislider ? argonLoadAssets(la.nouislider) : Promise.resolve()
+	]).then(function(){
+		argonInitThemeColorPicker();
+		if (window.argonInitCardRadiusSlider){ window.argonInitCardRadiusSlider(); }
+	})['catch'](function(err){
+		argonSettingsAssetsPending = null;
+		if (window.console){ console.warn('settings assets lazy load failed:', err); }
+	});
+	return argonSettingsAssetsPending;
+}
+/* 预热：指针移入 / 键盘聚焦设置按钮时就先把资源取回来，掩盖加载延迟 */
+$(document).on('pointerover focusin', '#fabtn_toggle_blog_settings_popup', function(){
+	argonEnsureSettingsAssets();
+});
 function pickrObjectToHEX(color){
 	let HEXA = color.toHEXA();
 	return ("#" + HEXA[0] + HEXA[1] + HEXA[2]).toUpperCase();

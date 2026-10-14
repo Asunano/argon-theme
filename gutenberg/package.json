@@ -11,7 +11,6 @@
     "@wordpress/compose": "^4.2.0",
     "@wordpress/data": "^5.2.0",
     "cgb-scripts": "1.23.1",
-    "font-awesome": "^4.7.0",
     "is-whitespace-character": "^2.0.0"
   }
 }

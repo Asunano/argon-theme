@@ -3,7 +3,10 @@
 <div class="page-information-card-container">
 	<div class="page-information-card card bg-gradient-secondary shadow-lg border-0" <?php if (isset($_GET['post_type'])){echo 'style="animation: none;"';}?>>
 		<div class="card-body">
-			<h3 class="text-black mr-2 d-inline-block">	<?php echo esc_html( get_search_query() );?> </h3>
+			<?php /* 搜索页主标题用 h1（原为 h3）：这是该页唯一的主标题。
+			         此处不在 <article> 内，不受 style.css 的 article h1..h6 外边距规则影响；
+			         保留 d-inline-block 以维持与后面「的搜索结果」同一行的排版。 */ ?>
+			<h1 class="text-black mr-2 d-inline-block">	<?php echo esc_html( get_search_query() );?> </h1>
 			<p class="lead text-black mt-0 d-inline-block">
 				<?php _e('的搜索结果', 'argon');?>
 			</p>
@@ -32,8 +35,19 @@
 						?>
 					</div>
 					<script>
+					/* 必须包 ready 判定：argon_js_merged 已改 defer，
+					   解析期执行到这里时 jQuery 还没定义，会抛 $ is not defined。
+					   三态判定不可省略 —— 若脚本注入时文档已就绪，只挂 DOMContentLoaded 会永不触发。 */
+					(function(fn){
+						if (document.readyState === "loading"){
+							document.addEventListener("DOMContentLoaded", fn);
+						}else{
+							fn();
+						}
+					})(function(){
 						$(".search-filter").prop("checked", false);
 						$("<?php echo "#search_filter_" . implode(",#search_filter_", $current_filters_type); ?>").prop("checked", true);
+					});
 					</script>
 			<?php } ?>
 			<p class="text-black mt-3 mb-0 opacity-8">

@@ -1,0 +1,31 @@
+emoji-sprite.svg / emoji-sprite-map.json —— 图形素材来源与许可
+============================================================
+
+本目录下的 emoji-sprite.svg 由 Twitter Twemoji 的图形资源构建而成。
+
+  Twemoji
+  Copyright 2020 Twitter, Inc and other contributors
+  Graphics licensed under CC-BY 4.0: https://creativecommons.org/licenses/by/4.0/
+  https://github.com/jdecked/twemoji
+
+Twemoji 的图形采用 CC-BY 4.0 许可，该许可【要求署名】。因此本文件即为
+该署名声明，请勿删除。
+
+构建方式（可复现）：
+
+  node tools/emoji/gen-sprite.js --extra 2b50
+
+素材取自 npm 包 @twemoji/svg@15.0.0（已固定版本以保证产物稳定）。
+sprite 中包含的符号集合 = emotions.php 里「Emoji」分组的全部表情
+∪ 通过 --extra 显式追加的、正文实际用到的 emoji。
+
+为什么不打包 Twemoji 全量资源：
+  全量 Twemoji 有数千个符号。原先的 sprite 含 135 个（452.0 KB raw /
+  111.1 KB gzip），但把测试站全部 124 个页面的 HTML 扫一遍，只有 2 个
+  符号真的出现过，其余 133 个从未出现 —— 即 98% 的字节是为不会用到的
+  图形付的。现在只覆盖主题自己提供的表情面板，体积降到 52.1 KB raw /
+  14.7 KB gzip。
+
+未收录的 emoji 如何处理：
+  assets/js/argon-emoji-sprite.js 在映射表里查不到某个 emoji 时会
+  【保留原字符】，由系统 emoji 字体渲染，不会出现空白图标。

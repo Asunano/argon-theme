@@ -76,43 +76,189 @@
 	<?php }else{ ?>
 	<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5">
 	<?php } ?>
-	<?php /* 字体域名资源提示：加速异步 googlefont 的 DNS/连接建立，减少 FOUT 时长（不影响渲染阻塞） */ ?>
+	<?php /* 字体域名资源提示：仅衬线模式仍会请求 Google（Noto Serif SC）时才需要。
+	         Open Sans 已改为自托管，非衬线模式下这些 preconnect/dns-prefetch 只会白白多开连接。 */ ?>
+	<?php if (argon_get_option('argon_disable_googlefont') != 'true' && get_option('argon_font') == 'serif') { ?>
 	<link rel="preconnect" href="https://fonts.googleapis.com">
 	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 	<link rel="dns-prefetch" href="https://fonts.googleapis.com">
+	<?php } ?>
 	<?php /* 预加载遮罩：关键样式内联，确保首屏瞬时出现、不依赖异步 CSS，避免遮罩自身闪烁 */ ?>
 	<?php if (get_option('argon_enable_preloader') != 'false') { ?>
 	<style>
 	/* 背景跟随主题深浅：浅色白(#fff)，深色统一用有设计的深灰(非纯黑) */
-	#argon-preloader{position:fixed;inset:0;z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--argon-preloader-bg,#fff);transition:opacity .6s ease;will-change:opacity;}
+	/* 容器负责定位、层级与【mask 化开】。
+	   mask 放在容器上而不是只放背景层：这样遮罩色与加载内容会【一起】从中心化开、
+	   一起消失 —— 加载内容不会在遮罩散开之后还孤零零留在屏幕上。
+	   （加载内容自身不做模糊，见下面的关键帧；模糊只由 .argon-preloader__blur 负责。） */
+	#argon-preloader{position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:none;
+		--argon-reveal:0%;
+		-webkit-mask-image:radial-gradient(circle at 50% 50%,transparent calc(var(--argon-reveal) - 7%),#000 var(--argon-reveal));
+		mask-image:radial-gradient(circle at 50% 50%,transparent calc(var(--argon-reveal) - 7%),#000 var(--argon-reveal));
+	}
+	/* 遮罩色单独一层，便于深浅色变量与将来替换 */
+	.argon-preloader__bg{position:absolute;inset:0;background:var(--argon-preloader-bg,#fff);}
 	/* 退出：遮罩整体淡出；模糊作用在内层内容(纯色遮罩模糊不可见) */
-	#argon-preloader.ar--hidden,#argon-preloader.argon-preloader--hidden{opacity:0;pointer-events:none;}
+	/* 退场【只靠背景层的 mask 化开】，容器整体不再淡出。
+	   原来这里是 opacity:0 —— 拆层之后基础规则里已经没有 opacity 的过渡了，
+	   于是容器会瞬间变透明、连背景层一起消失，化开动画根本来不及显示，
+	   看起来就「只有模糊、没有化开」。这里只保留 pointer-events。 */
+	#argon-preloader.ar--hidden,#argon-preloader.argon-preloader--hidden{pointer-events:none;}
 	/* 仅当深浅开关真正打开(.darkmode)时用深色(纯黑)，amoled-dark 只是纯黑变体修饰，不能单独生效 */
 	.darkmode{--argon-preloader-bg:#000;}
 	.darkmode.amoled-dark{--argon-preloader-bg:#000;}
-	.argon-preloader__inner{display:flex;flex-direction:column;align-items:center;animation:argon-preloader-in 1.2s ease both;}
+	/* 入场动画 0.5s。
+	   原来是 1.2s —— 但退场的触发条件是「样式表就绪 + 字体就绪（超时 1.5s）+ 最短 150ms」，
+	   快网下大约 300ms 就会开始，于是 1.2s 的入场被【拦腰截断】：
+	   加载内容还没淡入完就开始退场，观感很突兀。
+	   0.5s 配合下面 JS 里 550ms 的最短可见时长，入场总能跑完，退场再接手。 */
+	.argon-preloader__inner{position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;text-align:center;animation:argon-preloader-in 0.5s ease both;}
 	#argon-preloader.ar--hidden .argon-preloader__inner,#argon-preloader.argon-preloader--hidden .argon-preloader__inner{animation:argon-preloader-out 2s ease forwards;}
-	/* 旋转圈：主题色弧 + 主题色浅轨道，浅底深底都清晰可见 */
-	.argon-preloader__spinner{width:56px;height:56px;border:5px solid rgba(94,114,228,.25);border-top-color:var(--themecolor,#5e72e4);border-radius:50%;animation:argon-spin 1s linear infinite,argon-glow 2.4s ease-in-out infinite;}
-	.argon-preloader__text{margin-top:18px;color:var(--themecolor,#5e72e4);font-size:15px;letter-spacing:.2em;}
-	.argon-preloader__text::after{content:'';animation:argon-dots 1.8s steps(1,end) infinite;}
-	@keyframes argon-spin{to{transform:rotate(360deg);}}
-	/* 旋转圈外发光脉冲 */
-	@keyframes argon-glow{0%,100%{box-shadow:0 0 0 0 rgba(94,114,228,0);}50%{box-shadow:0 0 16px 2px rgba(94,114,228,.4);}}
-	/* 内层渐入：从深模糊浮现，渐变转浅模糊再清晰（与消失动画同款渐变模糊） */
+		/* 内层渐入：从深模糊浮现 → 浅模糊 → 清晰（进场前是糊的）。
+	   时长 0.5s（见上面的 animation）。
+	   注意：退场动画会用 animation 简写【整体替换】这条入场动画，
+	   所以入场必须在退场开始之前跑完，否则退场会从它自己的 0%（blur(0)）起步，
+	   文字会「从模糊突然变清晰」再变模糊 —— 比不加模糊更难看。
+	   为此把下面 JS 里的最短可见时长提到了 550ms（> 0.5s）。 */
 	@keyframes argon-preloader-in{
-		0%   {opacity:0;   filter:blur(16px);transform:scale(1.04);}  /* 深模糊浮现 */
-		60%  {opacity:1;   filter:blur(4px); transform:scale(1.02);}  /* 渐变转浅模糊 */
-		100% {opacity:1;   filter:blur(0);   transform:scale(1);}     /* 清晰 */
+		0%   {opacity:0; filter:blur(16px); transform:scale(1.04);}
+		60%  {opacity:1; filter:blur(4px);  transform:scale(1.02);}
+		100% {opacity:1; filter:blur(0);    transform:scale(1);}
 	}
-	/* 内层渐出：先迅速加深到深模糊，再渐变回落到浅模糊并淡出（优雅的渐变模糊） */
+		/* 内层渐出：清晰 → 迅速加深到深模糊 → 回落一点并淡出（退场时是糊的）。
+	   模糊峰值放在 30%（原来主题是 40%），让「糊起来」来得更快一点；
+	   峰值也略增到 18px，在 2s 的退场里更容易看清这段渐变。 */
 	@keyframes argon-preloader-out{
-		0%   {opacity:1;   filter:blur(0);   transform:none;}
-		40%  {opacity:1;   filter:blur(16px);transform:scale(1.04);}  /* 深模糊 */
-		100% {opacity:0;   filter:blur(4px); transform:scale(1.05);}  /* 渐变转浅模糊后淡出 */
+		0%   {opacity:1; filter:blur(0);    transform:scale(1);}
+		30%  {opacity:1; filter:blur(18px); transform:scale(1.03);}
+		100% {opacity:0; filter:blur(4px);  transform:scale(1.05);}
 	}
 	/* 加载文字动态省略号 */
 	@keyframes argon-dots{0%{content:'';}25%{content:'.';}50%{content:'..';}75%{content:'...';}100%{content:'';}}
+
+	/* ============================================================
+	   首屏内容：四行（欢迎语 / 站点名 / 进度条 / 加载提示）
+	   ------------------------------------------------------------
+	   尺寸全部由一个基准 --argon-lds 派生，随视口缩放：
+	     手机 48~60px，桌面 60~120px，超宽屏 132px
+	   三行字号各自独立缩放，且断点两侧连续（手机段上限 = 桌面段下限），
+	   避免「屏幕变大、组件反而变小」这种回缩。
+
+	   关于标签：这里用 div + h1/h2 的【字号样式】，不是真的 <h1>/<h2>。
+	   预加载器在 header.php 里，页面本身已经有 h1（文章标题或站点名），
+	   再加一个重复的 h1 会伤 SEO —— 所以刻意不用真标签。
+	   ============================================================ */
+	#argon-preloader{
+		--argon-lds:clamp(60px,7vw,120px);
+		--argon-ld-h2:clamp(12px,1.05vw,17px);
+		--argon-ld-h1:clamp(24px,2.9vw,46px);
+		--argon-ld-txt:clamp(11px,.95vw,14px);
+	}
+	@media (max-width:560px){#argon-preloader{--argon-lds:clamp(48px,12vw,60px);}}
+	@media (min-width:2000px){#argon-preloader{--argon-lds:132px;}}
+	/* 背景柔光：让首屏不至于太空，但不抢主体 */
+	.argon-preloader__glow{position:absolute;left:50%;top:44%;width:calc(var(--argon-lds) * 5.4);height:calc(var(--argon-lds) * 5.4);margin:calc(var(--argon-lds) * -2.7) 0 0 calc(var(--argon-lds) * -2.7);border-radius:50%;pointer-events:none;z-index:-1;background:radial-gradient(circle,rgba(94,114,228,.15) 0%,rgba(94,114,228,.05) 42%,transparent 70%);animation:argon-glow-breathe 3.6s ease-in-out infinite;}
+	@keyframes argon-glow-breathe{0%,100%{transform:scale(.92);opacity:.7;}50%{transform:scale(1.06);opacity:1;}}
+	/* ① 欢迎语 —— h2 字号：小、灰、字距宽（text-indent 抵消末字字距，视觉居中） */
+	.argon-preloader__welcome{font-size:var(--argon-ld-h2);font-weight:600;letter-spacing:.34em;text-indent:.34em;color:#9aa0b4;margin-bottom:calc(var(--argon-lds) * .1);}
+	.darkmode .argon-preloader__welcome{color:#767d95;}
+	/* ② 站点名 —— h1 字号：大、粗、深色、字距收紧 */
+	.argon-preloader__sitename{font-size:var(--argon-ld-h1);font-weight:800;letter-spacing:-.01em;line-height:1.18;color:#1f2333;max-width:min(86vw,720px);}
+	.darkmode .argon-preloader__sitename{color:#eef1f8;}
+	/* ③ 进度条 */
+	.argon-preloader__bar{position:relative;margin-top:calc(var(--argon-lds) * .3);width:min(46vw,320px);height:max(3px,calc(var(--argon-lds) * .032));border-radius:99px;background:rgba(94,114,228,.14);overflow:hidden;}
+	.darkmode .argon-preloader__bar{background:rgba(255,255,255,.1);}
+	.argon-preloader__bar i{position:absolute;top:0;bottom:0;width:38%;border-radius:99px;background:var(--themecolor,#5e72e4);animation:argon-bar-sweep 1.5s cubic-bezier(.65,0,.35,1) infinite;}
+	@keyframes argon-bar-sweep{0%{left:-38%;}100%{left:100%;}}
+	/* ④ 加载提示 —— 小字、主题色 */
+	.argon-preloader__hint{margin-top:calc(var(--argon-lds) * .16);font-size:var(--argon-ld-txt);font-weight:500;letter-spacing:.18em;text-indent:.18em;color:var(--themecolor,#5e72e4);opacity:.78;}
+	.argon-preloader__hint::after{content:'';animation:argon-dots 1.6s steps(1,end) infinite;}
+	@media (max-width:560px){
+		.argon-preloader__bar{width:min(62vw,240px);margin-top:calc(var(--argon-lds) * .24);}
+		.argon-preloader__welcome{letter-spacing:.26em;text-indent:.26em;}
+		.argon-preloader__hint{letter-spacing:.12em;text-indent:.12em;}
+	}
+
+	/* ============================================================
+	   退场：遮罩从中心「化开」+ 内容从模糊收敛到清晰
+	   ------------------------------------------------------------
+	   为什么不用 clip-path 把内容「擦」出来：
+	     clip-path 保留的是圆内，加在遮罩上会变成「遮罩从中心长出来盖住内容」，
+	     方向正好相反；而把内容抬到遮罩之上，遮罩里转圈的模糊淡出又会被整个盖住，
+	     于是既没有模糊过渡、也不连贯。
+	     现在让遮罩【留在上层不动】，自己带一个「中心透明、向外不透明」的圆形遮罩，
+	     半径从 0 长到 110% —— 遮罩从中心化开，转圈淡出全程可见。
+
+	   两个数值上的坑（都实测过）：
+	     · radial-gradient 里百分比圆是相对【最远角】的，写 150% 是它的 1.5 倍，
+	       视觉上过渡跑到约 2/3 就完全揭示完了，后面一段看不出来。取 110% 刚好。
+	     · cubic-bezier 的 y1 是「起步速度」，写 .8 是起步极快 ——
+	       半径 0.8 秒就冲到 95%，剩下时间几乎静止，观感仍然「太快」。y1 取 0。
+	   ============================================================ */
+	@property --argon-reveal{syntax:'<percentage>';inherits:false;initial-value:0%;}
+	
+			#argon-preloader.ar--hidden,#argon-preloader.argon-preloader--hidden{
+		--argon-reveal:110%;
+		/* 退场只做 mask 化开：遮罩从中心「挖」开，2s。
+		   不要再叠 opacity 淡出 —— 那会让遮罩提前淡没、化开只走一半。 */
+		transition:--argon-reveal 2s cubic-bezier(.55,0,.3,1);
+	}
+	/* ============================================================
+	   模糊层（层级：圆环 → 模糊 → 博客内容）
+	   ------------------------------------------------------------
+	   之前是直接给 #toolbar / #content 加 filter:blur() —— 两个问题：
+	     · 层级不对：模糊成了内容自身的属性，而不是夹在圆环与内容之间的一层；
+	     · 不同步：内容整体均匀变清，跟圆环扩散没有空间上的对应。
+	   现在改成独立的 backdrop-filter 层，夹在两者中间：
+
+	     最上  #argon-preloader        圆环（带 mask，从中心化开）
+	     中间  .argon-preloader__blur  只负责模糊它后面的东西
+	     最下  #content                博客内容（本身不动、不加 filter）
+
+	   关键点：这一层【不需要自己的 mask】。上面的遮罩是不透明的，
+	   只在中心留出一个透明圆，所以模糊层天然只在「被揭示出来的那块」可见 ——
+	   圆扩到哪儿，哪儿才露出模糊，天然同步。
+
+	   顺带解决两个隐患：不再给内容加 filter，所以
+	     · filter 创建包含块、导致 fixed 浮动按钮错位的风险消失；
+	     · 整页反复重栅格化带来的文字抖动也消失。
+	   ============================================================ */
+	.argon-preloader__blur{
+		position:fixed;inset:0;z-index:99998;pointer-events:none;
+		/* 平时不做任何模糊，零开销 */
+		-webkit-backdrop-filter:none;backdrop-filter:none;
+	}
+	/* 用 animation 而不是 transition：元素从首屏就在 DOM 里，
+	   而动画在「元素首次匹配到规则」时一定会从头播，不依赖前一帧的样式，
+	   也就天然与遮罩化开同步（两者都由 html.argon-revealing 触发、同时长同缓动）。 */
+	html.argon-revealing .argon-preloader__blur{
+		animation:argon-blur-out 2s cubic-bezier(.55,0,.3,1) forwards;
+	}
+	@keyframes argon-blur-out{
+		0%  {-webkit-backdrop-filter:blur(8px) saturate(1.06);backdrop-filter:blur(8px) saturate(1.06);}
+		60% {-webkit-backdrop-filter:blur(3px) saturate(1.02);backdrop-filter:blur(3px) saturate(1.02);}
+		100%{-webkit-backdrop-filter:blur(0)   saturate(1);   backdrop-filter:blur(0)   saturate(1);}
+	}
+	/* 不支持 backdrop-filter 的浏览器：没有模糊层，遮罩化开照常 */
+	@supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
+		.argon-preloader__blur{display:none;}
+	}
+	/* 不支持 @property 的老浏览器：遮罩直接淡出，不会卡住 */
+	/* 降级分支的探测条件要真的针对 @property。
+	   【不能用 @supports not (background:paint(x))】—— paint() 是 CSS Painting API
+	   （只有 Chromium 支持），而 Firefox/Safari 不支持它却【支持 @property】，
+	   于是这条「老浏览器降级」恰好会在支持 @property 的新浏览器上生效：
+	   它把 opacity 压成 0.8s 淡出，而 mask 化开是 1.5s —— 0.8 秒时遮罩已经淡没、
+	   化开只走了一半，正是「扩散看不见」那个 bug 在非 Chromium 上复现。
+	   改成由内联脚本按 CSS.registerProperty 是否存在来打标记，语义明确。 */
+	html.argon-no-at-property.ar-revealing #argon-preloader{opacity:0;transition:opacity .8s ease;}
+	}
+	@media (prefers-reduced-motion:reduce){
+		#argon-preloader,#argon-preloader *,#argon-preloader.ar--hidden,
+		.argon-preloader__blur,html.argon-revealing .argon-preloader__blur{
+			animation-duration:.01s !important;transition-duration:.01s !important;
+		}
+	}
 	</style>
 	<noscript><style>#argon-preloader{display:none!important;}</style></noscript>
 	<script>
@@ -138,31 +284,68 @@
 	</script>
 	<?php } ?>
 	<!-- SEO / OG / Twitter -->
-	<?php if (get_option('argon_enable_social_meta', 'true') != 'false'){ ?>
 	<?php
+		/* 站点图标与 PWA manifest 与「社交元标签」无关，独立于 argon_enable_social_meta 输出。
+		   原先这两行被包在下面那个 if 里，导致关掉社交元标签会【连带丢掉 PWA manifest】
+		   （实测：关闭后全站 rel="manifest" = 0；favicon 只是被 WP core 自己的输出兜住了，
+		   并非没受影响）。见 docs/SEO与语义标签修复方案.md §3 */
 		$argon_site_icon = get_site_icon_url();
 		if ($argon_site_icon != ''){
 	?>
 	<link rel="icon" href="<?php echo esc_url($argon_site_icon); ?>">
 	<?php } ?>
 	<link rel="manifest" href="<?php echo esc_url(home_url('?argon_manifest=1')); ?>">
-	<meta property="og:site_name" content="<?php echo get_bloginfo('name');?>">
-	<meta property="og:title" content="<?php echo wp_get_document_title();?>">
+
+	<?php if (get_option('argon_enable_social_meta', 'true') != 'false'){ ?>
+	<meta property="og:site_name" content="<?php echo esc_attr(get_bloginfo('name'));?>">
+	<meta property="og:title" content="<?php echo esc_attr(wp_get_document_title());?>">
 	<meta property="og:type" content="<?php echo is_singular() ? 'article' : 'website'; ?>">
-	<meta property="og:url" content="<?php echo home_url(add_query_arg(array(),$wp->request));?>">
-	<meta property="og:locale" content="<?php echo get_locale(); ?>">
 	<?php
+		/* og:url 应与 canonical 一致。
+		   原先用 home_url(add_query_arg(array(), $wp->request)) —— 在【朴素固定链接】下
+		   $wp->request 为空，会退化成首页地址（实测测试站文章页 og:url = 首页，
+		   而 canonical = /?p=1，两者不一致），分享出去的链接会指向首页。
+
+		   注意分页：博客首页/归档的第 2 页起必须带上页码，否则 og:url 会退回第 1 页
+		   （实测过：?paged=2 时 og:url 变成 "/"）。所以除【静态首页且不分页】外，
+		   博客首页与各类归档统一走 get_pagenum_link() —— 它对第 1 页会自动省略页码。 */
+		$argon_og_paged = max(1, (int) get_query_var('paged'));
+		if (is_singular()){
+			$argon_og_url = get_permalink();
+		}elseif (is_front_page() && !is_paged()){
+			/* 静态首页（未分页）：get_pagenum_link() 在这里可能取到文章页的 URL，故单独处理 */
+			$argon_og_url = home_url('/');
+		}elseif (is_home() || is_front_page() || is_category() || is_tag() || is_tax() || is_author() || is_post_type_archive()){
+			$argon_og_url = get_pagenum_link($argon_og_paged);
+		}elseif (is_search()){
+			$argon_og_url = get_search_link();
+		}else{
+			$argon_og_url = home_url(add_query_arg(array(), $wp->request));
+		}
+	?>
+	<meta property="og:url" content="<?php echo esc_url($argon_og_url);?>">
+	<meta property="og:locale" content="<?php echo esc_attr(get_locale()); ?>">
+	<?php
+		/* 注意：$seo_description 由 get_seo_description() 返回，那里【不做】转义，
+		   统一在这里 esc_attr()。摘要里若含 " 而未转义，会截断 content="…" 属性。
+		   下面三个标签共用同一个变量，必须一起转义。 */
 		$seo_description = get_seo_description();
 		if ($seo_description != ''){ ?>
-			<meta name="description" content="<?php echo $seo_description?>">
-			<meta property="og:description" content="<?php echo $seo_description?>">
-			<meta name="twitter:description" content="<?php echo $seo_description?>">
+			<?php if (get_option('argon_enable_seo_description', 'true') != 'false'){ ?>
+			<meta name="description" content="<?php echo esc_attr($seo_description)?>">
+			<?php } ?>
+			<meta property="og:description" content="<?php echo esc_attr($seo_description)?>">
+			<meta name="twitter:description" content="<?php echo esc_attr($seo_description)?>">
 	<?php } ?>
 
 	<?php
+		/* 关键词开关只控制 <meta name="keywords"> 本身。
+		   Description 开关同理：只控制 <meta name="description">，
+		   不影响上面的 og:description / twitter:description（那两个属社交元标签，
+		   由 argon_enable_social_meta 管）。 */
 		$seo_keywords = get_seo_keywords();
-		if ($seo_keywords != ''){ ?>
-			<meta name="keywords" content="<?php echo $seo_keywords;?>">
+		if ($seo_keywords != '' && get_option('argon_enable_seo_keywords', 'true') != 'false'){ ?>
+			<meta name="keywords" content="<?php echo esc_attr($seo_keywords);?>">
 	<?php } ?>
 
 	<?php
@@ -196,7 +379,7 @@
 	<?php } ?>
 
 	<meta name="twitter:card" content="summary_large_image">
-	<meta name="twitter:title" content="<?php echo wp_get_document_title();?>">
+	<meta name="twitter:title" content="<?php echo esc_attr(wp_get_document_title());?>">
 	<?php } ?>
 
 	<meta name="theme-color" content="<?php echo esc_attr($themecolor); ?>">
@@ -216,34 +399,84 @@
 	<?php endif; ?>
 	<?php
 		wp_enqueue_style("argon_css_merged", $GLOBALS['assets_path'] . "/assets/argon_css_merged.css", null, $GLOBALS['theme_version']);
-		// Font Awesome 6（免费版）：all.min.css 提供 solid/regular/brands + 内置 FA4 别名；
-		// v4-shims.min.css 是 FA6 官方 FA4 兼容层（fa-clock-o / fa-send 等旧类名映射），
-		// 后加载覆盖合并包内的 FA4 裁剪版，保证 `fa fa-xxx` 类名全部可用
-		wp_enqueue_style("font-awesome-full", $GLOBALS['assets_path'] . "/assets/vendor/font-awesome6/css/all.min.css", null, $GLOBALS['theme_version']);
-		wp_enqueue_style("font-awesome-shims", $GLOBALS['assets_path'] . "/assets/vendor/font-awesome6/css/v4-shims.min.css", null, $GLOBALS['theme_version']);
+		// iziToast 弹窗样式（约 56KB）：已从合并包拆出（原占合并包 18.8%）。
+		// 该组件只在用户交互后触发（点赞、评论提交、复制等 AJAX 回调，共 35 处调用），
+		// 首屏渲染时不会有任何提示气泡出现，故随其他交互态样式一并异步加载。
+		// 下方 style_loader_tag 中以 media=print + onload 方式放行阻塞。
+		wp_enqueue_style("argon-izitoast", $GLOBALS['assets_path'] . "/assets/css/argon-izitoast.css", null, $GLOBALS['theme_version']);
+		// Font Awesome 6 子集（同步）：由 tools/font-subset/ 按「全站实际用到的图标类名」生成，
+		// 含 @font-face + 基类/工具类 + FA6 官方 v4 兼容层（fa-clock-o / fa-send 等旧类名）。
+		// 字体同步子集化到同一份码点清单（FA6 三字体 292.6KB -> 13.5KB）。
+		// 原 FA6 全量 CSS（all.min.css 100.6KB + v4-shims 27KB）已裁为 22.5KB，故改为同步加载，
+		// 不再依赖合并包内 FA4 兜底首屏图标（FA4 已整体移除）。
+		// 新增图标后需重跑：gen-codepoints.js -> subset.py -> trim-css.js -> verify.js
+		wp_enqueue_style("font-awesome-subset", $GLOBALS['assets_path'] . "/assets/css/argon-fontawesome.css", null, $GLOBALS['theme_version']);
+		// 网页字体：按「禁用 Google 字体」开关条件加载（关闭 = 完全不下任何网页字体，回退系统字体栈）。
+		// Open Sans 已改为自托管 Latin 子集：单个 47.2KB 可变字体文件覆盖 300/400/600/700 全部字重，
+		// 取代原先向 Google 请求的 6 个子集共 201.4KB，且不再依赖第三方域名。
+		// 放在 style.css 之前，让字体下载尽早开始（@font-face 的可用性与顺序无关，这里只为提前发现）。
+		// 衬线模式下不必加载：style.css 里 "Open Sans" 只出现在 :root 的 --font，
+		// 而 html.use-serif body 会用 --font:"Noto Serif SC",... 覆盖掉它。
+		// 实测（821 个元素）：非衬线 780 个在用；衬线 0 个在用、字体根本不加载 —— 纯浪费 47.2KB。
+		if (argon_get_option('argon_disable_googlefont') != 'true' && get_option('argon_font') != 'serif') {
+			wp_enqueue_style("argon-fonts", $GLOBALS['assets_path'] . "/assets/css/argon-fonts.css", null, $GLOBALS['theme_version']);
+		}
 		wp_enqueue_style("style", $GLOBALS['assets_path'] . "/style.css", null, $GLOBALS['theme_version']);
-		if (argon_get_option('argon_disable_googlefont') != 'true') {wp_enqueue_style("googlefont", "//fonts.googleapis.com/css?family=Open+Sans:300,400,600,700|Noto+Serif+SC:300,600&display=swap");}
+		// 衬线模式仍需要 Noto Serif SC（CJK 字体，体积过大不适合打包进主题）。
+		// 它的 @font-face 占 Google CSS 的绝大部分（raw 220KB / gzip 60.6KB，202 个 face），
+		// 非衬线模式下 use-serif 类不存在、这些字体永远不会被用到 —— 故只在衬线模式请求。
+		if (argon_get_option('argon_disable_googlefont') != 'true' && get_option('argon_font') == 'serif') {
+			wp_enqueue_style("googlefont", "//fonts.googleapis.com/css?family=Noto+Serif+SC:300,600&display=swap");
+		}
 		wp_enqueue_script("argon_js_merged", $GLOBALS['assets_path'] . "/assets/argon_js_merged.js", null, $GLOBALS['theme_version']);
 		/* 条件加载：仅在使用到的功能开启时才请求对应 vendor，降低首屏 JS 体积 */
-		if (argon_get_option('argon_enable_fancybox') != 'false' && argon_get_option('argon_enable_zoomify') == 'false'){
-			wp_enqueue_style("fancybox5", $GLOBALS['assets_path'] . "/assets/vendor/fancybox5/fancybox.css", null, $GLOBALS['theme_version']);
-			wp_enqueue_script("fancybox5", $GLOBALS['assets_path'] . "/assets/vendor/fancybox5/fancybox.umd.js", null, $GLOBALS['theme_version']);
-		}
+		/* fancybox5（灯箱，gzip 47.9KB）已改为【按需加载】：
+		   首次点击 [data-fancybox]（或指针移入时预热）才注入 JS/CSS，
+		   清单在上面的 $argon_lazy_assets['fancybox']。
+		   原先用 defer 只是不阻塞，每次访问仍要下载一遍 —— 现在是根本不下载。
+		   见 docs/fancybox与pickr懒加载方案.md */
 		if (argon_get_option('argon_enable_code_highlight') == 'true'){
 			wp_enqueue_script("highlight", $GLOBALS['assets_path'] . "/assets/vendor/highlight/highlight.pack.js", null, $GLOBALS['theme_version']);
 			wp_enqueue_script("highlight-ln", $GLOBALS['assets_path'] . "/assets/vendor/highlight/highlightjs-line-numbers.min.js", null, $GLOBALS['theme_version']);
 			wp_enqueue_style("highlight-style", $GLOBALS['assets_path'] . "/assets/vendor/highlight/styles/" . (argon_get_option('argon_code_theme') == '' ? 'vs2015' : argon_get_option('argon_code_theme')) . ".css", null, $GLOBALS['theme_version']);
 		}
 		if (argon_get_option('argon_show_customize_theme_color_picker') != 'false'){
-			/* pickr JS 已为 1.8.2，而 vendor 的 monolith.min.css 仍是 1.5.0(取色变量/面板结构不匹配，
-			   导致色块变黑、面板错位)。此处改用主题自有的、与 JS 同版本的 1.8.2 主题 CSS，避免改动 vendor 文件 */
-			wp_enqueue_style("pickr-style", $GLOBALS['assets_path'] . "/assets/css/pickr-monolith-1.8.2.css", null, $GLOBALS['theme_version']);
-			wp_enqueue_script("nouislider", $GLOBALS['assets_path'] . "/assets/vendor/nouislider/js/nouislider.min.js", null, $GLOBALS['theme_version']);
-			wp_enqueue_script("pickr", $GLOBALS['assets_path'] . "/assets/vendor/pickr/pickr.es5.min.js", null, $GLOBALS['theme_version']);
+			/* pickr（取色器）与 nouislider（圆角滑块）已改为【按需加载】：
+			   两者都只在打开设置面板时才需要，合计 gzip 35.3KB，原先每页都下载一遍。
+			   清单在上面的 $argon_lazy_assets['pickr'] / ['nouislider']，由 argontheme.js 的
+			   argonEnsureSettingsAssets() 在首次打开面板（或指针移入按钮预热）时注入。
+			   注意 pickr JS 是 1.8.2，而 vendor 的 monolith.min.css 仍是 1.5.0（取色变量/面板结构
+			   不匹配，会导致色块变黑、面板错位），故 CSS 用主题自有的、与 JS 同版本的
+			   assets/css/pickr-monolith-1.8.2.css。
+			   见 docs/fancybox与pickr懒加载方案.md */
 		}
 	?>
 	<?php wp_head(); ?>
 	<?php $GLOBALS['wp_path'] = get_option('argon_wp_path') == '' ? '/' : get_option('argon_wp_path'); ?>
+	<?php
+	/* 按需加载的资源清单 —— 交给 argontheme.js 的 argonLoadAssets 使用。
+	   只下发【本次真的会用到】的那些，条件与原先的 wp_enqueue 保持一致，
+	   避免配置关掉后还占 config 体积。
+	   URL 必须走 $GLOBALS['assets_path']（可能是 CDN 基址）并在 PHP 侧拼好，
+	   否则开了「资源 CDN」选项的站点会 404。
+	   ?ver= 与 wp_enqueue_* 生成的 URL 一致，命中同一份 CDN/浏览器缓存。 */
+	$argon_lazy_assets = array();
+	if (argon_get_option('argon_enable_fancybox') != 'false' && argon_get_option('argon_enable_zoomify') == 'false'){
+		$argon_lazy_assets['fancybox'] = array(
+			'js'  => array($GLOBALS['assets_path'] . '/assets/vendor/fancybox5/fancybox.umd.js?ver=' . $GLOBALS['theme_version']),
+			'css' => array($GLOBALS['assets_path'] . '/assets/vendor/fancybox5/fancybox.css?ver=' . $GLOBALS['theme_version']),
+		);
+	}
+	if (argon_get_option('argon_show_customize_theme_color_picker') != 'false'){
+		$argon_lazy_assets['pickr'] = array(
+			'js'  => array($GLOBALS['assets_path'] . '/assets/vendor/pickr/pickr.es5.min.js?ver=' . $GLOBALS['theme_version']),
+			'css' => array($GLOBALS['assets_path'] . '/assets/css/pickr-monolith-1.8.2.css?ver=' . $GLOBALS['theme_version']),
+		);
+		$argon_lazy_assets['nouislider'] = array(
+			'js'  => array($GLOBALS['assets_path'] . '/assets/vendor/nouislider/js/nouislider.min.js?ver=' . $GLOBALS['theme_version']),
+		);
+	}
+	?>
 	<script>
 		document.documentElement.classList.remove("no-js");
 		var argonConfig = {
@@ -280,7 +513,9 @@
 				hide_linenumber: <?php echo get_option('argon_code_highlight_hide_linenumber', 'false'); ?>,
 				transparent_linenumber: <?php echo get_option('argon_code_highlight_transparent_linenumber', 'false'); ?>,
 				break_line: <?php echo get_option('argon_code_highlight_break_line', 'false'); ?>
-			}
+			},
+			/* 按需加载清单（fancybox / pickr / nouislider），见文件上方 $argon_lazy_assets */
+			lazy_assets: <?php echo wp_json_encode($argon_lazy_assets); ?>
 		}
 	</script>
 	<script>
@@ -411,27 +646,71 @@
 <body <?php body_class(); ?>>
 <?php /*wp_body_open();*/ ?>
 <?php if (get_option('argon_enable_preloader') != 'false') { ?>
-<div id="argon-preloader" aria-hidden="true">
-	<div class="argon-preloader__inner">
-		<div class="argon-preloader__spinner"></div>
-		<div class="argon-preloader__text"><?php _e('加载中', 'argon'); ?></div>
+<?php /* 模糊层：夹在圆环与博客内容之间（层级 圆环 → 模糊 → 内容）。
+         平时 backdrop-filter:none，零开销；只在退场时由 argon-revealing 触发模糊收敛。
+         放在遮罩【之前】，靠 z-index 99998 < 99999 保证在遮罩下面。 */ ?>
+<div class="argon-preloader__blur" aria-hidden="true"></div>
+  <div id="argon-preloader" aria-hidden="true">
+  	<?php /* 圆环层：只有遮罩色 + mask。加载内容【不在】它里面 ——
+  	         否则 mask 会把转圈与四行一起裁掉。 */ ?>
+  	<div class="argon-preloader__bg" aria-hidden="true"></div>
+  	<div class="argon-preloader__inner">
+		<div class="argon-preloader__glow"></div>
+		<?php /* 四行：欢迎语 / 站点名 / 进度条 / 加载提示。
+		         站点名走 esc_html 转义；欢迎语与加载提示可翻译。
+		         刻意不用 <h1>/<h2> 真标签 —— 页面本身已有 h1，重复会伤 SEO。 */ ?>
+		<div class="argon-preloader__welcome"><?php echo esc_html(apply_filters('argon_preloader_welcome', __('欢迎光临', 'argon'))); ?></div>
+		<div class="argon-preloader__sitename"><?php echo esc_html(get_bloginfo('name')); ?></div>
+		<div class="argon-preloader__bar"><i></i></div>
+		<div class="argon-preloader__hint"><?php echo esc_html(apply_filters('argon_preloader_hint', __('正在加载', 'argon'))); ?></div>
 	</div>
 </div>
 <script>
 (function(){
 	var el = document.getElementById('argon-preloader');
 	if (!el) return;
+	/* 不支持 @property 的浏览器：--argon-reveal 不会插值，遮罩会瞬跳。
+	   给它打个标记走淡出降级（而不是用 @supports 探测 paint()，那个特性不对）。 */
+	if (!(window.CSS && CSS.registerProperty)) {
+		document.documentElement.classList.add('argon-no-at-property');
+	}
+	var blurEl = document.querySelector('.argon-preloader__blur');
 	var hidden = false;
 	function hide(){
 		if (hidden) return; hidden = true;
+		/* argon-revealing 加在 <html> 上：它同时驱动三件事，所以天然同步 ——
+		   ① 遮罩的圆形化开（--argon-reveal 过渡）
+		   ② 模糊层的 backdrop-filter 收敛（argon-blur-out 动画）
+		   ③ 转圈的模糊淡出（argon-preloader-out，由 --hidden 触发）
+		   注意不能加在 body 上：那里一旦有 filter 就会创建包含块，
+		   内部 position:fixed 的浮动按钮会因此错位（实测差 254px）。 */
+		document.documentElement.classList.add('argon-revealing');
 		el.classList.add('argon-preloader--hidden');
-		// 退出动画(内层模糊 2s)播完后再移除节点
-		setTimeout(function(){ if (el && el.parentNode) el.parentNode.removeChild(el); }, 2100);
+		/* 等化开（1.5s）与内层模糊淡出（2s）都走完再摘掉节点 */
+		setTimeout(function(){
+			if (el && el.parentNode) el.parentNode.removeChild(el);
+			if (blurEl && blurEl.parentNode) blurEl.parentNode.removeChild(blurEl);
+			document.documentElement.classList.remove('argon-revealing');
+		}, 2700);
 	}
 	var start = Date.now();
-	var fontsReady = (document.fonts && document.fonts.ready) ? document.fonts.ready : Promise.resolve();
-	// 最短可见时长(正常 600ms)；主结束时机仍是资源(JS/CSS)加载完毕
-	var minVisible = 600;
+	/* 字体就绪 —— 但必须【加超时】。
+	   document.fonts.ready 在字体慢或 CDN 抖动时会一直挂着，
+	   那样遮罩会把整页（包括已经就位的骨架屏）一直盖住，
+	   最坏要等下面那个 10s 兜底才消失。 */
+	var FONT_TIMEOUT = 1500;
+	var fontsReady = (document.fonts && document.fonts.ready)
+		? Promise.race([document.fonts.ready, new Promise(function(res){ setTimeout(res, FONT_TIMEOUT); })])
+		: Promise.resolve();
+	/* 最短可见时长：只留一点点，避免样式刚应用就闪一下。
+	   关闭的主条件已经变成「骨架屏已就位（DOMContentLoaded + 样式表就绪） + 字体就绪」，
+	   不再固定等 600ms —— 快网下那 600ms 会把骨架屏 / LQIP 白白压住，
+	   而它们正是用来填补「遮罩退场之后、图片还没下完」那段时间的。 */
+	/* 最短可见时长 550ms：入场动画 0.5s 必须跑完再退场。
+	   否则退场会用 animation 简写整体替换入场动画，从它自己的 0%（blur(0)）起步，
+	   文字会「从模糊突然变清晰」再变模糊 —— 比不加模糊更难看。
+	   550ms 只比 0.5s 多一点余量，不会明显拖慢首屏。 */
+	var minVisible = 550;
 	function minDelay(){ return new Promise(function(res){ setTimeout(res, Math.max(0, minVisible - (Date.now() - start))); }); }
 	// 等待所有样式表加载完成（合并 JS 为解析阻塞脚本，已在 DOMContentLoaded 前执行完毕）
 	function stylesheetsReady(){
@@ -445,7 +724,9 @@
 		}
 		return Promise.all(pending);
 	}
-	// 结束时机：DOMContentLoaded(JS+CSS 已就绪) + 样式表加载 + 字体就绪 + 最短可见时长，随后带模糊淡出
+	/* 关闭时机：DOMContentLoaded（骨架屏的 HTML 已解析）+ 样式表就绪（骨架屏样式已生效）
+	   + 字体就绪（或超时）+ 极短的最短可见时长，随后带模糊淡出。
+	   刻意【不等图片】—— 遮罩退场之后正是骨架屏 / LQIP 接手的那段时间。 */
 	function ready(){ Promise.all([stylesheetsReady(), fontsReady, minDelay()]).then(hide); }
 	if (document.readyState === 'loading') {
 		document.addEventListener('DOMContentLoaded', ready);
@@ -601,14 +882,25 @@
 	<?php
 		$banner_title = get_option('argon_banner_title') == '' ? get_bloginfo('name') : get_option('argon_banner_title');
 		$enable_banner_title_typing_effect = get_option('argon_enable_banner_title_typing_effect') != 'true' ? "false" : get_option('argon_enable_banner_title_typing_effect');
+		/* 首页（含静态首页）的 banner 站名用 <h1>，其余页面保持 <div>：
+		   首页此前完全没有 h1（banner 站名是 div、#content 里也没有标题），
+		   而文章页的 h1 是文章标题，banner 再出 h1 就会有两个。
+		   注意 banner_size 设为 hide 时本区块【仍然渲染】（只是 <html> 多了 no-banner 类，
+		   由 CSS 隐藏），所以首页在任何配置下都恰好有一个 h1。 */
+	/* 用 is_home() 单独判断，不要加 && !is_front_page()：
+	   · 博客首页（is_home() 为真）：没有页面标题，h1 必须由 banner 承担；
+	     若排除 is_front_page() 就会变成【一个 h1 都没有】（实测首页 h1=0）。
+	   · 静态首页（is_front_page() 为真、is_home() 为假）：h1 由
+	     template-parts/content-page.php 的页面标题承担，banner 用 div 才对。 */
+	$argon_banner_tag = is_home() ? 'h1' : 'div';
 	?>
 	<div id="banner_container" class="banner-container container text-center">
 		<?php if ($enable_banner_title_typing_effect != "true"){?>
-			<div class="banner-title text-white"><span class="banner-title-inner"><?php echo apply_filters('argon_banner_title_html', $banner_title); ?></span>
-			<?php echo get_option('argon_banner_subtitle') == '' ? '' : '<span class="banner-subtitle d-block">' . get_option('argon_banner_subtitle') . '</span>'; ?></div>
+			<<?php echo $argon_banner_tag; ?> class="banner-title text-white"><span class="banner-title-inner"><?php echo apply_filters('argon_banner_title_html', $banner_title); ?></span>
+			<?php echo get_option('argon_banner_subtitle') == '' ? '' : '<span class="banner-subtitle d-block">' . get_option('argon_banner_subtitle') . '</span>'; ?></<?php echo $argon_banner_tag; ?>>
 		<?php } else {?>
-			<div class="banner-title text-white" data-interval="<?php echo get_option('argon_banner_typing_effect_interval', 100); ?>"><span data-text="<?php echo $banner_title; ?>" class="banner-title-inner">&nbsp;</span>
-			<?php echo get_option('argon_banner_subtitle') == '' ? '' : '<span data-text="' . get_option('argon_banner_subtitle') . '" class="banner-subtitle d-block">&nbsp;</span>'; ?></div>
+			<<?php echo $argon_banner_tag; ?> class="banner-title text-white" data-interval="<?php echo get_option('argon_banner_typing_effect_interval', 100); ?>"><span data-text="<?php echo $banner_title; ?>" class="banner-title-inner">&nbsp;</span>
+			<?php echo get_option('argon_banner_subtitle') == '' ? '' : '<span data-text="' . get_option('argon_banner_subtitle') . '" class="banner-subtitle d-block">&nbsp;</span>'; ?></<?php echo $argon_banner_tag; ?>>
 		<?php }?>
 	</div>
 	<?php if (get_option('argon_banner_background_url') != '') { ?>

@@ -3984,6 +3984,37 @@ function argon_init_gutenberg_friendlinks_block() {
 	);
 }
 add_action('init', 'argon_init_gutenberg_friendlinks_block');
+
+/* argon/ref 也是动态区块：脚注编号由服务端按【渲染顺序】累积到全局
+   $post_references，文章底部的参考列表由 get_reference_list() 统一输出。
+   做成静态区块会把编号写死，以后调整顺序就对不上了。
+   渲染直接复用短代码函数 shortcode_ref()，两边行为完全一致
+   （只在 id 非空时才传 id，否则走「按内容去重」那条分支）。 */
+function argon_init_gutenberg_ref_block() {
+	register_block_type(
+		'argon/ref',
+		array(
+			'editor_script'   => 'argon-gutenberg-block-js',
+			'editor_style'    => 'argon-gutenberg-block-backend-css',
+			'render_callback' => 'argon_render_ref_block',
+			'attributes'      => array(
+				'id'      => array('type' => 'string', 'default' => ''),
+				'content' => array('type' => 'string', 'default' => ''),
+			),
+		)
+	);
+}
+add_action('init', 'argon_init_gutenberg_ref_block');
+
+function argon_render_ref_block($attributes) {
+	$content = isset($attributes['content']) ? $attributes['content'] : '';
+	if ($content === '') {
+		return '';
+	}
+	$id = isset($attributes['id']) ? trim($attributes['id']) : '';
+	$attr = ($id !== '') ? array('id' => $id) : array();
+	return shortcode_ref($attr, $content);
+}
 function argon_add_gutenberg_category($block_categories, $editor_context) {
 	if (!empty($editor_context->post)){
 		array_push(

@@ -13,3 +13,4 @@ import './label/label.js';
 import './hidden/hidden.js';
 import './checkbox/checkbox.js';
 import './friendlinks/friendlinks.js';
+import './ref/ref.js';

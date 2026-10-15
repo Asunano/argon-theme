@@ -1,5 +1,6 @@
 import './editor.scss';
 import { argonBlockClass, argonBlockAnchor, argonColorClass, argonColorStyle } from './../block-utils.js';
+import { ArgonColorControl } from './../components/color-control.js';
 import { __ } from './../i18n/i18n.js';
 import {
 	RichText,
@@ -11,7 +12,6 @@ import {
 	PanelColorSettings
 } from "@wordpress/block-editor";
 import {
-	ColorPalette,
 	TextControl,
 	ToggleControl,
 	Panel, PanelBody, PanelRow
@@ -94,19 +94,7 @@ registerBlockType('argon/progressbar', {
 							<div id="gutenpride-controls">
 								<fieldset>
 									<PanelRow>{__('颜色', 'argon')}</PanelRow>
-									<ColorPalette
-										onChange={onChangeColor}
-										colors={[
-											{ name: 'argon', color: '#5e72e4' },
-											{ name: 'green', color: '#4fd69c' },
-											{ name: 'red', color: '#f75676' },
-											{ name: 'blue', color: '#37d5f2' },
-											{ name: 'orange', color: '#fc7c5f' },
-											{ name: 'pink', color: '#fa7298' },
-											{ name: 'black', color: '#3c4d69' },
-										]}
-										value={props.attributes.color}
-									/>
+									<ArgonColorControl value={props.attributes.color} onChange={onChangeColor} />
 								</fieldset>
 								<fieldset>
 									<PanelRow>{__('部件', 'argon')}</PanelRow>

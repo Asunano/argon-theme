@@ -3946,6 +3946,10 @@ function argon_init_gutenberg_blocks() {
 		'argon/progressbar',
 		'argon/todolist',
 		'argon/tabpanel',
+		/* 2026-10 补齐：短代码里一直有、区块里缺的四个功能 */
+		'argon/label',
+		'argon/hidden',
+		'argon/checkbox',
 	);
 	foreach ( $argon_blocks as $argon_block ) {
 		register_block_type(
@@ -3959,6 +3963,27 @@ function argon_init_gutenberg_blocks() {
 	}
 }
 add_action('init', 'argon_init_gutenberg_blocks');
+
+/* argon/friendlinks 是动态区块：前台 HTML 由 PHP 生成（数据来自 WordPress 自带的
+   链接管理器），所以它不放进上面的数组，而是单独注册并给 render_callback。
+   JS 侧 save 返回 null，编辑器用 ServerSideRender 显示服务端渲染的真实结果。
+   渲染函数 argon_render_friendlinks() 与短代码 [friendlinks] 共用同一份逻辑。 */
+function argon_init_gutenberg_friendlinks_block() {
+	register_block_type(
+		'argon/friendlinks',
+		array(
+			'editor_script'   => 'argon-gutenberg-block-js',
+			'editor_style'    => 'argon-gutenberg-block-backend-css',
+			'render_callback' => 'argon_render_friendlinks_block',
+			'attributes'      => array(
+				'style' => array('type' => 'string', 'default' => '1'),
+				'sort'  => array('type' => 'string', 'default' => 'name'),
+				'order' => array('type' => 'string', 'default' => 'ASC'),
+			),
+		)
+	);
+}
+add_action('init', 'argon_init_gutenberg_friendlinks_block');
 function argon_add_gutenberg_category($block_categories, $editor_context) {
 	if (!empty($editor_context->post)){
 		array_push(
@@ -4213,15 +4238,31 @@ function shortcode_collapse_block($attr,$content=""){
 	$out .= "</div>";
 	return $out;
 }
+/* 短代码包装：解析属性后交给共用渲染函数 */
+function shortcode_friend_link($attr, $content = ""){
+	return argon_render_friendlinks(
+		isset($attr['style']) ? $attr['style'] : '1',
+		isset($attr['sort'])  ? $attr['sort']  : 'name',
+		isset($attr['order']) ? $attr['order'] : 'ASC'
+	);
+}
 add_shortcode('friendlinks','shortcode_friend_link');
-function shortcode_friend_link($attr,$content=""){
-	$sort = isset( $attr['sort'] ) ? $attr['sort'] : 'name';
-	$order = isset( $attr['order'] ) ? $attr['order'] : 'ASC';
+/* 古腾堡区块的服务端渲染：与短代码走同一段逻辑 */
+function argon_render_friendlinks_block($attributes){
+	return argon_render_friendlinks(
+		isset($attributes['style']) ? $attributes['style'] : '1',
+		isset($attributes['sort'])  ? $attributes['sort']  : 'name',
+		isset($attributes['order']) ? $attributes['order'] : 'ASC'
+	);
+}
+/* 友链列表的渲染。短代码与古腾堡区块【共用这一个函数】——
+   两处各写一遍必然会跑偏（颜色/样式/转义规则都可能不一致）。 */
+function argon_render_friendlinks($style = '1', $sort = 'name', $order = 'ASC'){
 	$friendlinks = get_bookmarks( array(
 		'orderby' => $sort ,
 		'order'   => $order
 	));
-	$style = isset( $attr['style'] ) ? $attr['style'] : '1';
+
 	switch ($style) {
 		case '1':
 			$class = "friend-links-style1";

@@ -58,6 +58,26 @@ function theme_slug_setup() {
 	// 启用 WP 官方区块样式：经典主题需显式声明，否则 wp-block-library-theme 不会在前台入队，
 	// 画廊/封面等区块的 is-layout-grid 等布局缺少列模板而失效。配合 argon_enqueue_block_library_always() 在 Pjax 下常驻。
 	add_theme_support('wp-block-styles');
+	/* 区块编辑器的能力开关。
+	   经典主题必须显式声明这些，否则编辑器里对应功能直接消失：
+	   · align-wide        宽对齐 / 全宽（配合 theme.json 的 wideSize，区块的 supports.align 才有意义）
+	   · editor-styles     允许 add_editor_style 把样式带进编辑器
+	   · responsive-embeds 嵌入内容（视频、推文等）在窄屏自适应
+	   · custom-spacing / custom-line-height / custom-units / appearance-tools
+	                       间距、行高、单位、边框圆角等外观工具
+	   · html5             评论/搜索/画廊等表单用 HTML5 标记 */
+	add_theme_support('align-wide');
+	add_theme_support('responsive-embeds');
+	add_theme_support('custom-spacing');
+	add_theme_support('custom-line-height');
+	add_theme_support('custom-units');
+	add_theme_support('appearance-tools');
+	add_theme_support('html5', array('comment-list', 'comment-form', 'search-form', 'gallery', 'caption', 'style', 'script'));
+	/* 编辑器样式：单独一份精简的，不用 231KB 的 style.css 全量
+	   （里面含 #toolbar / .darkmode / body 等后台用不到甚至冲突的规则）。
+	   内容与前端同源，避免「编辑器所见 ≠ 前台所得」。 */
+	add_theme_support('editor-styles');
+	add_editor_style(array('assets/css/argon-editor.css', 'assets/css/argon-fontawesome.css'));
 	load_theme_textdomain('argon', get_template_directory() . '/languages');
 }
 add_action('after_setup_theme','theme_slug_setup');

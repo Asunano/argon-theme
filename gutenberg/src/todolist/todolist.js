@@ -1,4 +1,5 @@
 import './editor.scss';
+import { argonBlockClass, argonBlockAnchor } from './../block-utils.js';
 import { __ } from './../i18n/i18n.js';
 import {
 	RichText,
@@ -20,9 +21,15 @@ import {
 const { registerBlockType } = wp.blocks;
 
 registerBlockType('argon/todolist', {
+	apiVersion: 2,
 	title: 'Todo List',
 	icon: 'yes-alt',
 	category: 'argon',
+	supports: {
+		align: ['wide', 'full'],
+		anchor: true,
+		className: true,
+	},
 	keywords: [
 		'argon',
 		'Todo list'
@@ -122,7 +129,7 @@ registerBlockType('argon/todolist', {
 		});
 		
 		return (
-			<div style="margin-bottom: 20px;">
+			<div className={argonBlockClass("", props)} {...argonBlockAnchor(props)} style="margin-bottom: 20px;">
 				{nodelist}
 			</div>
 		);

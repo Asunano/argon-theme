@@ -1,4 +1,5 @@
 import './editor.scss';
+import { argonBlockClass, argonBlockAnchor } from './../block-utils.js';
 import { __ } from './../i18n/i18n.js';
 import {
 	RichText,
@@ -19,9 +20,15 @@ import { isWhitespaceCharacter } from 'is-whitespace-character'
 const { registerBlockType } = wp.blocks;
 
 registerBlockType('argon/alert', {
+	apiVersion: 2,
 	title: __('提示'),
 	icon: 'warning',
 	category: 'argon',
+	supports: {
+		align: ['wide', 'full'],
+		anchor: true,
+		className: true,
+	},
 	keywords: [
 		'argon',
 		__('提示')
@@ -53,7 +60,7 @@ registerBlockType('argon/alert', {
 
 		return (
 			<div>
-				<div className="alert" style={{ backgroundColor: props.attributes.color }}>
+				<div className={argonBlockClass("alert", props)} {...argonBlockAnchor(props)} style={{ backgroundColor: props.attributes.color }}>
 					{!(isWhitespaceCharacter(props.attributes.fa_icon_name) || props.attributes.fa_icon_name == "") &&
 						<span className="alert-inner--icon">
 							<i className={`fa fa-${props.attributes.fa_icon_name}`}></i>
@@ -107,7 +114,7 @@ registerBlockType('argon/alert', {
 	},
 	save: (props) => {
 		return (
-			<div className="alert" style={{ backgroundColor: props.attributes.color }}>
+			<div className={argonBlockClass("alert", props)} {...argonBlockAnchor(props)} style={{ backgroundColor: props.attributes.color }}>
 				{!(isWhitespaceCharacter(props.attributes.fa_icon_name) || props.attributes.fa_icon_name == "") &&
 					<span className="alert-inner--icon">
 						<i className={`fa fa-${props.attributes.fa_icon_name}`}></i>

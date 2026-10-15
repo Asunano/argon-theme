@@ -1,4 +1,5 @@
 import './editor.scss';
+import { argonBlockClass, argonBlockAnchor } from './../block-utils.js';
 import { __ } from './../i18n/i18n.js';
 import {
 	RichText,
@@ -21,9 +22,15 @@ const { registerBlockType } = wp.blocks;
 const clamp = (num, min, max) => Math.min(Math.max(num, min), max);
 
 registerBlockType('argon/progressbar', {
+	apiVersion: 2,
 	title: __('进度条'),
 	icon: 'chart-bar',
 	category: 'argon',
+	supports: {
+		align: ['wide', 'full'],
+		anchor: true,
+		className: true,
+	},
 	keywords: [
 		'argon',
 		__('进度条')
@@ -61,7 +68,7 @@ registerBlockType('argon/progressbar', {
 		}
 		return (
 			<div>
-				<div class="progress-wrapper">
+				<div class={argonBlockClass("progress-wrapper", props)} {...argonBlockAnchor(props)}>
 					<div class="progress-info">
 						{props.attributes.show_title &&
 							<div class="progress-label">
@@ -122,7 +129,7 @@ registerBlockType('argon/progressbar', {
 	},
 	save: (props) => {
 		return (
-			<div class="progress-wrapper">
+			<div class={argonBlockClass("progress-wrapper", props)} {...argonBlockAnchor(props)}>
 				<div class="progress-info">
 					{props.attributes.show_title &&
 						<div class="progress-label">

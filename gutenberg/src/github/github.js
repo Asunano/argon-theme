@@ -1,4 +1,5 @@
 import './editor.scss';
+import { argonBlockClass, argonBlockAnchor } from './../block-utils.js';
 import { __ } from './../i18n/i18n.js';
 import {
 	RichText,
@@ -26,9 +27,15 @@ const getStyleClass = (className = "") => {
 }
 
 registerBlockType('argon/github', {
+	apiVersion: 2,
 	title: __('Github Repo 信息卡'),
 	icon: 'github fa fa-github',
 	category: 'argon',
+	supports: {
+		align: ['wide', 'full'],
+		anchor: true,
+		className: true,
+	},
 	keywords: [
 		'argon',
 		'github',
@@ -117,7 +124,7 @@ registerBlockType('argon/github', {
 	},
 	save: (props) => {
 		return (
-			<div className={`github-info-card card shadow-sm ${getStyleClass(props.className || props.attributes.className)}`} data-author={props.attributes.author} data-project={props.attributes.project}>
+			<div className={argonBlockClass(`github-info-card card shadow-sm ${getStyleClass(props.attributes.className)}`, props)} {...argonBlockAnchor(props)} data-author={props.attributes.author} data-project={props.attributes.project}>
 				<div className="github-info-card-header">
 					<a href="https://github.com/" ref="nofollow" target="_blank" title="Github" rel="noopener">
 						<span><i className="fa fa-github"></i>&nbsp;GitHub</span>

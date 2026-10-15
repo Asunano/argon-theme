@@ -1,0 +1,83 @@
+{
+	"$schema": "https://schemas.wp.org/trunk/theme.json",
+	"version": 3,
+	"settings": {
+		"appearanceTools": true,
+		"useRootPaddingAwareAlignments": true,
+		"layout": {
+			"contentSize": "941px",
+			"wideSize": "1200px"
+		},
+		"color": {
+			"defaultPalette": false,
+			"defaultGradients": false,
+			"defaultDuotone": false,
+			"palette": [
+				{ "slug": "argon", "color": "#5e72e4", "name": "Argon" },
+				{ "slug": "primary", "color": "#7889e8", "name": "主色" },
+				{ "slug": "success", "color": "#4fd69c", "name": "成功" },
+				{ "slug": "danger", "color": "#f75676", "name": "危险" },
+				{ "slug": "info", "color": "#37d5f2", "name": "信息" },
+				{ "slug": "warning", "color": "#fc7c5f", "name": "警告" },
+				{ "slug": "pink", "color": "#fa7298", "name": "粉" },
+				{ "slug": "dark", "color": "#3c4d69", "name": "深色" },
+				{ "slug": "grey", "color": "#888888", "name": "灰" },
+				{ "slug": "white", "color": "#ffffff", "name": "白" },
+				{ "slug": "black", "color": "#000000", "name": "黑" }
+			]
+		},
+		"typography": {
+			"fluid": true,
+			"defaultFontSizes": false,
+			"fontSizes": [
+				{ "slug": "small", "size": "0.875rem", "name": "小" },
+				{ "slug": "medium", "size": "1rem", "name": "正文" },
+				{ "slug": "large", "size": "1.25rem", "name": "大" },
+				{ "slug": "x-large", "size": "1.5rem", "name": "特大" },
+				{ "slug": "xx-large", "size": "2rem", "name": "超大" }
+			]
+		},
+		"spacing": {
+			"units": ["px", "em", "rem", "%", "vw", "vh"],
+			"spacingSizes": [
+				{ "slug": "20", "size": "0.5rem", "name": "紧凑" },
+				{ "slug": "30", "size": "1rem", "name": "常规" },
+				{ "slug": "40", "size": "1.5rem", "name": "宽松" },
+				{ "slug": "50", "size": "2rem", "name": "很宽" },
+				{ "slug": "60", "size": "3rem", "name": "超宽" }
+			]
+		}
+	},
+	"styles": {
+		"color": {
+			"background": "var(--color-body-bg, #f3f3f3)",
+			"text": "var(--color-text, #525f7f)"
+		},
+		"typography": {
+			"fontSize": "1rem",
+			"lineHeight": "1.8"
+		},
+		"elements": {
+			"link": {
+				"color": { "text": "var(--themecolor, #5e72e4)" },
+				"typography": { "textDecoration": "none" },
+				":hover": { "typography": { "textDecoration": "underline" } }
+			},
+			"heading": {
+				"typography": { "fontWeight": "600", "lineHeight": "1.4" }
+			},
+			"button": {
+				"color": {
+					"background": "var(--themecolor, #5e72e4)",
+					"text": "#ffffff"
+				},
+				"border": { "radius": "4px" }
+			}
+		},
+		"blocks": {
+			"core/quote": {
+				"typography": { "fontStyle": "normal" }
+			}
+		}
+	}
+}

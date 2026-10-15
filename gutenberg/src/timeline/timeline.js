@@ -1,4 +1,5 @@
 import './editor.scss';
+import { argonBlockClass, argonBlockAnchor } from './../block-utils.js';
 import { __ } from './../i18n/i18n.js';
 import {
 	RichText,
@@ -20,9 +21,15 @@ import {
 const { registerBlockType } = wp.blocks;
 
 registerBlockType('argon/timeline', {
+	apiVersion: 2,
 	title: __('时间线'),
 	icon: 'clock',
 	category: 'argon',
+	supports: {
+		align: ['wide', 'full'],
+		anchor: true,
+		className: true,
+	},
 	keywords: [
 		'argon',
 		__('时间线')
@@ -136,7 +143,7 @@ registerBlockType('argon/timeline', {
 		});
 
 		return (
-			<div>
+			<div className={argonBlockClass('', props)} {...argonBlockAnchor(props)}>
 				<div class="argon-timeline">
 					{nodelist}
 					<Button className="is-primary" onClick={addNode}  style={{marginTop: 8, backgroundColor: "#7889e8"}}>{__("+ 添加节点")}</Button>
@@ -166,7 +173,7 @@ registerBlockType('argon/timeline', {
 			);
 		});
 		return (
-			<div>
+			<div className={argonBlockClass('', props)} {...argonBlockAnchor(props)}>
 				<div class="argon-timeline">
 					{nodelist}
 				</div>

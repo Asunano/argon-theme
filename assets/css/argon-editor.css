@@ -1,0 +1,130 @@
+/**
+ * Argon 主题 · 区块编辑器样式
+ *
+ * 为什么单独一份，而不是直接 add_editor_style('style.css')：
+ *   style.css 有 231KB，里面大量是前台专用的规则（#toolbar、.darkmode、
+ *   body 背景、Pjax 容器、卡片阴影…），塞进编辑器既拖慢后台，
+ *   又可能把编辑器自身的 UI 弄乱。
+ *   这里只放编辑器真正需要的：主题变量、正文排版、区块在编辑器里的必要修正。
+ *
+ * 前端样式仍由 style.css 负责，两边同源（同一套变量与字号），
+ * 目标是「编辑器所见 = 前台所得」。
+ */
+
+/* ── 1. 主题变量（与 style.css 保持一致） ─────────────────────────── */
+.editor-styles-wrapper {
+	--themecolor: #5e72e4;
+	--themecolor-rgbstr: 94, 114, 228;
+	--color-body-bg: #f3f3f3;
+	--color-text: #525f7f;
+	--color-widgets: #ffffff;
+	--color-widgets-rgbstr: 255, 255, 255;
+	--color-card-bg: #ffffff;
+	--color-card-text: #32325d;
+	--color-border: rgba(0, 0, 0, 0.08);
+
+	background-color: var(--color-body-bg);
+	color: var(--color-text);
+}
+
+/* ── 2. 正文排版 ──────────────────────────────────────────────────
+   只作用于编辑器内容区，作用域限在 .editor-styles-wrapper 内，
+   避免影响后台自身的界面元素。 */
+.editor-styles-wrapper .wp-block {
+	max-width: 941px;
+}
+
+.editor-styles-wrapper h1,
+.editor-styles-wrapper h2,
+.editor-styles-wrapper h3,
+.editor-styles-wrapper h4,
+.editor-styles-wrapper h5,
+.editor-styles-wrapper h6 {
+	font-weight: 600;
+	line-height: 1.4;
+	color: var(--color-card-text);
+}
+
+.editor-styles-wrapper h1 { font-size: 2rem; }
+.editor-styles-wrapper h2 { font-size: 1.6rem; }
+.editor-styles-wrapper h3 { font-size: 1.35rem; }
+.editor-styles-wrapper h4 { font-size: 1.15rem; }
+
+.editor-styles-wrapper p,
+.editor-styles-wrapper li {
+	font-size: 1rem;
+	line-height: 1.8;
+}
+
+.editor-styles-wrapper a {
+	color: var(--themecolor);
+	text-decoration: none;
+}
+
+.editor-styles-wrapper a:hover {
+	text-decoration: underline;
+}
+
+.editor-styles-wrapper blockquote {
+	border-left: 4px solid var(--themecolor);
+	background: rgba(var(--themecolor-rgbstr), 0.06);
+	padding: 12px 18px;
+	font-style: normal;
+}
+
+.editor-styles-wrapper code,
+.editor-styles-wrapper pre {
+	font-family: Consolas, Monaco, "Courier New", monospace;
+	font-size: 0.9em;
+}
+
+.editor-styles-wrapper pre {
+	background: #f6f8fa;
+	border-radius: 4px;
+	padding: 14px 16px;
+	overflow: auto;
+}
+
+.editor-styles-wrapper table {
+	border-collapse: collapse;
+	width: 100%;
+}
+
+.editor-styles-wrapper th,
+.editor-styles-wrapper td {
+	border: 1px solid var(--color-border);
+	padding: 8px 12px;
+}
+
+.editor-styles-wrapper img {
+	max-width: 100%;
+	height: auto;
+}
+
+/* ── 3. 主题区块在编辑器里的修正 ──────────────────────────────────
+   区块自身的编辑器样式由 gutenberg/dist/index.css 提供（register_block_type
+   的 editor_style）。这里只补两处：主题色相关的、以及前端才有的兜底。 */
+
+/* 折叠区块：前端靠 style.css 的 .collapse-block.collapsed 折叠 body，
+   编辑器里要能看到同样的效果，否则「已折叠」的块在编辑器里看起来是展开的 */
+.editor-styles-wrapper .collapse-block.collapsed .collapse-block-body {
+	display: none;
+}
+
+/* 进度条在编辑器里给个最小高度，避免空内容时塌成一条线 */
+.editor-styles-wrapper .progress-wrapper .progress {
+	min-height: 6px;
+	background: rgba(0, 0, 0, 0.06);
+	border-radius: 3px;
+}
+
+/* ── 4. 对齐宽度 ──────────────────────────────────────────────────
+   theme.json 里声明了 contentSize 941px / wideSize 1200px，
+   这里给出对应的宽度，让「宽对齐 / 全宽」在编辑器里所见即所得。 */
+.editor-styles-wrapper .wp-block[data-align="wide"] {
+	max-width: 1200px;
+}
+
+.editor-styles-wrapper .wp-block[data-align="full"] {
+	max-width: none;
+}

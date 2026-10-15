@@ -1,4 +1,5 @@
 import './editor.scss';
+import { argonBlockClass, argonBlockAnchor } from './../block-utils.js';
 import { __ } from './../i18n/i18n.js';
 import {
 	RichText,
@@ -27,9 +28,15 @@ const calcTranslucentColor = (color) => {
 }
 
 registerBlockType('argon/collapse', {
+	apiVersion: 2,
 	title: __('折叠区块'),
 	icon: 'align-wide',
 	category: 'argon',
+	supports: {
+		align: ['wide', 'full'],
+		anchor: true,
+		className: true,
+	},
 	keywords: [
 		'argon',
 		__('折叠区块')
@@ -161,7 +168,7 @@ registerBlockType('argon/collapse', {
 	},
 	save: (props) => {
 		return (
-			<div className={`collapse-block shadow-sm ${props.attributes.collapsed ? "collapsed" : ""} ${props.attributes.show_left_border ? "" : "hide-border-left"}`}  style={{ borderLeftColor: props.attributes.color }}>
+			<div className={argonBlockClass(`collapse-block shadow-sm ${props.attributes.collapsed ? "collapsed" : ""} ${props.attributes.show_left_border ? "" : "hide-border-left"}`.trim(), props)} {...argonBlockAnchor(props)} style={{ borderLeftColor: props.attributes.color }}>
 				<div className="collapse-block-title" style={{ backgroundColor: calcTranslucentColor(props.attributes.color) }}>
 					{!(isWhitespaceCharacter(props.attributes.fa_icon_name) || props.attributes.fa_icon_name == "") &&
 						<span>

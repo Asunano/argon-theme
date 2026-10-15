@@ -1,4 +1,5 @@
 import './editor.scss';
+import { argonBlockClass, argonBlockAnchor } from './../block-utils.js';
 import { __ } from './../i18n/i18n.js';
 import {
 	RichText,
@@ -20,9 +21,15 @@ import { isWhitespaceCharacter } from 'is-whitespace-character'
 const { registerBlockType } = wp.blocks;
 
 registerBlockType('argon/admonition', {
+	apiVersion: 2,
 	title: __('警告'),
 	icon: 'text-page',
 	category: 'argon',
+	supports: {
+		align: ['wide', 'full'],
+		anchor: true,
+		className: true,
+	},
 	keywords: [
 		'argon',
 		__('警告')
@@ -81,7 +88,7 @@ registerBlockType('argon/admonition', {
 
 		return (
 			<div>
-				<div className="admonition shadow-sm" style={{ borderLeftColor: props.attributes.color }}>
+				<div className={argonBlockClass("admonition shadow-sm", props)} {...argonBlockAnchor(props)} style={{ borderLeftColor: props.attributes.color }}>
 					{props.attributes.show_title &&
 						<div className="admonition-title" style={{ backgroundColor: props.attributes.color + "33" }}>
 							{!(isWhitespaceCharacter(props.attributes.fa_icon_name) || props.attributes.fa_icon_name == "") &&
@@ -163,7 +170,7 @@ registerBlockType('argon/admonition', {
 	},
 	save: (props) => {
 		return (
-			<div className="admonition shadow-sm" style={{ borderLeftColor: props.attributes.color }}>
+			<div className={argonBlockClass("admonition shadow-sm", props)} {...argonBlockAnchor(props)} style={{ borderLeftColor: props.attributes.color }}>
 				{props.attributes.show_title &&
 					<div className="admonition-title" style={{ backgroundColor: props.attributes.color + "33" }}>
 						{!(isWhitespaceCharacter(props.attributes.fa_icon_name) || props.attributes.fa_icon_name == "") &&

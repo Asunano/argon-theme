@@ -1,4 +1,5 @@
 import './editor.scss';
+import { argonBlockClass, argonBlockAnchor } from './../block-utils.js';
 import { __ } from './../i18n/i18n.js';
 import {
 	RichText,
@@ -28,9 +29,15 @@ const getRandomString = (length) => {
 
 
 registerBlockType('argon/tabpanel', {
+	apiVersion: 2,
 	title: __('Tab 面板'),
 	icon: 'table-row-after',
 	category: 'argon',
+	supports: {
+		align: ['wide', 'full'],
+		anchor: true,
+		className: true,
+	},
 	keywords: [
 		'argon',
 		__('Tab 面板'),
@@ -251,7 +258,7 @@ registerBlockType('argon/tabpanel', {
 		});
 		
 		return (
-			<div class="argon-tabpanel">
+			<div class={argonBlockClass("argon-tabpanel", props)} {...argonBlockAnchor(props)}>
 				<div class="tabpanel-header nav-wrapper">
 					<ul class="nav nav-pills nav-fill" role="tablist">
 						{tabTitleNodeList}

@@ -67,11 +67,19 @@ registerBlockType('argon/tabpanel', {
 		},
 	},
 	edit: (props) => {
-		if (props.attributes.id == '' || (props.attributes.id[0] >= '0' && props.attributes.id[0] <= '9')) {
-			props.setAttributes({
-				id: "tabpanel-" + getRandomString(8)
-			})
-		}
+		/* 生成随机 id 必须在 useEffect 里做 —— 之前在 render 期直接调 setAttributes，
+		   属于渲染期副作用，React 会报「Cannot update a component while rendering」，
+		   严重时会死循环。放进 useEffect 只在挂载后跑一次。 */
+		const { useEffect } = wp.element;
+		useEffect(() => {
+			if (props.attributes.id == '' || (props.attributes.id[0] >= '0' && props.attributes.id[0] <= '9')) {
+				props.setAttributes({
+					id: "tabpanel-" + getRandomString(8)
+				})
+			}
+			// 只在挂载时执行一次：id 一旦生成就不再重跑
+			// eslint-disable-next-line react-hooks/exhaustive-deps
+		}, []);
 		const addNode = () => {
 			let newList = [
 				...props.attributes.list,
@@ -258,14 +266,14 @@ registerBlockType('argon/tabpanel', {
 		});
 		
 		return (
-			<div class={argonBlockClass("argon-tabpanel", props)} {...argonBlockAnchor(props)}>
-				<div class="tabpanel-header nav-wrapper">
-					<ul class="nav nav-pills nav-fill" role="tablist">
+			<div className={argonBlockClass("argon-tabpanel", props)} {...argonBlockAnchor(props)}>
+				<div className="tabpanel-header nav-wrapper">
+					<ul className="nav nav-pills nav-fill" role="tablist">
 						{tabTitleNodeList}
 					</ul>
 				</div>
-				<div class="tabpanel-body card card-body shadow-sm">
-					<div class="tab-content">
+				<div className="tabpanel-body card card-body shadow-sm">
+					<div className="tab-content">
 						{tabContentNodeList}
 					</div>
 				</div>

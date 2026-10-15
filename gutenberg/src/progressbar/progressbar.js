@@ -68,10 +68,10 @@ registerBlockType('argon/progressbar', {
 		}
 		return (
 			<div>
-				<div class={argonBlockClass("progress-wrapper", props)} {...argonBlockAnchor(props)}>
-					<div class="progress-info">
+				<div className={argonBlockClass("progress-wrapper", props)} {...argonBlockAnchor(props)}>
+					<div className="progress-info">
 						{props.attributes.show_title &&
-							<div class="progress-label">
+							<div className="progress-label">
 								<RichText
 									tagName="span"
 									placeholder={__("标题")}
@@ -80,12 +80,12 @@ registerBlockType('argon/progressbar', {
 								/>
 							</div>
 						}
-						<div class="progress-percentage">
+						<div className="progress-percentage">
 							<span>{props.attributes.progress}%</span>
 						</div>
 					</div>
-					<div class="progress">
-						<div class="progress-bar" style={{ width: props.attributes.progress.toString() + "%", backgroundColor: props.attributes.color }} />
+					<div className="progress">
+						<div className="progress-bar" style={{ width: props.attributes.progress.toString() + "%", backgroundColor: props.attributes.color }} />
 					</div>
 				</div>
 				<InspectorControls key="setting">
@@ -129,19 +129,19 @@ registerBlockType('argon/progressbar', {
 	},
 	save: (props) => {
 		return (
-			<div class={argonBlockClass("progress-wrapper", props)} {...argonBlockAnchor(props)}>
-				<div class="progress-info">
+			<div className={argonBlockClass("progress-wrapper", props)} {...argonBlockAnchor(props)}>
+				<div className="progress-info">
 					{props.attributes.show_title &&
-						<div class="progress-label">
+						<div className="progress-label">
 							<span dangerouslySetInnerHTML={{ __html: props.attributes.title }}/>
 						</div>
 					}
-					<div class="progress-percentage">
+					<div className="progress-percentage">
 						<span>{props.attributes.progress}%</span>
 					</div>
 				</div>
-				<div class="progress">
-					<div class="progress-bar" style={{ width: props.attributes.progress.toString() + "%", backgroundColor: props.attributes.color }} />
+				<div className="progress">
+					<div className="progress-bar" style={{ width: props.attributes.progress.toString() + "%", backgroundColor: props.attributes.color }} />
 				</div>
 			</div>
 		);

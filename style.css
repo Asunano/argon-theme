@@ -4318,6 +4318,16 @@ html.darkmode #post_comment.post-comment-force-privatemode-off .comment-post-pri
 .collapse-block.collapsed .collapse-icon {
 	transform: rotateZ(0deg);
 }
+/* 折叠区块的 body 兜底。
+   区块编辑器里那个「默认折叠」开关之前【完全不生效】：save 里写的是
+   style={collapsed ? "display: none" : ""} —— 传的是字符串，React 会忽略它，
+   所以已存 HTML 里根本没有 display:none；而 .collapse-block-body 也没有默认隐藏。
+   结果就是：前台默认展开、但图标显示「已折叠」，第一次点击反而把它收起来。
+   代码侧已修（改传对象），但【已经存下来的文章 HTML 不会变】，
+   所以这里必须再加一条 CSS 兜底，让老文章立刻恢复正常。 */
+.collapse-block.collapsed .collapse-block-body {
+	display: none;
+}
 .admonition-title,
 .collapse-block-title {
 	padding: 10px 15px;

@@ -178,7 +178,7 @@ registerBlockType('argon/collapse', {
 					<span className="collapse-block-title-inner" dangerouslySetInnerHTML={{ __html: props.attributes.title }}/>
 					<i className="collapse-icon fa fa-angle-down"></i>
 				</div>
-				<div className="collapse-block-body" style={props.attributes.collapsed ? "display: none" : ""} dangerouslySetInnerHTML={{ __html: props.attributes.content }}/>
+				<div className="collapse-block-body" style={props.attributes.collapsed ? { display: 'none' } : undefined} dangerouslySetInnerHTML={{ __html: props.attributes.content }}/>
 			</div>
 		);
 	},

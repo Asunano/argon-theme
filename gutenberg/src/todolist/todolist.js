@@ -77,7 +77,6 @@ registerBlockType('argon/todolist', {
 			props.setAttributes({ list: newList });
 		};
 		const onChangeCheckStatus = (value, id) => {
-			console.log(value);
 			let newList = props.attributes.list.map((node) => {
 				if (node.id == id){
 					return {...node, checked: value}
@@ -92,16 +91,16 @@ registerBlockType('argon/todolist', {
 				return;
 			}
 			return (
-				<div class="shortcode-todo custom-control custom-checkbox" key={node.id.toString()}>
-					<input class="custom-control-input" type="checkbox" checked={node.checked}/>
-					<label class="custom-control-label" onClick={e => onChangeCheckStatus(!node.checked, node.id)}/>
+				<div className="shortcode-todo custom-control custom-checkbox" key={node.id.toString()}>
+					<input className="custom-control-input" type="checkbox" checked={node.checked ? true : null} readOnly/>
+					<label className="custom-control-label" onClick={e => onChangeCheckStatus(!node.checked, node.id)}/>
 					<RichText
 						tagName="span"
 						placeholder={__("条目内容")}
 						value={node.content}
 						onChange={value => onChangeContent(value, node.id)}
 					/>
-					<Button className="is-tertiary todolist-remove-item-btn" onClick={() => removeNode(node.id)} style={{color: "#7889e8"}}><span class="dashicon dashicons dashicons-trash"></span></Button>
+					<Button className="is-tertiary todolist-remove-item-btn" onClick={() => removeNode(node.id)} style={{color: "#7889e8"}}><span className="dashicon dashicons dashicons-trash"></span></Button>
 				</div>
 			);
 		});
@@ -119,9 +118,9 @@ registerBlockType('argon/todolist', {
 				return;
 			}
 			return (
-				<div class="shortcode-todo custom-control custom-checkbox">
-					<input class="custom-control-input" type="checkbox" checked={node.checked ? true : null}/>
-					<label class="custom-control-label">
+				<div className="shortcode-todo custom-control custom-checkbox">
+					<input className="custom-control-input" type="checkbox" checked={node.checked ? true : null}/>
+					<label className="custom-control-label">
 						<span dangerouslySetInnerHTML={{ __html: node.content }}/>
 					</label>
 				</div>
@@ -129,7 +128,7 @@ registerBlockType('argon/todolist', {
 		});
 		
 		return (
-			<div className={argonBlockClass("", props)} {...argonBlockAnchor(props)} style="margin-bottom: 20px;">
+			<div className={argonBlockClass("", props)} {...argonBlockAnchor(props)} style={{ marginBottom: 20 }}>
 				{nodelist}
 			</div>
 		);

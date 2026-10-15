@@ -4026,7 +4026,7 @@ function shortcode_progressbar($attr,$content=""){
 	if ($content != ""){
 		$out .= "<div class='progress-label'><span>" . $content . "</span></div>";
 	}
-	$progress = isset( $attr['progress'] ) ? $attr['progress'] : 100;
+	$progress = isset( $attr['progress'] ) ? intval( $attr['progress'] ) : 100;
 	$out .= "<div class='progress-percentage'><span>" . $progress . "%</span></div>";
 	$out .= "</div><div class='progress'><div class='progress-bar";
 	$color = isset( $attr['color'] ) ? $attr['color'] : 'indigo';
@@ -4100,7 +4100,7 @@ function shortcode_alert($attr,$content=""){
 	}
 	$out .= "'>";
 	if (isset($attr['icon'])){
-		$out .= "<span class='alert-inner--icon'><i class='fa fa-" . $attr['icon'] . "'></i></span>";
+		$out .= "<span class='alert-inner--icon'><i class='fa fa-" . esc_attr($attr['icon']) . "'></i></span>";
 	}
 	$out .= "<span class='alert-inner--text'>";
 	if (isset($attr['title'])){
@@ -4144,7 +4144,7 @@ function shortcode_admonition($attr,$content=""){
 	if (isset($attr['title'])){
 		$out .= "<div class='admonition-title'>";
 		if (isset($attr['icon'])){
-			$out .= "<i class='fa fa-" . $attr['icon'] . "'></i> ";
+			$out .= "<i class='fa fa-" . esc_attr($attr['icon']) . "'></i> ";
 		}
 		$out .= $attr['title'] . "</div>";
 	}
@@ -4201,7 +4201,7 @@ function shortcode_collapse_block($attr,$content=""){
 
 	$out .= "<div class='collapse-block-title'>";
 	if (isset($attr['icon'])){
-		$out .= "<i class='fa fa-" . $attr['icon'] . "'></i> ";
+		$out .= "<i class='fa fa-" . esc_attr($attr['icon']) . "'></i> ";
 	}
 	$out .= "<span class='collapse-block-title-inner'>" . $title . "</span><i class='collapse-icon fa fa-angle-down'></i></div>";
 
@@ -4457,7 +4457,7 @@ function shortcode_github($attr,$content=""){
 		restore_error_handler();
 	}
 
-	$out = "<div class='github-info-card github-info-card-" . $size . " card shadow-sm' data-author='" . $author . "' data-project='" . $project . "' githubinfo-card-id='" . $github_info_card_id . "' data-getdata='" . $getdata . "' data-description='" . $description . "' data-stars='" . $stars . "' data-forks='" . $forks . "'>";
+	$out = "<div class='github-info-card github-info-card-" . $size . " card shadow-sm' data-author='" . esc_attr($author) . "' data-project='" . esc_attr($project) . "' githubinfo-card-id='" . $github_info_card_id . "' data-getdata='" . $getdata . "' data-description='" . $description . "' data-stars='" . $stars . "' data-forks='" . $forks . "'>";
 	$out .= "<div class='github-info-card-header'><a href='https://github.com/' ref='nofollow' target='_blank' title='Github' no-pjax><span><i class='fa fa-github'></i>";
 	if ($size != "mini"){
 		$out .= " GitHub";

@@ -126,7 +126,7 @@ registerBlockType('argon/github', {
 		return (
 			<div className={argonBlockClass(`github-info-card card shadow-sm ${getStyleClass(props.attributes.className)}`, props)} {...argonBlockAnchor(props)} data-author={props.attributes.author} data-project={props.attributes.project}>
 				<div className="github-info-card-header">
-					<a href="https://github.com/" ref="nofollow" target="_blank" title="Github" rel="noopener">
+					<a href="https://github.com/" rel="nofollow" target="_blank" title="Github" rel="noopener">
 						<span><i className="fa fa-github"></i>&nbsp;GitHub</span>
 					</a>
 				</div>

@@ -36,14 +36,22 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-
+      # 区块产物必须构建成功 —— 之前这里写着 continue-on-error: true，
+      # 结果 cgb-scripts（2017 年的 webpack3 + node-sass）在 CI 上装不上、
+      # 构建静默失败、步骤仍显示绿色，发布包里打的一直是仓库里 2020 年那次构建的旧产物。
+      # 现在换成 @wordpress/scripts（webpack5 + dart-sass，无原生编译），
+      # 并且把「构建后产物必须与仓库里一致」变成硬性检查，防止源码改了产物没更新。
       - name: Build Gutenberg blocks
-        continue-on-error: true
         working-directory: gutenberg
         run: |
-          npm install
+          npm ci
           npm run build
-
+          if [ -n "$(git status --porcelain dist)" ]; then
+            echo "::error::gutenberg/dist 与源码不一致 —— 请本地跑 npm run build 后提交产物"
+            git status --porcelain dist
+            exit 1
+          fi
+          echo "区块产物已构建，且与仓库一致"
       # 必须先同步 version.json 再打包：否则发布包里带的是【上一个版本】的 version.json
       # （原顺序是先打包后同步，实测 v1.4.0 的包里 version.json 还写着 1.3.30）。
       - name: Sync version.json
@@ -113,14 +121,22 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-
+      # 区块产物必须构建成功 —— 之前这里写着 continue-on-error: true，
+      # 结果 cgb-scripts（2017 年的 webpack3 + node-sass）在 CI 上装不上、
+      # 构建静默失败、步骤仍显示绿色，发布包里打的一直是仓库里 2020 年那次构建的旧产物。
+      # 现在换成 @wordpress/scripts（webpack5 + dart-sass，无原生编译），
+      # 并且把「构建后产物必须与仓库里一致」变成硬性检查，防止源码改了产物没更新。
       - name: Build Gutenberg blocks
-        continue-on-error: true
         working-directory: gutenberg
         run: |
-          npm install
+          npm ci
           npm run build
-
+          if [ -n "$(git status --porcelain dist)" ]; then
+            echo "::error::gutenberg/dist 与源码不一致 —— 请本地跑 npm run build 后提交产物"
+            git status --porcelain dist
+            exit 1
+          fi
+          echo "区块产物已构建，且与仓库一致"
       - name: PHP syntax check
         run: |
           # 开发分支是试验场，语法错误必须拦在这里——不要等装到线上才发现整页 fatal。

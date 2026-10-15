@@ -1,16 +1,18 @@
 {
-  "name": "argon-gutenberg-blocks",
-  "version": "1.0.0",
-  "private": true,
-  "scripts": {
-    "start": "cgb-scripts start",
-    "build": "cgb-scripts build",
-    "eject": "cgb-scripts eject"
-  },
-  "dependencies": {
-    "@wordpress/compose": "^4.2.0",
-    "@wordpress/data": "^5.2.0",
-    "cgb-scripts": "1.23.1",
-    "is-whitespace-character": "^2.0.0"
-  }
+	"name": "argon-gutenberg-blocks",
+	"version": "1.0.0",
+	"private": true,
+	"description": "Argon 主题的古腾堡区块（alert / admonition / collapse / github / progressbar / tabpanel / timeline / todolist）",
+	"scripts": {
+		"build": "wp-scripts build --webpack-src-dir=src --output-path=dist",
+		"start": "wp-scripts start --webpack-src-dir=src --output-path=dist",
+		"format": "wp-scripts format src",
+		"lint:js": "wp-scripts lint-js src"
+	},
+	"dependencies": {
+		"is-whitespace-character": "^2.0.0"
+	},
+	"devDependencies": {
+		"@wordpress/scripts": "36.0.0"
+	}
 }

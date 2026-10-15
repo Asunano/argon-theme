@@ -3883,19 +3883,40 @@ function argon_get_post_outdated_info(){
 }
 //Gutenberg 编辑器区块
 function argon_init_gutenberg_blocks() {
+	/* 产物由 @wordpress/scripts 构建（见 gutenberg/package.json）。
+	   入口 src/index.js，产物 dist/index.js + dist/index.css + dist/index.asset.php。
+	   asset.php 里带着 webpack 解析出来的依赖列表与内容 hash 版本号 —— 用它注册，
+	   依赖与缓存都自动跟着产物走，不用手工维护。
+	   旧版是 cgb-scripts（2017 年的 webpack3 + node-sass），本地与 CI 都装不上，
+	   CI 那步还写着 continue-on-error，导致产物一直是 2020 年那次构建的。 */
+	$asset_file = get_template_directory() . '/gutenberg/dist/index.asset.php';
+	if (file_exists($asset_file)) {
+		$asset = require $asset_file;
+	} else {
+		$asset = array(
+			'dependencies' => array('wp-blocks', 'wp-i18n', 'wp-element', 'wp-block-editor', 'wp-components'),
+			'version'      => '1.0.0',
+		);
+	}
+
 	wp_register_script(
 		'argon-gutenberg-block-js',
-		$GLOBALS['assets_path'].'/gutenberg/dist/blocks.build.js',
-		array( 'wp-blocks', 'wp-i18n', 'wp-element', 'wp-editor'),
-		null,
+		$GLOBALS['assets_path'] . '/gutenberg/dist/index.js',
+		$asset['dependencies'],
+		$asset['version'],
 		true
 	);
 	wp_register_style(
 		'argon-gutenberg-block-backend-css',
-		$GLOBALS['assets_path'].'/gutenberg/dist/blocks.editor.build.css',
+		$GLOBALS['assets_path'] . '/gutenberg/dist/index.css',
 		array('wp-edit-blocks'),
-		filemtime(get_template_directory() . '/gutenberg/dist/blocks.editor.build.css')
+		$asset['version']
 	);
+	/* 区块脚本里有中文源串，挂上翻译以便 WP 语言包生效 */
+	if (function_exists('wp_set_script_translations')) {
+		wp_set_script_translations('argon-gutenberg-block-js', 'argon', get_template_directory() . '/languages');
+	}
+
 	$argon_blocks = array(
 		'argon/alert',
 		'argon/admonition',
@@ -3910,7 +3931,7 @@ function argon_init_gutenberg_blocks() {
 		register_block_type(
 			$argon_block,
 			array(
-				//'style'         => 'argon-gutenberg-block-frontend-css',
+				/* 前端样式不在这里给：区块的前端外观由主题 style.css 提供（与短代码同源） */
 				'editor_script' => 'argon-gutenberg-block-js',
 				'editor_style'  => 'argon-gutenberg-block-backend-css',
 			)

@@ -1,5 +1,5 @@
 import './editor.scss';
-import { argonBlockClass, argonBlockAnchor } from './../block-utils.js';
+import { argonBlockClass, argonBlockAnchor, argonColorClass, argonColorStyle } from './../block-utils.js';
 import { __ } from './../i18n/i18n.js';
 import {
 	RichText,
@@ -169,10 +169,17 @@ registerBlockType('argon/admonition', {
 		);
 	},
 	save: (props) => {
+		/* 颜色改走类名。短代码用的是 admonition-<name>，区块原来写行内样式，
+		   行内样式优先级最高，主题定制与暗色模式都盖不住。
+		   预设色映射成 admonition-<name>，根元素与标题都不再写行内样式
+		   （标题背景由 CSS 的 .admonition-<name> > .admonition-title 提供）；
+		   用户自定义色映射不到，仍然保留行内样式，否则颜色会丢。 */
+		const colorClass = argonColorClass('admonition', props.attributes.color);
+		const isPreset = colorClass !== '';
 		return (
-			<div className={argonBlockClass("admonition shadow-sm", props)} {...argonBlockAnchor(props)} style={{ borderLeftColor: props.attributes.color }}>
+			<div className={argonBlockClass(`admonition shadow-sm ${colorClass}`.trim(), props)} {...argonBlockAnchor(props)} style={isPreset ? undefined : { borderLeftColor: props.attributes.color }}>
 				{props.attributes.show_title &&
-					<div className="admonition-title" style={{ backgroundColor: props.attributes.color + "33" }}>
+					<div className="admonition-title" style={isPreset ? undefined : { backgroundColor: props.attributes.color + "33" }}>
 						{!(isWhitespaceCharacter(props.attributes.fa_icon_name) || props.attributes.fa_icon_name == "") &&
 							<span>
 								<i className={`fa fa-${props.attributes.fa_icon_name}`}></i>&nbsp;
@@ -187,4 +194,29 @@ registerBlockType('argon/admonition', {
 			</div>
 		);
 	},
+	/* 旧版 markup 声明：阶段 3 之前颜色是写死在行内 style 里的，没有 admonition-<name> 类。
+	   原样声明在这里，已存文章就不会被判为「此区块包含意外或无效的内容」。 */
+	deprecated: [
+		{
+			save: (props) => {
+				return (
+					<div className={argonBlockClass("admonition shadow-sm", props)} {...argonBlockAnchor(props)} style={{ borderLeftColor: props.attributes.color }}>
+						{props.attributes.show_title &&
+							<div className="admonition-title" style={{ backgroundColor: props.attributes.color + "33" }}>
+								{!(isWhitespaceCharacter(props.attributes.fa_icon_name) || props.attributes.fa_icon_name == "") &&
+									<span>
+										<i className={`fa fa-${props.attributes.fa_icon_name}`}></i>&nbsp;
+									</span>
+								}
+								<span dangerouslySetInnerHTML={{ __html: props.attributes.title }}/>
+							</div>
+						}
+						{props.attributes.show_content &&
+							<div className="admonition-body" dangerouslySetInnerHTML={{ __html: props.attributes.content }}/>
+						}
+					</div>
+				);
+			},
+		},
+	],
 });

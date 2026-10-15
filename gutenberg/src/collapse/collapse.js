@@ -1,5 +1,5 @@
 import './editor.scss';
-import { argonBlockClass, argonBlockAnchor } from './../block-utils.js';
+import { argonBlockClass, argonBlockAnchor, argonColorClass, argonColorStyle } from './../block-utils.js';
 import { __ } from './../i18n/i18n.js';
 import {
 	RichText,
@@ -167,9 +167,15 @@ registerBlockType('argon/collapse', {
 		);
 	},
 	save: (props) => {
+		/* 颜色改走类名：短代码用的是 collapse-block-<name>，区块原来写行内样式，
+		   行内样式优先级最高，主题定制与暗色模式都盖不住。
+		   预设色走类名（根元素边框色与标题背景都由 CSS 提供），
+		   自定义色（含默认的 #ffffff00 透明）仍走行内样式，否则颜色会丢。 */
+		const colorClass = argonColorClass('collapse-block', props.attributes.color);
+		const isPreset = colorClass !== '';
 		return (
-			<div className={argonBlockClass(`collapse-block shadow-sm ${props.attributes.collapsed ? "collapsed" : ""} ${props.attributes.show_left_border ? "" : "hide-border-left"}`.trim(), props)} {...argonBlockAnchor(props)} style={{ borderLeftColor: props.attributes.color }}>
-				<div className="collapse-block-title" style={{ backgroundColor: calcTranslucentColor(props.attributes.color) }}>
+			<div className={argonBlockClass(`collapse-block shadow-sm ${colorClass} ${props.attributes.collapsed ? "collapsed" : ""} ${props.attributes.show_left_border ? "" : "hide-border-left"}`.trim(), props)} {...argonBlockAnchor(props)} style={isPreset ? undefined : { borderLeftColor: props.attributes.color }}>
+				<div className="collapse-block-title" style={isPreset ? undefined : { backgroundColor: calcTranslucentColor(props.attributes.color) }}>
 					{!(isWhitespaceCharacter(props.attributes.fa_icon_name) || props.attributes.fa_icon_name == "") &&
 						<span>
 							<i className={`fa fa-${props.attributes.fa_icon_name}`}></i>&nbsp;
@@ -182,4 +188,26 @@ registerBlockType('argon/collapse', {
 			</div>
 		);
 	},
+	/* 旧版 markup 声明：阶段 3 之前颜色写死在行内 style 里，没有 collapse-block-<name> 类。
+	   原样声明在这里，已存文章就不会被判为「此区块包含意外或无效的内容」。 */
+	deprecated: [
+		{
+			save: (props) => {
+				return (
+					<div className={argonBlockClass(`collapse-block shadow-sm ${props.attributes.collapsed ? "collapsed" : ""} ${props.attributes.show_left_border ? "" : "hide-border-left"}`.trim(), props)} {...argonBlockAnchor(props)} style={{ borderLeftColor: props.attributes.color }}>
+						<div className="collapse-block-title" style={{ backgroundColor: calcTranslucentColor(props.attributes.color) }}>
+							{!(isWhitespaceCharacter(props.attributes.fa_icon_name) || props.attributes.fa_icon_name == "") &&
+								<span>
+									<i className={`fa fa-${props.attributes.fa_icon_name}`}></i>&nbsp;
+								</span>
+							}
+							<span className="collapse-block-title-inner" dangerouslySetInnerHTML={{ __html: props.attributes.title }}/>
+							<i className="collapse-icon fa fa-angle-down"></i>
+						</div>
+						<div className="collapse-block-body" style={props.attributes.collapsed ? { display: 'none' } : undefined} dangerouslySetInnerHTML={{ __html: props.attributes.content }}/>
+					</div>
+				);
+			},
+		},
+	],
 });

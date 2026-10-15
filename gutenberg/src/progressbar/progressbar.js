@@ -1,5 +1,5 @@
 import './editor.scss';
-import { argonBlockClass, argonBlockAnchor } from './../block-utils.js';
+import { argonBlockClass, argonBlockAnchor, argonColorClass, argonColorStyle } from './../block-utils.js';
 import { __ } from './../i18n/i18n.js';
 import {
 	RichText,
@@ -85,7 +85,7 @@ registerBlockType('argon/progressbar', {
 						</div>
 					</div>
 					<div className="progress">
-						<div className="progress-bar" style={{ width: props.attributes.progress.toString() + "%", backgroundColor: props.attributes.color }} />
+						<div className={`progress-bar ${argonColorClass('bg', props.attributes.color)}`.trim()} style={{ width: props.attributes.progress.toString() + "%", ...(argonColorStyle('bg', props.attributes.color, 'backgroundColor') || {}) }} />
 					</div>
 				</div>
 				<InspectorControls key="setting">
@@ -141,9 +141,36 @@ registerBlockType('argon/progressbar', {
 					</div>
 				</div>
 				<div className="progress">
-					<div className="progress-bar" style={{ width: props.attributes.progress.toString() + "%", backgroundColor: props.attributes.color }} />
+					{/* 颜色改走 Bootstrap 的 bg-<name> 类（与短代码一致）；
+					    预设色走类名，自定义色才写行内样式。 */}
+					<div className={`progress-bar ${argonColorClass('bg', props.attributes.color)}`.trim()} style={{ width: props.attributes.progress.toString() + "%", ...(argonColorStyle('bg', props.attributes.color, 'backgroundColor') || {}) }} />
 				</div>
 			</div>
 		);
 	},
+	/* 旧版 markup 声明：阶段 3 之前进度条颜色写死在行内 style 里，没有 bg-<name> 类。
+	   原样声明在这里，已存文章就不会被判为「此区块包含意外或无效的内容」。 */
+	deprecated: [
+		{
+			save: (props) => {
+				return (
+					<div className={argonBlockClass("progress-wrapper", props)} {...argonBlockAnchor(props)}>
+						<div className="progress-info">
+							{props.attributes.show_title &&
+								<div className="progress-label">
+									<span dangerouslySetInnerHTML={{ __html: props.attributes.title }}/>
+								</div>
+							}
+							<div className="progress-percentage">
+								<span>{props.attributes.progress}%</span>
+							</div>
+						</div>
+						<div className="progress">
+							<div className="progress-bar" style={{ width: props.attributes.progress.toString() + "%", backgroundColor: props.attributes.color }} />
+						</div>
+					</div>
+				);
+			},
+		},
+	],
 });

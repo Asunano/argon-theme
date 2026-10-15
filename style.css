@@ -7064,3 +7064,15 @@ html.darkmode .fl-site-info-desc{color:#94a3b8;}
 	.fl-site-info-desc{font-size:12px;}
 	.fl-site-info-copy{padding:9px 22px;font-size:13px;}
 }
+
+/* —— 补上色板里 grey (#888888) 对应的两个类 ——
+   阶段 3 把区块颜色从行内样式改成类名（alert-<name> / bg-<name>）之后，
+   预设色里的 grey 在主题与 Bootstrap 里都没有对应类，映射出来会没有样式。
+   短代码侧本来也没有 grey，这里一并补上，两边保持一致。 */
+.alert-grey {
+	background-color: #888888;
+	color: #fff;
+}
+.bg-grey {
+	background-color: #888888 !important;
+}

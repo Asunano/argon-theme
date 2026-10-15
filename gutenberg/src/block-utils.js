@@ -51,3 +51,55 @@ export function argonBlockClass(base, props) {
 export function argonBlockAnchor(props) {
 	return props && props.anchor ? { id: props.anchor } : {};
 }
+
+/**
+ * 预设色 → CSS 类后缀。
+ *
+ * 短代码用的是类名（alert-primary / admonition-success / bg-danger…），
+ * 而区块编辑器一直用【行内样式】。行内样式优先级最高，导致主题定制与暗色模式
+ * 都盖不住区块 —— 这是区块与短代码外观不一致的根源。
+ *
+ * 这里把预设色映射回类名；能映射的就不再写行内样式，于是 CSS 能正常生效。
+ * 用户自己挑的任意色映射不到，仍然走行内样式（否则颜色就丢了）。
+ */
+const ARGON_PRESET_COLORS = {
+	'#7889e8': 'primary', // Argon 主色（编辑器色板第一个）
+	'#5e72e4': 'primary', // 主题色
+	'#4fd69c': 'success', // green
+	'#f75676': 'danger', // red
+	'#37d5f2': 'info', // blue
+	'#fc7c5f': 'warning', // orange
+	'#3c4d69': 'default', // black
+	'#888888': 'grey', // grey
+};
+
+/**
+ * 把预设色转成 "<prefix>-<name>" 形式的类名；不是预设色则返回空串。
+ *
+ * @param {string} prefix 例如 'alert' / 'admonition' / 'collapse-block' / 'bg'
+ * @param {string} color  形如 #7889e8
+ * @return {string}
+ */
+export function argonColorClass(prefix, color) {
+	if (!color) {
+		return '';
+	}
+	const name = ARGON_PRESET_COLORS[String(color).toLowerCase()];
+	return name ? prefix + '-' + name : '';
+}
+
+/**
+ * 颜色对应的行内样式：只有【非预设色】才需要。
+ * 返回 undefined 时 React 不输出 style 属性。
+ *
+ * @param {string} prefix
+ * @param {string} color
+ * @param {string} property 要设置的 CSS 属性名，如 'backgroundColor'
+ * @return {Object|undefined}
+ */
+export function argonColorStyle(prefix, color, property) {
+	if (!color || argonColorClass(prefix, color)) {
+		return undefined;
+	}
+	return { [property]: color };
+}

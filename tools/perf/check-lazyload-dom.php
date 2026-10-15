@@ -45,6 +45,14 @@ function argon_get_img_meta_for_src($src) {
 	return array('data:image/jpeg;base64,FAKELQIP', 1200, 675);
 }
 function argon_get_lqip_for_img_src($src) { $m = argon_get_img_meta_for_src($src); return $m[0]; }
+/* argon_lazyload() 现在还会给空 alt 的图片补 alt（argon_get_img_alt_for_src）。
+   这里也桩掉，返回一个可辨识的字符串，好断言 alt 确实补上了。 */
+$GLOBALS['__alt_on'] = true;
+function argon_get_img_alt_for_src($src) {
+	if (empty($GLOBALS['__alt_on'])) { return ''; }
+	if ($src == '' || strpos($src, 'data:') === 0) { return ''; }
+	return 'FAKE ALT';
+}
 function esc_attr($s) { return htmlspecialchars((string) $s, ENT_QUOTES, 'UTF-8'); }
 
 function run_block($content, $style = 'lazyload-style-none') {

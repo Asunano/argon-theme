@@ -754,6 +754,46 @@ function argon_get_img_meta_for_src($src){
 	return $cache[$base];
 }
 
+/* 给正文里的一张 <img> 找合适的 alt 文本。
+ *
+ * 为什么需要：编辑器里插入图片时 alt 默认是空的，作者很少手动填，
+ * 于是正文里的 <img alt=""> 大量存在 —— 对无障碍不友好，对 SEO 也是白白浪费。
+ * 这里按 src 反查附件，取它的 alt；alt 为空再退到附件标题（媒体库里的「标题」）。
+ * 都没有就返回空串，保持原样（不编造内容）。
+ *
+ * 反查走 attachment_url_to_postid，与 argon_get_img_meta_for_src 同一套思路，
+ * 但它自己带静态缓存，重复调用不会反复查库。
+ */
+function argon_get_img_alt_for_src($src){
+	if ($src == '' || strpos($src, 'data:') === 0){
+		return '';
+	}
+	static $cache = array();
+	/* 去掉 -1024x576 这类尺寸后缀，拿原图 URL 去查 */
+	$base = preg_replace('/-\d+x\d+(\.[a-zA-Z0-9]+)$/', '$1', $src);
+	if (isset($cache[$base])){
+		return $cache[$base];
+	}
+	$cache[$base] = '';
+	if (!function_exists('attachment_url_to_postid')){
+		return $cache[$base];
+	}
+	$id = attachment_url_to_postid($base);
+	if (!$id){
+		$id = attachment_url_to_postid($src);
+	}
+	if (!$id){
+		return $cache[$base];
+	}
+	$alt = get_post_meta($id, '_wp_attachment_image_alt', true);
+	if (!is_string($alt) || trim($alt) === ''){
+		/* 退到附件标题（媒体库里的标题字段，插入图片时通常会有） */
+		$alt = get_the_title($id);
+	}
+	$cache[$base] = is_string($alt) ? trim($alt) : "";
+	return $cache[$base];
+}
+
 /* 兼容旧调用点：只要 LQIP */
 function argon_get_lqip_for_img_src($src){
 	$m = argon_get_img_meta_for_src($src);
@@ -3337,6 +3377,15 @@ function argon_lazyload($content){
 					}
 				}
 				$img->setAttribute('class', trim('lazyload ' . $lazyload_loading_style . $lqip_class . ' ' . $existing_class));
+				/* 补 alt：编辑器插入图片时 alt 默认是空的，作者很少手动填。
+				   有 data-original（原图地址）就按它反查附件的 alt / 标题。
+				   已经有 alt 的不动 —— 不覆盖作者写过的内容。 */
+				if (trim($img->getAttribute('alt')) === ''){
+					$alt = $lqip_src != '' ? argon_get_img_alt_for_src($lqip_src) : '';
+					if ($alt !== ''){
+						$img->setAttribute('alt', $alt);
+					}
+				}
 				$img->setAttribute('src', 'data:image/svg+xml;base64,PCEtLUFyZ29uTG9hZGluZy0tPgo8c3ZnIHdpZHRoPSIxIiBoZWlnaHQ9IjEiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIgc3Ryb2tlPSIjZmZmZmZmMDAiPjxnPjwvZz4KPC9zdmc+');
 			}
 			/* 逐个子节点输出，拆掉临时根 —— 不留任何包裹层 */
@@ -3378,7 +3427,7 @@ function argon_lazyload($content){
 					   否则会永久覆盖作者在编辑器里拖出来的宽度（Gutenberg 的 is-resized
 					   会带 width/height 属性），作者写了 height 时还会让 aspect-ratio 失效、图片变形。
 					   aspect-ratio 本身无害，无条件写。 */
-					$has_size = $img->getAttribute('width') != '' || $img->getAttribute('height') != ''
+					$has_size = preg_match('/\swidth=/i', $m[1]) || preg_match('/\sheight=/i', $m[1])
 						|| preg_match('/(^|;)\s*(width|height)\s*:/i', $style);
 					if (!$has_size){
 						$style .= 'width:100%;max-width:' . (int) $meta[1] . 'px;';
@@ -3387,7 +3436,13 @@ function argon_lazyload($content){
 					$style .= 'aspect-ratio:' . (int) $meta[1] . ' / ' . (int) $meta[2] . ';';
 				}
 				$ph = 'data:image/svg+xml;base64,PCEtLUFyZ29uTG9hZGluZy0tPgo8c3ZnIHdpZHRoPSIxIiBoZWlnaHQ9IjEiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PC9zdmc+';
-				return '<img' . $m[1] . 'data-original="' . $src . '" class="' . $cls . '"' . $wh . ' src="' . $ph . '"' . $m[3] . ($style != '' ? ' style="' . $style . '"' : '') . ' ' . $m[4];
+				/* 补 alt：编辑器插入图片时 alt 默认是空的，作者很少手动填。
+				   有 src 就按它反查附件的 alt / 标题；已经有非空 alt 的不动。
+				   先把原有的 alt 属性去掉再统一追加，避免出现两个 alt。 */
+				$alt_text = argon_get_img_alt_for_src($src);
+				$alt_attr = ($alt_text !== '') ? ' alt="' . esc_attr($alt_text) . '"' : '';
+				$attrs = preg_replace('/\s+alt=("[^"]*"|\'[^\']*\')/i', '', $m[1]);
+				return '<img' . $attrs . $alt_attr . 'data-original="' . $src . '" class="' . $cls . '"' . $wh . ' src="' . $ph . '"' . $m[3] . ($style != '' ? ' style="' . $style . '"' : '') . ' ' . $m[4];
 			}, $content);
 			$content = preg_replace('/<img(.*?)data-full-url=[\'"]([^\'"]+)[\'"](.*)>/i',"<img$1data-full-url=\"$2\" data-original=\"$2\"$3>" , $content);
 			$content = preg_replace('/<img(.*?)srcset=[\'"](.*?)[\'"](.*?)>/i',"<img$1$3>" , $content);
@@ -3430,6 +3485,54 @@ function the_content_filter($content){
 	return $content;
 }
 add_filter('the_content' , 'the_content_filter',20);
+
+/* alt 兜底。
+ * 上面的 argon_lazyload() 会在它处理的图片上补 alt，但它有三个覆盖不到的地方：
+ *   ① 首页正文 —— argon_lazyload 里有 !is_home() 判断，首页整段跳过
+ *   ② feed / robots 请求
+ *   ③ DOMDocument 不可用、回退到正则分支时
+ * 这里再兜一遍。挂在 25（the_content_filter 是 20），确保跑在懒加载改写之后 ——
+ * 那时 <img> 已经是 data-original 形式，优先按它反查附件。
+ *
+ * 注意：不要求 class 在 alt 之前。实测主题输出的 <img> 是
+ *     <img … alt="" class="lazyload … wp-image-1540" …>
+ * 只匹配一种属性顺序会漏掉大半，所以这里对整个 <img …> 标签处理。
+ */
+function argon_fill_img_alt_fallback($content){
+	if (is_admin() || is_feed() || is_robots()){
+		return $content;
+	}
+	if (strpos($content, '<img') === false){
+		return $content;
+	}
+	return preg_replace_callback('/<img\b[^>]*>/i', function($m){
+		$tag = $m[0];
+		/* 已经有非空 alt 的不动 —— 不覆盖作者写过的内容 */
+		if (preg_match('/\salt=(["\'])(.*?)\1/i', $tag, $a) && trim($a[2]) !== ''){
+			return $tag;
+		}
+		/* 懒加载改写后真实地址在 data-original，优先用它 */
+		$src = '';
+		if (preg_match('/\sdata-original=(["\'])(.*?)\1/i', $tag, $s)){
+			$src = $s[2];
+		}elseif (preg_match('/\ssrc=(["\'])(.*?)\1/i', $tag, $s)){
+			$src = $s[2];
+		}
+		if ($src === ''){
+			return $tag;
+		}
+		$alt = argon_get_img_alt_for_src($src);
+		if ($alt === ''){
+			return $tag;
+		}
+		$alt = esc_attr($alt);
+		if (preg_match('/\salt=(["\'])(.*?)\1/i', $tag)){
+			return preg_replace('/\salt=(["\'])(.*?)\1/i', ' alt="' . $alt . '"', $tag, 1);
+		}
+		return preg_replace('/<img\b/i', '<img alt="' . $alt . '"', $tag, 1);
+	}, $content);
+}
+add_filter('the_content', 'argon_fill_img_alt_fallback', 25);
 //使用 CDN 加速 gravatar
 function gravatar_cdn($url){
 	$cdn = argon_get_option('argon_gravatar_cdn', 'gravatar.pho.ink/avatar/');
@@ -6771,3 +6874,239 @@ function argon_fl_apply_button_html($style = '1'){
 	<?php
 	return ob_get_clean();
 }
+
+/* ============================================================
+ * FAQ / HowTo 区块（结构化数据）
+ * ============================================================
+ * 两个区块都是动态的，前台输出两样东西：
+ *   ① 可见内容 —— FAQ 用原生 <details>/<summary>（语义正确、可键盘操作、不依赖 JS），
+ *      HowTo 用有序列表
+ *   ② 结构化数据 —— 由这里统一收集，在页面底部输出【一段】JSON-LD
+ *
+ * 为什么要收集后统一输出：一个页面可能放多个 FAQ 区块，
+ * 每块都吐一段 FAQPage 的话一个页面会出现多个 FAQPage，Google 不推荐。
+ * 收集用 render_block 过滤器（按渲染顺序拿到每个块的属性），
+ * 输出挂在 wp_footer —— 那时正文已经渲染完，数据齐了。
+ *
+ * 与 SEO 插件共存：线上那套 @graph（Person/BlogPosting/WebPage…）是 Rank Math
+ * 之类的插件输出的，本主题不碰它；FAQPage / HowTo 作为独立的 ld+json 段落追加，
+ * Google 支持一个页面有多段 JSON-LD。
+ * ============================================================ */
+
+/* 把富文本压成纯文本（JSON-LD 里不要 HTML 标签） */
+function argon_schema_plain($text){
+	$text = wp_strip_all_tags((string) $text, true);
+	$text = preg_replace('/\s+/u', ' ', $text);
+	return trim($text);
+}
+
+/* 收集本页的 FAQ / HowTo 数据 */
+function argon_collect_schema_block($block_content, $block){
+	if (is_admin() || empty($block['blockName'])){
+		return $block_content;
+	}
+	$attrs = isset($block['attrs']) && is_array($block['attrs']) ? $block['attrs'] : array();
+
+	if ($block['blockName'] === 'argon/faq'){
+		$items = isset($attrs['items']) ? (array) $attrs['items'] : array();
+		$clean = array();
+		foreach ($items as $it){
+			$q = argon_schema_plain(isset($it['question']) ? $it['question'] : '');
+			$a = argon_schema_plain(isset($it['answer']) ? $it['answer'] : '');
+			if ($q !== '' && $a !== ''){
+				$clean[] = array('q' => $q, 'a' => $a);
+			}
+		}
+		if ($clean){
+			global $argon_faq_items;
+			if (!is_array($argon_faq_items)){ $argon_faq_items = array(); }
+			$argon_faq_items = array_merge($argon_faq_items, $clean);
+		}
+	}
+
+	if ($block['blockName'] === 'argon/howto'){
+		$title = argon_schema_plain(isset($attrs['title']) ? $attrs['title'] : '');
+		$desc  = argon_schema_plain(isset($attrs['description']) ? $attrs['description'] : '');
+		$steps = isset($attrs['steps']) ? (array) $attrs['steps'] : array();
+		$clean = array();
+		foreach ($steps as $st){
+			$name = argon_schema_plain(isset($st['name']) ? $st['name'] : '');
+			$text = argon_schema_plain(isset($st['text']) ? $st['text'] : '');
+			if ($name === '' && $text === ''){
+				continue;
+			}
+			$clean[] = array('name' => $name, 'text' => $text);
+		}
+		if ($clean && $title !== ''){
+			global $argon_howto_items;
+			if (!is_array($argon_howto_items)){ $argon_howto_items = array(); }
+			$argon_howto_items[] = array('title' => $title, 'description' => $desc, 'steps' => $clean);
+		}
+	}
+
+	return $block_content;
+}
+add_filter('render_block', 'argon_collect_schema_block', 10, 2);
+
+/* 页面底部输出合并后的 JSON-LD */
+function argon_print_schema_jsonld(){
+	global $argon_faq_items, $argon_howto_items;
+
+	$graph = array();
+
+	if (is_array($argon_faq_items) && $argon_faq_items){
+		$entities = array();
+		foreach ($argon_faq_items as $it){
+			$entities[] = array(
+				'@type'          => 'Question',
+				'name'           => $it['q'],
+				'acceptedAnswer' => array(
+					'@type' => 'Answer',
+					'text'  => $it['a'],
+				),
+			);
+		}
+		$graph[] = array(
+			'@type'      => 'FAQPage',
+			'mainEntity' => $entities,
+		);
+	}
+
+	if (is_array($argon_howto_items) && $argon_howto_items){
+		foreach ($argon_howto_items as $howto){
+			$steps = array();
+			$i = 0;
+			foreach ($howto['steps'] as $st){
+				$i++;
+				$step = array(
+					'@type'    => 'HowToStep',
+					'position' => $i,
+					'text'     => $st['text'] !== '' ? $st['text'] : $st['name'],
+				);
+				if ($st['name'] !== ''){
+					$step['name'] = $st['name'];
+				}
+				$steps[] = $step;
+			}
+			$item = array(
+				'@type' => 'HowTo',
+				'name'  => $howto['title'],
+				'step'  => $steps,
+			);
+			if ($howto['description'] !== ''){
+				$item['description'] = $howto['description'];
+			}
+			$graph[] = $item;
+		}
+	}
+
+	if (!$graph){
+		return;
+	}
+
+	$payload = array('@context' => 'https://schema.org');
+	if (count($graph) === 1){
+		$payload = array_merge($payload, $graph[0]);
+	}else{
+		$payload['@graph'] = $graph;
+	}
+	echo '<script type="application/ld+json">'
+		. wp_json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
+		. '</script>' . "\n";
+}
+add_action('wp_footer', 'argon_print_schema_jsonld', 99);
+
+/* ---- FAQ 区块的前台输出 ---- */
+function argon_render_faq_block($attributes){
+	$title = isset($attributes['title']) ? trim((string) $attributes['title']) : '';
+	$items = isset($attributes['items']) ? (array) $attributes['items'] : array();
+
+	$rows = '';
+	$i = 0;
+	foreach ($items as $it){
+		$q = isset($it['question']) ? (string) $it['question'] : '';
+		$a = isset($it['answer']) ? (string) $it['answer'] : '';
+		if (trim(wp_strip_all_tags($q)) === '' || trim(wp_strip_all_tags($a)) === ''){
+			continue;
+		}
+		$i++;
+		$rows .= '<details class="argon-faq-item"' . ($i === 1 ? ' open' : '') . '>'
+			. '<summary class="argon-faq-question">' . esc_html($q) . '</summary>'
+			. '<div class="argon-faq-answer">' . wpautop(esc_html($a)) . '</div>'
+			. '</details>';
+	}
+	if ($rows === ''){
+		return '';
+	}
+	$out = '<div class="argon-faq">';
+	if ($title !== ''){
+		$out .= '<div class="argon-faq-title">' . esc_html($title) . '</div>';
+	}
+	$out .= $rows . '</div>';
+	return $out;
+}
+
+/* ---- HowTo 区块的前台输出 ---- */
+function argon_render_howto_block($attributes){
+	$title = isset($attributes['title']) ? trim((string) $attributes['title']) : '';
+	$desc  = isset($attributes['description']) ? trim((string) $attributes['description']) : '';
+	$steps = isset($attributes['steps']) ? (array) $attributes['steps'] : array();
+
+	$rows = '';
+	foreach ($steps as $st){
+		$name = isset($st['name']) ? (string) $st['name'] : '';
+		$text = isset($st['text']) ? (string) $st['text'] : '';
+		if (trim(wp_strip_all_tags($name)) === '' && trim(wp_strip_all_tags($text)) === ''){
+			continue;
+		}
+		$rows .= '<li class="argon-howto-step">';
+		if ($name !== ''){
+			$rows .= '<div class="argon-howto-step-name">' . esc_html($name) . '</div>';
+		}
+		if ($text !== ''){
+			$rows .= '<div class="argon-howto-step-text">' . wpautop(esc_html($text)) . '</div>';
+		}
+		$rows .= '</li>';
+	}
+	if ($rows === '' || $title === ''){
+		return '';
+	}
+	$out = '<div class="argon-howto">';
+	$out .= '<div class="argon-howto-title">' . esc_html($title) . '</div>';
+	if ($desc !== ''){
+		$out .= '<div class="argon-howto-description">' . wpautop(esc_html($desc)) . '</div>';
+	}
+	$out .= '<ol class="argon-howto-steps">' . $rows . '</ol>';
+	$out .= '</div>';
+	return $out;
+}
+
+/* ---- 注册两个动态区块 ---- */
+function argon_init_gutenberg_schema_blocks() {
+	register_block_type(
+		'argon/faq',
+		array(
+			'editor_script'   => 'argon-gutenberg-block-js',
+			'editor_style'    => 'argon-gutenberg-block-backend-css',
+			'render_callback' => 'argon_render_faq_block',
+			'attributes'      => array(
+				'title' => array('type' => 'string', 'default' => ''),
+				'items' => array('type' => 'array', 'default' => array()),
+			),
+		)
+	);
+	register_block_type(
+		'argon/howto',
+		array(
+			'editor_script'   => 'argon-gutenberg-block-js',
+			'editor_style'    => 'argon-gutenberg-block-backend-css',
+			'render_callback' => 'argon_render_howto_block',
+			'attributes'      => array(
+				'title'       => array('type' => 'string', 'default' => ''),
+				'description' => array('type' => 'string', 'default' => ''),
+				'steps'       => array('type' => 'array', 'default' => array()),
+			),
+		)
+	);
+}
+add_action('init', 'argon_init_gutenberg_schema_blocks');

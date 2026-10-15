@@ -7076,3 +7076,98 @@ html.darkmode .fl-site-info-desc{color:#94a3b8;}
 .bg-grey {
 	background-color: #888888 !important;
 }
+
+/* —— FAQ / HowTo 区块（argon/faq、argon/howto） ——
+   两个区块都是动态的：可见内容由 PHP 渲染（FAQ 用原生 <details>/<summary>，
+   HowTo 用有序列表），结构化数据由 wp_footer 统一输出一段 JSON-LD。
+   这里的样式跟主题其它区块保持同一套变量与观感。 */
+.argon-faq,
+.argon-howto {
+	margin: 20px 0;
+}
+
+.argon-faq-title,
+.argon-howto-title {
+	font-size: 1.15rem;
+	font-weight: 600;
+	margin-bottom: 12px;
+	color: var(--color-card-text, #32325d);
+}
+
+.argon-howto-description {
+	margin-bottom: 12px;
+	color: var(--color-text, #525f7f);
+}
+
+.argon-faq-item {
+	border-left: 3px solid var(--themecolor, #5e72e4);
+	border-radius: 3px;
+	background-color: var(--color-widgets, #fff);
+	margin-bottom: 8px;
+	overflow: hidden;
+}
+
+.argon-faq-question {
+	cursor: pointer;
+	padding: 10px 15px;
+	font-weight: 600;
+	list-style: none;
+	position: relative;
+	padding-right: 38px;
+}
+
+/* 去掉浏览器自带的三角，换成 Font Awesome 的箭头 */
+.argon-faq-question::-webkit-details-marker {
+	display: none;
+}
+
+.argon-faq-question:after {
+	content: "\f107";
+	font-family: "FontAwesome";
+	font-weight: 900;
+	position: absolute;
+	right: 15px;
+	top: 50%;
+	transform: translateY(-50%) rotateZ(180deg);
+	transition: transform 0.2s ease;
+	opacity: 0.6;
+}
+
+.argon-faq-item[open] .argon-faq-question:after {
+	transform: translateY(-50%) rotateZ(0deg);
+}
+
+.argon-faq-answer {
+	padding: 0 15px 12px;
+	color: var(--color-text, #525f7f);
+}
+
+.argon-faq-answer p:last-child {
+	margin-bottom: 0;
+}
+
+.argon-howto-steps {
+	padding-left: 22px;
+	margin: 0;
+}
+
+.argon-howto-step {
+	margin-bottom: 12px;
+}
+
+.argon-howto-step-name {
+	font-weight: 600;
+	color: var(--color-card-text, #32325d);
+}
+
+.argon-howto-step-text {
+	color: var(--color-text, #525f7f);
+}
+
+.argon-howto-step-text p:last-child {
+	margin-bottom: 0;
+}
+
+html.darkmode .argon-faq-item {
+	background-color: var(--color-widgets, #1e1e1e);
+}

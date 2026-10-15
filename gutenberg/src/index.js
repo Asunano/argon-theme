@@ -14,3 +14,6 @@ import './hidden/hidden.js';
 import './checkbox/checkbox.js';
 import './friendlinks/friendlinks.js';
 import './ref/ref.js';
+/* FAQ / HowTo：输出可见列表 + FAQPage / HowTo 结构化数据（JSON-LD 由 PHP 侧合并输出） */
+import './faq/faq.js';
+import './howto/howto.js';

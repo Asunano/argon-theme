@@ -17,7 +17,17 @@ const { registerBlockType } = wp.blocks;
 registerBlockType('argon/kbd', {
 	apiVersion: 2,
 	title: __('键盘按键'),
-	icon: 'keyboard',
+	/* 注意：dashicons 没有 keyboard 图标（填 'keyboard' 在插入器里是空白），
+	   这里用自绘键帽 SVG */
+	icon: wp.element.createElement(
+		'svg',
+		{ viewBox: '0 0 24 24', width: 24, height: 24, 'aria-hidden': true },
+		wp.element.createElement('rect', { x: 3, y: 7, width: 18, height: 10, rx: 2, fill: 'none', stroke: 'currentColor', strokeWidth: 2 }),
+		wp.element.createElement('rect', { x: 6, y: 10, width: 3, height: 2, fill: 'currentColor' }),
+		wp.element.createElement('rect', { x: 10.5, y: 10, width: 3, height: 2, fill: 'currentColor' }),
+		wp.element.createElement('rect', { x: 15, y: 10, width: 3, height: 2, fill: 'currentColor' }),
+		wp.element.createElement('rect', { x: 7, y: 13.5, width: 10, height: 1.8, fill: 'currentColor' })
+	),
 	category: 'argon',
 	keywords: [ 'argon', __('键盘'), 'kbd', 'key' ],
 	supports: {

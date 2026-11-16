@@ -2,6 +2,14 @@
 
 本文件记录 Argon Theme 增强分支（[Asunano/argon-theme](https://github.com/Asunano/argon-theme)）的全部版本变更，按版本号倒序排列。本分支基于 [solstice23/argon-theme](https://github.com/solstice23/argon-theme) 开发，版本号序列沿用上游。分类术语含义：**新增**（新功能）、**变更**（对既有行为的调整）、**修复**（问题修正）、**性能**（性能优化）、**安全**（安全相关修正）、**构建**（构建与发布流程）。v1.3.18 之前的变更记录请查阅 Git 提交历史。
 
+## 未发布
+
+### 修复
+
+- Font Awesome 6 子集缺少本轮新组件用到的 14 个图标（fa-download / fa-play / fa-cloud / fa-music / fa-rss / fa-chevron-down / fa-chevron-up / fa-list-ul / fa-external-link / fa-play-circle / fa-user / fa-thumbs-down / fa-file-text-o），前台图标渲染为空白。已重新生成字体子集与 CSS（覆盖率校验 PASS）。
+- 区块编辑器此前不加载 Font Awesome，画布内所有组件预览的图标（含 GitHub 信息卡片）均为空白。现已随编辑器资源加载 FA 子集。
+- GitHub Release 下载卡首次渲染不再同步阻塞访客请求（部分服务器无法直连 api.github.com）：缓存未预热时改为计划任务后台抓取，下一轮请求生效；失败状态独立标记并在 30 分钟后自动重试。
+
 ## 1.3.36（2026-11-17）
 
 ### 新增

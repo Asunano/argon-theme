@@ -4,6 +4,10 @@
 
 ## 未发布
 
+### 新增
+
+- **GitHub Release 下载卡**：`[gh-release repo="Asunano/UFI-AXIS" tag="v0.1.3" mirror="https://mirror.example.com/" title="…"]`（区块 `argon/gh-release`）。自动列出指定 Release 的全部附件（文件名 + 大小 + 下载按钮）；`tag` 留空取最新 Release；`mirror` 为下载加速前缀，拼接规则为「镜像域名 + 完整原始地址」。数据经 GitHub API 获取并缓存 6 小时（失败 30 分钟），访客请求只读缓存；发布新 Release 后卡片内容自动更新，无需修改文章。
+
 ### 变更
 
 - 区块编辑器画布预览全面重设计（参考 GitHub 信息卡片的模式）：新增组件不再依赖 ServerSideRender 渲染编辑器预览，改为在编辑器内直接渲染带样式的卡片——下载卡片、外链卡片、评分卡、圆形进度为「实时预览」（随侧栏输入即时变化）；B 站 / 网易云 / APlayer / ArtPlayer / 文章引用卡 / 文章列表 / 友链朋友圈为「样式化占位」（平台数据在前台加载）。编辑器预览不再依赖 REST 渲染接口，规避「区块渲染为空」一类环境性故障；历史组件（FAQ / HowTo / 脚注 / 友链）保留 SSR 真实数据并补充编辑器样式。

@@ -16,7 +16,6 @@
 import { __ } from './../i18n/i18n.js';
 import { InnerBlocks, InspectorControls, useBlockProps } from '@wordpress/block-editor';
 import { PanelBody, PanelRow, RangeControl, TextControl, ToggleControl } from '@wordpress/components';
-import ServerSideRender from '@wordpress/server-side-render';
 
 const { registerBlockType } = wp.blocks;
 
@@ -70,17 +69,17 @@ registerBlockType('argon/toc', {
 						</PanelRow>
 					</PanelBody>
 				</InspectorControls>
-				<div
-					style={{
-						padding: '12px 16px',
-						borderRadius: '8px',
-						background: '#f7f7fb',
-						fontSize: '13px',
-						opacity: 0.8,
-					}}
-				>
-					<i className="fa fa-list-ul"></i>{' '}
-					{__('目录在前台根据文章标题自动生成（编辑器里不显示具体条目）')}
+				<div className="argon-toc argon-toc-editor">
+					<div className="argon-toc-title">
+						<i className="fa fa-list-ul"></i> {props.attributes.title || __('目录')}
+						<i className="fa fa-angle-down argon-toc-toggle"></i>
+					</div>
+					<div className="argon-toc-body">
+						{__('前台根据文内标题自动生成，最多收录到 h') + (props.attributes.max || 3) + ' ' + __('级')}
+						<div className="argon-editor-skeleton-bar" style={{ width: '70%', marginTop: '8px' }}></div>
+						<div className="argon-editor-skeleton-bar" style={{ width: '55%' }}></div>
+						<div className="argon-editor-skeleton-bar" style={{ width: '62%' }}></div>
+					</div>
 				</div>
 			</div>
 		);

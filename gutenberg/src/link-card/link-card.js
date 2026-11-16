@@ -12,8 +12,7 @@
 
 import { __ } from './../i18n/i18n.js';
 import { InspectorControls, useBlockProps } from '@wordpress/block-editor';
-import { Notice, PanelBody, PanelRow, TextControl, TextareaControl } from '@wordpress/components';
-import ServerSideRender from '@wordpress/server-side-render';
+import { PanelBody, PanelRow, TextControl, TextareaControl } from '@wordpress/components';
 
 const { registerBlockType } = wp.blocks;
 
@@ -84,12 +83,18 @@ registerBlockType('argon/link-card', {
 						</PanelRow>
 					</PanelBody>
 				</InspectorControls>
-				{!props.attributes.url && (
-					<Notice status="warning" isDismissible={false}>
-						{__('请在右侧「区块设置」中填写「链接地址」，卡片才会渲染。')}
-					</Notice>
-				)}
-				<ServerSideRender block="argon/link-card" attributes={props.attributes} />
+				<div className="argon-link-card argon-link-card-editor">
+					<span className="argon-link-card-icon">
+						{props.attributes.icon
+							? <img src={props.attributes.icon} alt="" />
+							: <span className="argon-link-card-icon-text">{(props.attributes.title || props.attributes.url || '?').charAt(0)}</span>}
+					</span>
+					<span className="argon-link-card-body">
+						<span className="argon-link-card-title">{props.attributes.title || props.attributes.url || __('链接地址（右侧栏填写）')}</span>
+						<span className="argon-link-card-desc">{props.attributes.desc || __('描述（可选，右侧栏填写）')}</span>
+					</span>
+					<span className="argon-link-card-arrow"><i className="fa fa-angle-right"></i></span>
+				</div>
 			</div>
 		);
 	},

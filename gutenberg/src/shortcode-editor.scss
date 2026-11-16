@@ -1,0 +1,793 @@
+/*
+ * 编辑器预览样式 —— 所有「短代码 + 区块」双形态组件的画布内预览（参考 github 信息卡片的模式：
+ * 编辑器里显示客户端渲染的样式化卡片，真实数据在前台由 render_callback 渲染）。
+ *
+ * 仅经 dist/index.css（editor_style）注入编辑器，不影响前台。
+ * 类名与前台 style.css 保持一致，便于将来统一；此处使用字面色值，
+ * 因为编辑器里没有主题的 CSS 变量（--themecolor 等）。
+ * 修改前台对应组件样式时，请同步这里。
+ */
+
+/* ---------- 编辑器通用骨架条 ---------- */
+.argon-editor-skeleton-bar {
+	display: block;
+	height: 12px;
+	border-radius: 6px;
+	background: #e4e6ef;
+	margin-top: 6px;
+}
+
+/* ---------- 下载卡片 ---------- */
+.download-card {
+	display: flex;
+	align-items: center;
+	gap: 15px;
+	padding: 16px 20px;
+	margin: 15px 0;
+	border-radius: 8px;
+	background-color: #fff;
+	box-shadow: 0 4px 12px rgba(0, 0, 0, .08);
+}
+.download-card-icon {
+	flex-shrink: 0;
+	width: 46px;
+	height: 46px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: 50%;
+	background-color: #8a98eb;
+	color: #fff;
+	font-size: 20px;
+}
+.download-card-body {
+	flex: 1;
+	min-width: 0;
+}
+.download-card-title {
+	font-weight: bold;
+	font-size: 16px;
+	margin-bottom: 4px;
+	word-break: break-all;
+}
+.download-card-meta {
+	font-size: 13px;
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+.download-card-meta-item {
+	opacity: .75;
+}
+.download-card-pwd code {
+	margin-left: 4px;
+}
+.download-card-description {
+	font-size: 14px;
+	margin-top: 6px;
+	opacity: .85;
+	word-break: break-word;
+}
+.download-card-action {
+	flex-shrink: 0;
+}
+.download-card-action .btn {
+	display: inline-block;
+	padding: 8px 18px;
+	border-radius: 3px;
+	font-size: 14px;
+	color: #fff;
+	text-decoration: none;
+	cursor: pointer;
+}
+.download-card-action .btn-success { background-color: #4fd69c; }
+.download-card-action .btn-primary { background-color: #7889e8; }
+.download-card-action .btn-danger { background-color: #f75676; }
+.download-card-action .btn-warning { background-color: #fc7c5f; }
+.download-card-action .btn-info { background-color: #37d5f2; }
+.badge {
+	display: inline-block;
+	padding: 3px 8px;
+	border-radius: 4px;
+	font-size: 12px;
+	line-height: 1.5;
+	color: #fff;
+}
+.badge-success { background-color: #4fd69c; }
+.badge-primary { background-color: #7889e8; }
+.badge-danger { background-color: #f75676; }
+.badge-warning { background-color: #fc7c5f; }
+.badge-info { background-color: #37d5f2; }
+
+/* ---------- B 站视频卡片 ---------- */
+.bilibili-card-editor {
+	position: relative;
+	width: 100%;
+	height: 0;
+	padding-bottom: 56.25%;
+	margin: 15px 0;
+	border-radius: 8px;
+	overflow: hidden;
+	background-color: #1a1a1a;
+}
+.bilibili-card-noinfo {
+	position: absolute;
+	left: 0;
+	top: 0;
+	right: 0;
+	bottom: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	color: #fff;
+	font-size: 15px;
+	padding: 0 20px;
+	text-align: center;
+}
+.bilibili-card-play {
+	position: absolute;
+	left: 50%;
+	top: 50%;
+	transform: translate(-50%, -50%);
+	width: 54px;
+	height: 54px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: 50%;
+	background-color: rgba(0, 0, 0, .55);
+	color: #fff;
+	font-size: 20px;
+}
+.bilibili-card-badge {
+	position: absolute;
+	left: 10px;
+	top: 10px;
+	padding: 2px 8px;
+	border-radius: 4px;
+	background-color: rgba(251, 114, 153, .9);
+	color: #fff;
+	font-size: 12px;
+	line-height: 1.5;
+}
+.bilibili-card-editor-note {
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: 10px;
+	text-align: center;
+	color: rgba(255, 255, 255, .75);
+	font-size: 12px;
+}
+
+/* ---------- 网易云 ---------- */
+.netease-editor-mock {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	margin: 15px 0;
+	padding: 12px 16px;
+	border-radius: 8px;
+	background-color: #fff;
+	box-shadow: 0 4px 12px rgba(0, 0, 0, .08);
+	border-left: 4px solid #c20c0c;
+}
+.netease-editor-mock-icon {
+	flex-shrink: 0;
+	width: 36px;
+	height: 36px;
+	border-radius: 50%;
+	background-color: #c20c0c;
+	color: #fff;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+.netease-editor-mock-body {
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+.netease-editor-mock-title {
+	font-weight: bold;
+	font-size: 14px;
+}
+.netease-editor-mock-sub {
+	font-size: 12px;
+	opacity: .7;
+	word-break: break-all;
+}
+
+/* ---------- APlayer ---------- */
+.aplayer-editor-mock {
+	margin: 15px 0;
+	border-radius: 8px;
+	background-color: #fff;
+	box-shadow: 0 4px 12px rgba(0, 0, 0, .08);
+	overflow: hidden;
+}
+.aplayer-editor-mock-head {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 10px 14px;
+}
+.aplayer-editor-mock-btn {
+	flex-shrink: 0;
+	width: 32px;
+	height: 32px;
+	border-radius: 50%;
+	background-color: #7889e8;
+	color: #fff;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+.aplayer-editor-mock-title {
+	font-weight: bold;
+	font-size: 14px;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.aplayer-editor-mock-list {
+	border-top: 1px solid rgba(0, 0, 0, .06);
+	max-height: 200px;
+	overflow: auto;
+}
+.aplayer-editor-track {
+	padding: 6px 14px;
+	font-size: 13px;
+	border-top: 1px solid rgba(0, 0, 0, .04);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.aplayer-editor-track:first-child {
+	border-top: 0;
+}
+.aplayer-editor-mock-hint,
+.aplayer-editor-mock-note {
+	padding: 8px 14px;
+	font-size: 12px;
+	opacity: .6;
+}
+.aplayer-editor-mock-note {
+	border-top: 1px solid rgba(0, 0, 0, .06);
+}
+
+/* ---------- ArtPlayer ---------- */
+.artplayer-editor-mock {
+	position: relative;
+	width: 100%;
+	min-height: 220px;
+	margin: 15px 0;
+	border-radius: 8px;
+	overflow: hidden;
+	background-color: #000;
+	background-size: cover;
+	background-position: center;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+.artplayer-editor-play {
+	width: 54px;
+	height: 54px;
+	border-radius: 50%;
+	background-color: rgba(0, 0, 0, .55);
+	color: #fff;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 20px;
+	flex-shrink: 0;
+}
+.artplayer-editor-label {
+	position: absolute;
+	left: 14px;
+	bottom: 12px;
+	color: #fff;
+	font-size: 13px;
+	max-width: calc(100% - 28px);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	text-shadow: 0 1px 3px rgba(0, 0, 0, .6);
+}
+
+/* ---------- 外链卡片 ---------- */
+.argon-link-card-editor {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	margin: 15px 0;
+	padding: 12px 16px;
+	border-radius: 8px;
+	background-color: #fff;
+	box-shadow: 0 4px 12px rgba(0, 0, 0, .08);
+	color: inherit;
+}
+.argon-link-card-icon {
+	flex-shrink: 0;
+	width: 40px;
+	height: 40px;
+	border-radius: 8px;
+	overflow: hidden;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background-color: #8a98eb;
+}
+.argon-link-card-icon img {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+.argon-link-card-icon-text {
+	color: #fff;
+	font-weight: bold;
+	font-size: 18px;
+}
+.argon-link-card-body {
+	flex: 1;
+	min-width: 0;
+}
+.argon-link-card-title {
+	display: block;
+	font-weight: bold;
+	font-size: 15px;
+	line-height: 1.4;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.argon-link-card-desc {
+	display: block;
+	font-size: 13px;
+	opacity: .7;
+	line-height: 1.5;
+	margin-top: 2px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.argon-link-card-arrow {
+	flex-shrink: 0;
+	opacity: .45;
+	font-size: 16px;
+}
+
+/* ---------- 评分卡 ---------- */
+.argon-review {
+	margin: 20px 0;
+	padding: 18px 20px;
+	border-radius: 10px;
+	background-color: #fff;
+	box-shadow: 0 4px 16px rgba(0, 0, 0, .08);
+}
+.argon-review-head {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 12px;
+}
+.argon-review-title {
+	font-weight: bold;
+	font-size: 17px;
+	line-height: 1.4;
+}
+.argon-review-score {
+	flex-shrink: 0;
+	color: #5e72e4;
+	font-weight: bold;
+}
+.argon-review-score-value {
+	font-size: 26px;
+	line-height: 1;
+}
+.argon-review-score-max {
+	font-size: 14px;
+	opacity: .6;
+	margin-left: 1px;
+}
+.argon-review-stars {
+	position: relative;
+	display: inline-block;
+	line-height: 1;
+	margin: 6px 0 2px;
+	font-size: 18px;
+	letter-spacing: 2px;
+}
+.argon-review-stars-bg {
+	color: rgba(128, 128, 128, .35);
+}
+.argon-review-stars-fg {
+	position: absolute;
+	left: 0;
+	top: 0;
+	overflow: hidden;
+	white-space: nowrap;
+	color: #fc7c5f;
+}
+.argon-review-summary {
+	margin-top: 8px;
+	font-size: 14px;
+	line-height: 1.7;
+	opacity: .85;
+}
+.argon-review-pros-cons {
+	display: flex;
+	gap: 16px;
+	margin-top: 14px;
+	flex-wrap: wrap;
+}
+.argon-review-list {
+	flex: 1 1 220px;
+	min-width: 0;
+	padding: 10px 14px;
+	border-radius: 8px;
+	background-color: rgba(79, 214, 156, .1);
+}
+.argon-review-cons {
+	background-color: rgba(247, 86, 118, .1);
+}
+.argon-review-list-title {
+	font-weight: bold;
+	font-size: 14px;
+	margin-bottom: 6px;
+}
+.argon-review-pros .argon-review-list-title {
+	color: #2dce89;
+}
+.argon-review-cons .argon-review-list-title {
+	color: #f5365c;
+}
+.argon-review-list ul {
+	margin: 0;
+	padding-left: 18px;
+	font-size: 13px;
+	line-height: 1.8;
+}
+
+/* ---------- 文章引用卡 / 文章列表 ---------- */
+.argon-post-card {
+	display: flex;
+	align-items: stretch;
+	gap: 12px;
+	margin: 12px 0;
+	padding: 10px;
+	border-radius: 8px;
+	background-color: #fff;
+	box-shadow: 0 4px 12px rgba(0, 0, 0, .08);
+	color: inherit;
+}
+.argon-post-card-thumb {
+	flex-shrink: 0;
+	width: 72px;
+	height: 72px;
+	border-radius: 6px;
+	overflow: hidden;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background-color: #8a98eb;
+}
+.argon-post-card-thumb img {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+.argon-post-card-thumb-text {
+	color: #fff;
+	font-weight: bold;
+	font-size: 26px;
+}
+.argon-post-card-body {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	gap: 3px;
+}
+.argon-post-card-title {
+	font-weight: bold;
+	font-size: 15px;
+	line-height: 1.4;
+}
+.argon-post-card-excerpt {
+	font-size: 13px;
+	opacity: .72;
+	line-height: 1.5;
+}
+.argon-post-card-meta {
+	font-size: 12px;
+	opacity: .55;
+}
+.argon-post-list {
+	margin: 15px 0;
+}
+.argon-post-list-editor-note,
+.argon-fl-moments-editor-hint {
+	font-size: 12px;
+	opacity: .6;
+	margin-bottom: 10px;
+}
+.argon-post-card-skeleton {
+	opacity: .75;
+}
+
+/* ---------- 友链朋友圈 ---------- */
+.argon-fl-moments {
+	margin: 20px 0;
+	padding: 16px 18px;
+	border-radius: 10px;
+	background-color: #fff;
+	box-shadow: 0 4px 16px rgba(0, 0, 0, .08);
+}
+.argon-fl-moments-title {
+	font-weight: bold;
+	font-size: 15px;
+	margin-bottom: 12px;
+}
+.argon-fl-moments-title i {
+	color: #fc7c5f;
+	margin-right: 6px;
+}
+.argon-fl-moment {
+	display: flex;
+	gap: 10px;
+	padding: 10px 0;
+	border-top: 1px dashed rgba(128, 128, 128, .25);
+}
+.argon-fl-moment:first-child {
+	border-top: 0;
+	padding-top: 0;
+}
+.argon-fl-moment-avatar {
+	flex-shrink: 0;
+	width: 34px;
+	height: 34px;
+	border-radius: 50%;
+	overflow: hidden;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background-color: #8a98eb;
+}
+.argon-fl-moment-avatar-text {
+	color: #fff;
+	font-size: 14px;
+}
+.argon-fl-moment-body {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 5px;
+	justify-content: center;
+}
+.argon-fl-moment-skeleton {
+	opacity: .75;
+}
+
+/* ---------- 圆形进度 ---------- */
+.argon-circle-progress {
+	position: relative;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: var(--argon-circle-size, 96px);
+	height: var(--argon-circle-size, 96px);
+	margin: 8px 12px 8px 0;
+	vertical-align: middle;
+}
+.argon-circle-track {
+	stroke: rgba(128, 128, 128, .22);
+}
+.argon-circle-label {
+	position: absolute;
+	font-weight: bold;
+	font-size: 15px;
+}
+
+/* ---------- 倒计时 ---------- */
+.argon-countdown {
+	margin: 18px 0;
+	padding: 16px 18px;
+	border-radius: 10px;
+	text-align: center;
+	background-color: #fff;
+	box-shadow: 0 4px 16px rgba(0, 0, 0, .08);
+}
+.argon-countdown-title {
+	font-weight: bold;
+	font-size: 15px;
+	margin-bottom: 10px;
+}
+.argon-countdown-body {
+	display: flex;
+	align-items: baseline;
+	justify-content: center;
+	gap: 10px;
+	flex-wrap: wrap;
+}
+.argon-countdown-item {
+	display: inline-flex;
+	align-items: baseline;
+	gap: 2px;
+}
+.argon-countdown-value {
+	font-size: 26px;
+	font-weight: bold;
+	color: #5e72e4;
+	font-variant-numeric: tabular-nums;
+	line-height: 1.1;
+}
+.argon-countdown-unit {
+	font-size: 13px;
+	opacity: .65;
+}
+.argon-countdown-editor-note {
+	margin-top: 10px;
+	font-size: 12px;
+	opacity: .6;
+}
+
+/* ---------- 文内目录 ---------- */
+.argon-toc {
+	margin: 18px 0;
+	padding: 14px 18px;
+	border-radius: 10px;
+	background-color: #fff;
+	box-shadow: 0 4px 16px rgba(0, 0, 0, .08);
+}
+.argon-toc-title {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-weight: bold;
+	font-size: 15px;
+}
+.argon-toc-toggle {
+	margin-left: auto;
+}
+.argon-toc-body {
+	margin-top: 10px;
+	font-size: 13px;
+	opacity: .75;
+}
+
+/* ---------- 复制按钮 ---------- */
+.argon-copy {
+	display: inline-flex;
+	align-items: center;
+	max-width: 100%;
+	vertical-align: middle;
+	border-radius: 4px;
+	background-color: rgba(0, 0, 0, .05);
+}
+.argon-copy-text {
+	padding: 2px 8px;
+	font-size: 90%;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.argon-copy-btn {
+	flex-shrink: 0;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	padding: 2px 8px;
+	border: 0;
+	background: transparent;
+	color: inherit;
+	opacity: .6;
+	cursor: pointer;
+	line-height: 1.4;
+}
+
+/* ---------- FAQ / HowTo / 脚注 / 友链（保留 SSR 真实数据，仅补编辑器外观） ---------- */
+.argon-faq {
+	margin: 15px 0;
+}
+.argon-faq-item {
+	border-radius: 6px;
+	background-color: #fff;
+	box-shadow: 0 2px 8px rgba(0, 0, 0, .08);
+	margin-bottom: 10px;
+	overflow: hidden;
+}
+.argon-faq-question {
+	padding: 10px 14px;
+	font-weight: bold;
+	font-size: 14px;
+	display: block;
+}
+.argon-faq-answer {
+	padding: 0 14px 10px;
+	font-size: 13px;
+	line-height: 1.7;
+	opacity: .85;
+}
+.argon-howto {
+	margin: 15px 0;
+	padding: 14px 18px;
+	border-radius: 8px;
+	background-color: #fff;
+	box-shadow: 0 4px 16px rgba(0, 0, 0, .08);
+}
+.argon-howto-title {
+	font-weight: bold;
+	font-size: 15px;
+	margin-bottom: 6px;
+}
+.argon-howto-description {
+	font-size: 13px;
+	opacity: .75;
+	margin-bottom: 10px;
+}
+.argon-howto-steps {
+	margin: 0;
+	padding-left: 20px;
+	font-size: 13px;
+	line-height: 1.9;
+}
+.argon-reference-list-container {
+	margin: 20px 0;
+	padding: 12px 16px;
+	border-radius: 8px;
+	background-color: #fff;
+	box-shadow: 0 4px 12px rgba(0, 0, 0, .08);
+	font-size: 13px;
+}
+.reference {
+	font-size: 12px;
+	vertical-align: super;
+}
+.friend-links {
+	margin: 15px 0;
+}
+.friend-links .row {
+	display: flex;
+	flex-wrap: wrap;
+	margin: 0 -10px;
+}
+.friend-links .link {
+	padding: 0 10px;
+	margin-bottom: 12px;
+	box-sizing: border-box;
+	width: 50%;
+}
+.friend-link-container {
+	border-radius: 8px;
+	background-color: #fff;
+	box-shadow: 0 4px 12px rgba(0, 0, 0, .08);
+	padding: 12px;
+	height: 100%;
+	box-sizing: border-box;
+}
+.friend-link-title {
+	font-weight: bold;
+	font-size: 14px;
+	margin-bottom: 4px;
+	color: #5e72e4;
+}
+.friend-link-description {
+	font-size: 12px;
+	opacity: .7;
+	margin-bottom: 6px;
+}
+.friend-links-group-title {
+	font-size: 20px;
+	text-align: center;
+	font-weight: bold;
+	margin: 20px 0 12px;
+	color: #5e72e4;
+}

@@ -20,7 +20,6 @@ import {
 	TextControl,
 	ToggleControl,
 } from '@wordpress/components';
-import ServerSideRender from '@wordpress/server-side-render';
 
 const { registerBlockType } = wp.blocks;
 
@@ -198,7 +197,23 @@ registerBlockType('argon/aplayer', {
 						</PanelRow>
 					</PanelBody>
 				</InspectorControls>
-				<ServerSideRender block="argon/aplayer" attributes={props.attributes} />
+				<div className="aplayer-editor-mock">
+					<div className="aplayer-editor-mock-head">
+						<span className="aplayer-editor-mock-btn"><i className="fa fa-play"></i></span>
+						<span className="aplayer-editor-mock-title">
+							{tracks.length > 0
+								? `${tracks[0].name || tracks[0].url || __('未命名音频')}${tracks.length > 1 ? ` 等 ${tracks.length} 首` : ''}`
+								: __('音频播放器')}
+						</span>
+					</div>
+					{tracks.length > 0
+						? <div className="aplayer-editor-mock-list">{tracks.map((t, i) => <div key={i} className="aplayer-editor-track">{t.name || t.url || __('未命名音频')}</div>)}</div>
+						: <div className="aplayer-editor-mock-hint">{__('在右侧「曲目」中添加音频后，这里会显示曲目列表')}</div>}
+					<div className="aplayer-editor-mock-note">
+						{__('播放器在前台加载渲染')}
+						{props.attributes.mode === 'fixed' ? ' · ' + __('吸底') : props.attributes.mode === 'mini' ? ' · ' + __('迷你') : ''}
+					</div>
+				</div>
 			</div>
 		);
 	},

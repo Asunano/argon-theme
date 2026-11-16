@@ -21,9 +21,52 @@ import {
 	TextControl,
 	TextareaControl,
 } from '@wordpress/components';
-import ServerSideRender from '@wordpress/server-side-render';
 
 const { registerBlockType } = wp.blocks;
+
+const ReviewEditorPreview = ({ attributes }) => {
+	const max = parseFloat(attributes.max) || 5;
+	const score = Math.min(parseFloat(attributes.score) || 0, max);
+	const percent = max > 0 ? (score / max) * 100 : 0;
+	const stars = Math.round(max);
+	const fmt = (n) => String(parseFloat(n.toFixed(1)));
+	const splitLines = (v) => (v || '').split(/\r\n|\r|\n|\|/).map(s => s.trim()).filter(Boolean);
+	const pros = splitLines(attributes.pros);
+	const cons = splitLines(attributes.cons);
+	return (
+		<div className="argon-review">
+			<div className="argon-review-head">
+				<div className="argon-review-title">{attributes.title || __('评分')}</div>
+				<div className="argon-review-score">
+					<span className="argon-review-score-value">{score > 0 ? fmt(score) : '—'}</span>
+					<span className="argon-review-score-max">/{fmt(max)}</span>
+				</div>
+			</div>
+			<div className="argon-review-stars">
+				<span className="argon-review-stars-bg" aria-hidden="true">{String.fromCharCode(9733).repeat(stars)}</span>
+				<span className="argon-review-stars-fg" aria-hidden="true" style={{ width: percent + '%' }}>{String.fromCharCode(9733).repeat(stars)}</span>
+			</div>
+			{attributes.summary !== '' && <div className="argon-review-summary">{attributes.summary}</div>}
+			{(pros.length > 0 || cons.length > 0) && (
+				<div className="argon-review-pros-cons">
+					{pros.length > 0 && (
+						<div className="argon-review-list argon-review-pros">
+							<div className="argon-review-list-title"><i className="fa fa-thumbs-up"></i> {__('优点')}</div>
+							<ul>{pros.map((p, i) => <li key={i}>{p}</li>)}</ul>
+						</div>
+					)}
+					{cons.length > 0 && (
+						<div className="argon-review-list argon-review-cons">
+							<div className="argon-review-list-title"><i className="fa fa-thumbs-down"></i> {__('缺点')}</div>
+							<ul>{cons.map((c, i) => <li key={i}>{c}</li>)}</ul>
+						</div>
+					)}
+				</div>
+			)}
+		</div>
+	);
+};
+
 
 const ITEM_TYPES = [
 	{ label: __('产品', 'argon'), value: 'Product' },
@@ -158,7 +201,7 @@ registerBlockType('argon/review', {
 						</PanelRow>
 					</PanelBody>
 				</InspectorControls>
-				<ServerSideRender block="argon/review" attributes={props.attributes} />
+				<ReviewEditorPreview attributes={props.attributes} />
 			</div>
 		);
 	},

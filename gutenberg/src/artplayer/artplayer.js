@@ -10,8 +10,7 @@
 
 import { __ } from './../i18n/i18n.js';
 import { InspectorControls, useBlockProps } from '@wordpress/block-editor';
-import { Notice, PanelBody, PanelRow, TextControl, ToggleControl } from '@wordpress/components';
-import ServerSideRender from '@wordpress/server-side-render';
+import { PanelBody, PanelRow, TextControl, ToggleControl } from '@wordpress/components';
 
 const { registerBlockType } = wp.blocks;
 
@@ -115,12 +114,10 @@ registerBlockType('argon/artplayer', {
 						</PanelRow>
 					</PanelBody>
 				</InspectorControls>
-				{!props.attributes.src && (
-					<Notice status="warning" isDismissible={false}>
-						{__('请在右侧「区块设置」中填写「视频地址」，播放器才会渲染。')}
-					</Notice>
-				)}
-				<ServerSideRender block="argon/artplayer" attributes={props.attributes} />
+				<div className="artplayer-editor-mock" style={props.attributes.poster ? { backgroundImage: `url(${props.attributes.poster})` } : undefined}>
+					<div className="artplayer-editor-play"><i className="fa fa-play"></i></div>
+					<span className="artplayer-editor-label">{props.attributes.title || props.attributes.src || __('视频地址（右侧栏填写）')}</span>
+				</div>
 			</div>
 		);
 	},

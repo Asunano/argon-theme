@@ -10,8 +10,7 @@
 
 import { __ } from './../i18n/i18n.js';
 import { InspectorControls, useBlockProps } from '@wordpress/block-editor';
-import { Notice, PanelBody, PanelRow, SelectControl, TextControl, ToggleControl } from '@wordpress/components';
-import ServerSideRender from '@wordpress/server-side-render';
+import { PanelBody, PanelRow, SelectControl, TextControl, ToggleControl } from '@wordpress/components';
 
 const { registerBlockType } = wp.blocks;
 
@@ -98,15 +97,18 @@ registerBlockType('argon/bilibili', {
 						</PanelRow>
 					</PanelBody>
 				</InspectorControls>
-				{!props.attributes.input && (
-					<Notice status="warning" isDismissible={false}>
-						{__('请在右侧「区块设置」中填写 BV 号 / av 号 / 视频链接。')}
-					</Notice>
-				)}
-				<ServerSideRender
-					block="argon/bilibili"
-					attributes={props.attributes}
-				/>
+				<div className="bilibili-card bilibili-card-editor">
+					<div className="bilibili-card-noinfo">
+						<i className="fa fa-play-circle"></i>
+						{props.attributes.input || __('BV 号 / av 号 / 视频链接（右侧栏填写）')}
+					</div>
+					<div className="bilibili-card-play"><i className="fa fa-play"></i></div>
+					<span className="bilibili-card-badge">bilibili</span>
+					<div className="bilibili-card-editor-note">
+						{__('封面、标题与 UP 主将在前台加载')}
+						{props.attributes.mode === 'iframe' ? ' · ' + __('直接嵌入模式') : ''}
+					</div>
+				</div>
 			</div>
 		);
 	},

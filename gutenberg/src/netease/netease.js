@@ -9,8 +9,7 @@
 
 import { __ } from './../i18n/i18n.js';
 import { InspectorControls, useBlockProps } from '@wordpress/block-editor';
-import { Notice, PanelBody, PanelRow, SelectControl, TextControl, ToggleControl } from '@wordpress/components';
-import ServerSideRender from '@wordpress/server-side-render';
+import { PanelBody, PanelRow, SelectControl, TextControl, ToggleControl } from '@wordpress/components';
 
 const { registerBlockType } = wp.blocks;
 
@@ -87,15 +86,13 @@ registerBlockType('argon/netease', {
 						</PanelRow>
 					</PanelBody>
 				</InspectorControls>
-				{!props.attributes.input && (
-					<Notice status="warning" isDismissible={false}>
-						{__('请在右侧「区块设置」中填写歌曲 / 歌单 ID 或链接。')}
-					</Notice>
-				)}
-				<ServerSideRender
-					block="argon/netease"
-					attributes={props.attributes}
-				/>
+				<div className="netease-editor-mock">
+					<span className="netease-editor-mock-icon"><i className="fa fa-music"></i></span>
+					<span className="netease-editor-mock-body">
+						<span className="netease-editor-mock-title">网易云音乐</span>
+						<span className="netease-editor-mock-sub">{props.attributes.input || __('歌曲 / 歌单 ID 或链接（右侧栏填写）')}</span>
+					</span>
+				</div>
 			</div>
 		);
 	},

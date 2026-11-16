@@ -14,8 +14,7 @@
 
 import { __ } from './../i18n/i18n.js';
 import { InspectorControls, useBlockProps } from '@wordpress/block-editor';
-import { Notice, PanelBody, PanelRow, SelectControl, TextControl, ToggleControl } from '@wordpress/components';
-import ServerSideRender from '@wordpress/server-side-render';
+import { PanelBody, PanelRow, SelectControl, TextControl, ToggleControl } from '@wordpress/components';
 
 const { registerBlockType } = wp.blocks;
 
@@ -65,12 +64,16 @@ registerBlockType('argon/post-card', {
 						</PanelRow>
 					</PanelBody>
 				</InspectorControls>
-				{!props.attributes.id && !props.attributes.url && (
-					<Notice status="warning" isDismissible={false}>
-						{__('请在右侧「区块设置」中填写文章 ID 或文章链接。')}
-					</Notice>
-				)}
-				<ServerSideRender block="argon/post-card" attributes={props.attributes} />
+				<div className="argon-post-card argon-post-card-editor">
+					<span className="argon-post-card-thumb argon-post-card-thumb-text">{props.attributes.id ? '#' : <i className="fa fa-file-text-o"></i>}</span>
+					<span className="argon-post-card-body">
+						<span className="argon-post-card-title">
+							{props.attributes.url || (props.attributes.id ? `文章 #${props.attributes.id}` : __('文章 ID 或链接（右侧栏填写）'))}
+						</span>
+						<span className="argon-post-card-excerpt">{__('标题、摘要与封面将在前台渲染')}</span>
+						<span className="argon-post-card-meta">post-card</span>
+					</span>
+				</div>
 			</div>
 		);
 	},
@@ -164,7 +167,23 @@ registerBlockType('argon/post-list', {
 						</PanelRow>
 					</PanelBody>
 				</InspectorControls>
-				<ServerSideRender block="argon/post-list" attributes={props.attributes} />
+				<div className="argon-post-list argon-post-list-editor">
+					<div className="argon-post-list-editor-note">
+						{__('前台将显示文章卡片列表')}
+						{props.attributes.tag ? ' · ' + __('标签') + ': ' + props.attributes.tag : ''}
+						{props.attributes.category ? ' · ' + __('分类') + ': ' + props.attributes.category : ''}
+						{` · ${props.attributes.count || 4} ` + __('篇')}
+					</div>
+					{[1, 2, 3].map((i) => (
+						<div key={i} className="argon-post-card argon-post-card-skeleton">
+							<span className="argon-post-card-thumb argon-post-card-thumb-text"><i className="fa fa-file-text-o"></i></span>
+							<span className="argon-post-card-body">
+								<span className="argon-post-card-title"><span className="argon-editor-skeleton-bar" style={{ width: '55%' }}></span></span>
+								<span className="argon-post-card-excerpt"><span className="argon-editor-skeleton-bar" style={{ width: '80%' }}></span></span>
+							</span>
+						</div>
+					))}
+				</div>
 			</div>
 		);
 	},

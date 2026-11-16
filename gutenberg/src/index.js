@@ -23,6 +23,7 @@ import './kbd/kbd.js';
 import './mark/mark.js';
 import './btn/btn.js';
 import './shortcode-preview.scss';
+import './shortcode-editor.scss';
 /* 媒体包（2026-11）：外链媒体动态区块 —— 渲染走 PHP（B 站信息卡要服务端拉平台 API） */
 import './download/download.js';
 import './bilibili/bilibili.js';

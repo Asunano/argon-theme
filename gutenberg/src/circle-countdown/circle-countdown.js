@@ -13,7 +13,6 @@
 import { __ } from './../i18n/i18n.js';
 import { InspectorControls, useBlockProps } from '@wordpress/block-editor';
 import { PanelBody, PanelRow, RangeControl, SelectControl, TextControl } from '@wordpress/components';
-import ServerSideRender from '@wordpress/server-side-render';
 
 const { registerBlockType } = wp.blocks;
 
@@ -95,7 +94,31 @@ registerBlockType('argon/circle-progress', {
 						</PanelRow>
 					</PanelBody>
 				</InspectorControls>
-				<ServerSideRender block="argon/circle-progress" attributes={props.attributes} />
+				{(() => {
+					const size = Math.max(40, Math.min(240, props.attributes.size || 96));
+					const stroke = Math.max(2, Math.min(30, props.attributes.stroke || 8));
+					const percent = Math.max(0, Math.min(100, props.attributes.percentage || 0));
+					const r = (size - stroke) / 2;
+					const c = 2 * Math.PI * r;
+					const colors = { indigo: '#5e72e4', green: '#4fd69c', red: '#f75676', orange: '#fc7c5f', blue: '#37d5f2', grey: '#888888' };
+					const color = colors[props.attributes.color] || colors.indigo;
+					return (
+						<div className="argon-circle-progress" style={{ '--argon-circle-size': size + 'px' }}>
+							<svg viewBox={`0 0 ${size} ${size}`} width={size} height={size}>
+								<circle className="argon-circle-track" cx={size / 2} cy={size / 2} r={r} strokeWidth={stroke} fill="none" />
+								<circle
+									className="argon-circle-bar"
+									cx={size / 2} cy={size / 2} r={r} strokeWidth={stroke} fill="none" stroke={color}
+									strokeDasharray={Math.round(c * 100) / 100}
+									strokeDashoffset={Math.round(c * (1 - percent / 100) * 100) / 100}
+									transform={`rotate(-90 ${size / 2} ${size / 2})`}
+									strokeLinecap="round"
+								/>
+							</svg>
+							<span className="argon-circle-label">{props.attributes.label || percent + '%'}</span>
+						</div>
+					);
+				})()}
 			</div>
 		);
 	},
@@ -150,7 +173,20 @@ registerBlockType('argon/countdown', {
 						</PanelRow>
 					</PanelBody>
 				</InspectorControls>
-				<ServerSideRender block="argon/countdown" attributes={props.attributes} />
+				<div className="argon-countdown">
+					{props.attributes.title !== '' && <div className="argon-countdown-title">{props.attributes.title}</div>}
+					<div className="argon-countdown-body">
+						{['天', '时', '分', '秒'].map((u) => (
+							<span key={u} className="argon-countdown-item">
+								<span className="argon-countdown-value">--</span>
+								<span className="argon-countdown-unit">{u}</span>
+							</span>
+						))}
+					</div>
+					<div className="argon-countdown-editor-note">
+						{props.attributes.date ? __('前台实时倒计时 · 目标：') + props.attributes.date : __('请在右侧填写目标时间')}
+					</div>
+				</div>
 			</div>
 		);
 	},

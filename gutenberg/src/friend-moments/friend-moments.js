@@ -11,7 +11,6 @@
 import { __ } from './../i18n/i18n.js';
 import { InspectorControls, useBlockProps } from '@wordpress/block-editor';
 import { PanelBody, PanelRow, RangeControl, TextControl } from '@wordpress/components';
-import ServerSideRender from '@wordpress/server-side-render';
 
 const { registerBlockType } = wp.blocks;
 
@@ -76,7 +75,21 @@ registerBlockType('argon/friend-moments', {
 						</PanelRow>
 					</PanelBody>
 				</InspectorControls>
-				<ServerSideRender block="argon/friend-moments" attributes={props.attributes} />
+				<div className="argon-fl-moments argon-fl-moments-editor">
+					<div className="argon-fl-moments-title"><i className="fa fa-rss"></i> {props.attributes.title || __('友链朋友圈')}</div>
+					<div className="argon-fl-moments-editor-hint">
+						{__('前台聚合友链 RSS 最新文章；首次使用请先在主题设置里「立即刷新缓存」')}
+					</div>
+					{[1, 2, 3].map((i) => (
+						<div key={i} className="argon-fl-moment argon-fl-moment-skeleton">
+							<span className="argon-fl-moment-avatar argon-fl-moment-avatar-text"><i className="fa fa-user"></i></span>
+							<span className="argon-fl-moment-body">
+								<span className="argon-editor-skeleton-bar" style={{ width: '40%' }}></span>
+								<span className="argon-editor-skeleton-bar" style={{ width: '85%' }}></span>
+							</span>
+						</div>
+					))}
+				</div>
 			</div>
 		);
 	},

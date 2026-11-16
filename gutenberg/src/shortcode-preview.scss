@@ -1,0 +1,129 @@
+/*
+ * 编辑器预览样式（跟随 dist/index.css 注入编辑器，不影响前台）。
+ *
+ * 前台外观由主题 style.css 提供（与短代码同源），编辑器加载不到它，
+ * 这里给 kbd / mark / btn 三类组件一份同值镜像，保证编辑器里所见即所得。
+ * 修改前台样式时记得同步这里。
+ */
+
+/* kbd 键帽 —— 镜像 style.css 的 article .post-content kbd */
+kbd {
+	padding: 2px 6px;
+	font-size: 90%;
+	color: #fff;
+	background-color: #333;
+	border-radius: 3px;
+}
+
+/* mark 高亮 —— 镜像 style.css 的 .argon-mark 系 */
+mark.argon-mark {
+	--mark-color: rgba(255, 214, 66, 0.5);
+	background-color: transparent;
+	padding: 0 0.15em;
+	border-radius: 2px;
+	-webkit-box-decoration-break: clone;
+	box-decoration-break: clone;
+}
+mark.argon-mark-yellow {
+	--mark-color: rgba(255, 214, 66, 0.5);
+}
+mark.argon-mark-indigo {
+	--mark-color: rgba(94, 114, 228, 0.25);
+}
+mark.argon-mark-green {
+	--mark-color: rgba(79, 214, 156, 0.25);
+}
+mark.argon-mark-red {
+	--mark-color: rgba(245, 87, 118, 0.25);
+}
+mark.argon-mark-orange {
+	--mark-color: rgba(252, 124, 95, 0.3);
+}
+mark.argon-mark-blue {
+	--mark-color: rgba(55, 209, 242, 0.25);
+}
+mark.argon-mark-grey {
+	--mark-color: rgba(136, 136, 136, 0.3);
+}
+mark.argon-mark-flat {
+	background-color: var(--mark-color);
+}
+mark.argon-mark-underline {
+	background-image: linear-gradient(to top, var(--mark-color) 40%, transparent 40%);
+}
+mark.argon-mark-wavy {
+	text-decoration-line: underline;
+	text-decoration-style: wavy;
+	text-decoration-color: var(--mark-color);
+	text-decoration-thickness: 2px;
+	text-underline-offset: 4px;
+}
+
+/* btn 按钮 —— 编辑器不加载 Bootstrap，这里给一份低保真预览 */
+a.btn {
+	display: inline-block;
+	padding: 8px 18px;
+	border-radius: 3px;
+	font-size: 14px;
+	line-height: 1.5;
+	text-decoration: none;
+	cursor: pointer;
+}
+a.btn-primary {
+	background-color: #7889e8;
+	color: #fff;
+}
+a.btn-success {
+	background-color: #4fd69c;
+	color: #fff;
+}
+a.btn-danger {
+	background-color: #f75676;
+	color: #fff;
+}
+a.btn-warning {
+	background-color: #fc7c5f;
+	color: #fff;
+}
+a.btn-info {
+	background-color: #37d5f2;
+	color: #fff;
+}
+a.btn-outline-primary {
+	border: 1px solid #7889e8;
+	color: #7889e8;
+	background-color: transparent;
+}
+a.btn-outline-success {
+	border: 1px solid #4fd69c;
+	color: #4fd69c;
+	background-color: transparent;
+}
+a.btn-outline-danger {
+	border: 1px solid #f75676;
+	color: #f75676;
+	background-color: transparent;
+}
+a.btn-outline-warning {
+	border: 1px solid #fc7c5f;
+	color: #fc7c5f;
+	background-color: transparent;
+}
+a.btn-outline-info {
+	border: 1px solid #37d5f2;
+	color: #37d5f2;
+	background-color: transparent;
+}
+a.btn-sm {
+	padding: 5px 12px;
+	font-size: 12px;
+}
+a.btn-lg {
+	padding: 10px 24px;
+	font-size: 16px;
+}
+a.btn-round {
+	border-radius: 50px;
+	padding-left: 22px;
+	padding-right: 22px;
+}

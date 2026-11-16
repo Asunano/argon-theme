@@ -2190,6 +2190,68 @@ function is_comment_pinable($id){
 	return true;
 }
 //评论内容格式化
+/* 贴纸类表情的 :code: → <img> 替换对。评论区（argon_get_comment_text）与
+   文章/说说正文（argon_render_emotion_in_content）共用这一份映射，
+   static 缓存避免同一页面两处使用时重复构建。 */
+function argon_get_emotion_sticker_replace_pairs(){
+	global $emotionListDefault;
+	static $pairs = null;
+	if ($pairs !== null){
+		return $pairs;
+	}
+	$emotionList = apply_filters("argon_emotion_list", $emotionListDefault);
+	$search = array();
+	$replace = array();
+	foreach ($emotionList as $groupIndex => $group){
+		foreach ($group['list'] as $index => $emotion){
+			if ($emotion['type'] != 'sticker'){
+				continue;
+			}
+			if (!isset($emotion['code']) || mb_strlen($emotion['code']) == 0){
+				continue;
+			}
+			if (!isset($emotion['src']) || mb_strlen($emotion['src']) == 0){
+				continue;
+			}
+			$search[] = ':' . $emotion['code'] . ':';
+			$replace[] = "<img class='comment-sticker lazyload' src='data:image/svg+xml;base64,PHN2ZyBjbGFzcz0iZW1vdGlvbi1sb2FkaW5nIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIGZpbGw9Im5vbmUiIHZpZXdCb3g9Ii04IC04IDQwIDQwIiBzdHJva2U9IiM4ODgiIG9wYWNpdHk9Ii41IiB3aWR0aD0iNjAiIGhlaWdodD0iNjAiPgogIDxwYXRoIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIgc3Ryb2tlLXdpZHRoPSIxLjUiIGQ9Ik0xNC44MjggMTQuODI4YTQgNCAwIDAxLTUuNjU2IDBNOSAxMGguMDFNMTUgMTBoLjAxTTIxIDEyYTkgOSAwIDExLTE4IDAgOSA5IDAgMDExOCAweiIvPgo8L3N2Zz4=' data-original='" . $emotion['src'] . "'/><noscript><img class='comment-sticker' src='" . $emotion['src'] . "'/></noscript>";
+		}
+	}
+	$pairs = array($search, $replace);
+	return $pairs;
+}
+/* 文章/说说正文渲染贴纸表情（#702）：与评论区同一套 :code: 替换。
+   <pre>/<code> 内不替换，避免污染代码示例；RSS 里 lazyload 图片不会加载，跳过；
+   挂在 the_content 且优先级晚于 do_shortcode(11)，说说模板的 the_content() 同样生效。 */
+function argon_render_emotion_in_content($content){
+	if (get_option("argon_comment_emotion_keyboard", "true") == "false"){
+		return $content;
+	}
+	if (is_feed() || strpos($content, ":") === false){
+		return $content;
+	}
+	list($search, $replace) = argon_get_emotion_sticker_replace_pairs();
+	if (empty($search)){
+		return $content;
+	}
+	$segments = preg_split('/(<pre[^>]*>.*?<\/pre>|<code[^>]*>.*?<\/code>)/s', $content, -1, PREG_SPLIT_DELIM_CAPTURE);
+	if ($segments === false || count($segments) === 1){
+		return str_replace($search, $replace, $content);
+	}
+	$out = "";
+	foreach ($segments as $segment){
+		if ($segment === ""){
+			continue;
+		}
+		if (preg_match('/^<(pre|code)[^>]*>/', $segment)){
+			$out .= $segment;
+		}else{
+			$out .= str_replace($search, $replace, $segment);
+		}
+	}
+	return $out;
+}
+add_filter('the_content', 'argon_render_emotion_in_content', 20);
 function argon_get_comment_text($comment_ID = 0, $args = array()) {
 	$comment = get_comment($comment_ID);
 	$comment_text = get_comment_text($comment, $args);
@@ -2215,25 +2277,7 @@ function argon_get_comment_text($comment_ID = 0, $args = array()) {
 	);
 	//表情
 	if (get_option("argon_comment_emotion_keyboard", "true") != "false"){
-		global $emotionListDefault;
-		$emotionList = apply_filters("argon_emotion_list", $emotionListDefault);
-		$search = array();
-		$replace = array();
-		foreach ($emotionList as $groupIndex => $group){
-			foreach ($group['list'] as $index => $emotion){
-				if ($emotion['type'] != 'sticker'){
-					continue;
-				}
-				if (!isset($emotion['code']) || mb_strlen($emotion['code']) == 0){
-					continue;
-				}
-				if (!isset($emotion['src']) || mb_strlen($emotion['src']) == 0){
-					continue;
-				}
-				$search[] = ':' . $emotion['code'] . ':';
-				$replace[] = "<img class='comment-sticker lazyload' src='data:image/svg+xml;base64,PHN2ZyBjbGFzcz0iZW1vdGlvbi1sb2FkaW5nIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIGZpbGw9Im5vbmUiIHZpZXdCb3g9Ii04IC04IDQwIDQwIiBzdHJva2U9IiM4ODgiIG9wYWNpdHk9Ii41IiB3aWR0aD0iNjAiIGhlaWdodD0iNjAiPgogIDxwYXRoIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIgc3Ryb2tlLXdpZHRoPSIxLjUiIGQ9Ik0xNC44MjggMTQuODI4YTQgNCAwIDAxLTUuNjU2IDBNOSAxMGguMDFNMTUgMTBoLjAxTTIxIDEyYTkgOSAwIDExLTE4IDAgOSA5IDAgMDExOCAweiIvPgo8L3N2Zz4=' data-original='" . $emotion['src'] . "'/><noscript><img class='comment-sticker' src='" . $emotion['src'] . "'/></noscript>";
-			}
-		}
+		list($search, $replace) = argon_get_emotion_sticker_replace_pairs();
 		if (!empty($search)){
 			$comment_text = str_replace($search, $replace, $comment_text); // 一次性替换，避免对每个表情遍历整段评论文本
 		}
@@ -4053,6 +4097,12 @@ function argon_init_gutenberg_blocks() {
 		'argon/label',
 		'argon/hidden',
 		'argon/checkbox',
+		/* 2026-11 快赢包：kbd 键盘按键 / mark 高亮标记 / btn 按钮（样式与短代码同源，见 style.css 短代码适配段） */
+		'argon/kbd',
+		'argon/mark',
+		'argon/btn',
+		/* 2026-11 媒体包：mermaid 图表（静态区块，前端 mermaid.js 懒加载渲染，#563） */
+		'argon/mermaid',
 	);
 	foreach ( $argon_blocks as $argon_block ) {
 		register_block_type(
@@ -4082,11 +4132,416 @@ function argon_init_gutenberg_friendlinks_block() {
 				'style' => array('type' => 'string', 'default' => '1'),
 				'sort'  => array('type' => 'string', 'default' => 'name'),
 				'order' => array('type' => 'string', 'default' => 'ASC'),
+				/* 2026-11 快赢包（#539/#114）：按分类过滤 / 按分类分组 */
+				'category' => array('type' => 'string', 'default' => ''),
+				'grouped'  => array('type' => 'boolean', 'default' => false),
 			),
 		)
 	);
 }
 add_action('init', 'argon_init_gutenberg_friendlinks_block');
+
+/* argon/download 也是动态区块：卡片 HTML 由 PHP 生成，与短代码 [download] 共用
+   shortcode_download()（#234）。描述文字存在 content 属性里，包装成 $content 传给它。 */
+function argon_init_gutenberg_download_block() {
+	register_block_type(
+		'argon/download',
+		array(
+			'editor_script'   => 'argon-gutenberg-block-js',
+			'editor_style'    => 'argon-gutenberg-block-backend-css',
+			'render_callback' => 'argon_render_download_block',
+			'attributes'      => array(
+				'type'    => array('type' => 'string', 'default' => 'other'),
+				'name'    => array('type' => 'string', 'default' => ''),
+				'size'    => array('type' => 'string', 'default' => ''),
+				'version' => array('type' => 'string', 'default' => ''),
+				'date'    => array('type' => 'string', 'default' => ''),
+				'pwd'     => array('type' => 'string', 'default' => ''),
+				'url'     => array('type' => 'string', 'default' => ''),
+				'icon'    => array('type' => 'string', 'default' => ''),
+				'content' => array('type' => 'string', 'default' => ''),
+			),
+		)
+	);
+}
+function argon_render_download_block($attributes){
+	return shortcode_download($attributes, isset($attributes['content']) ? $attributes['content'] : '');
+}
+add_action('init', 'argon_init_gutenberg_download_block');
+
+/* argon/bilibili 与 argon/netease 也是动态区块（#532）：外链媒体的信息卡需要服务端
+   拉取平台 API（B 站），渲染函数与短代码 [bilibili] / [netease] 共用。 */
+function argon_init_gutenberg_embed_blocks() {
+	register_block_type(
+		'argon/bilibili',
+		array(
+			'editor_script'   => 'argon-gutenberg-block-js',
+			'editor_style'    => 'argon-gutenberg-block-backend-css',
+			'render_callback' => 'argon_render_bilibili_block',
+			'attributes'      => array(
+				'input'    => array('type' => 'string', 'default' => ''),
+				'mode'     => array('type' => 'string', 'default' => 'card'),
+				'page'     => array('type' => 'integer', 'default' => 0),
+				'autoplay' => array('type' => 'boolean', 'default' => false),
+				'danmaku'  => array('type' => 'boolean', 'default' => false),
+			),
+		)
+	);
+	register_block_type(
+		'argon/netease',
+		array(
+			'editor_script'   => 'argon-gutenberg-block-js',
+			'editor_style'    => 'argon-gutenberg-block-backend-css',
+			'render_callback' => 'argon_render_netease_block',
+			'attributes'      => array(
+				'input'    => array('type' => 'string', 'default' => ''),
+				'type'     => array('type' => 'string', 'default' => ''),
+				'height'   => array('type' => 'integer', 'default' => 0),
+				'autoplay' => array('type' => 'boolean', 'default' => false),
+			),
+		)
+	);
+}
+function argon_render_bilibili_block($attributes){
+	return argon_render_bilibili(
+		isset($attributes['input']) ? $attributes['input'] : '',
+		isset($attributes['mode']) ? $attributes['mode'] : 'card',
+		isset($attributes['page']) ? intval($attributes['page']) : 0,
+		isset($attributes['autoplay']) && $attributes['autoplay'] ? 'true' : 'false',
+		isset($attributes['danmaku']) && $attributes['danmaku'] ? 'true' : 'false'
+	);
+}
+function argon_render_netease_block($attributes){
+	return argon_render_netease(
+		isset($attributes['input']) ? $attributes['input'] : '',
+		isset($attributes['type']) ? $attributes['type'] : '',
+		isset($attributes['height']) ? intval($attributes['height']) : 0,
+		isset($attributes['autoplay']) && $attributes['autoplay'] ? 'true' : 'false'
+	);
+}
+add_action('init', 'argon_init_gutenberg_embed_blocks');
+
+/* argon/aplayer 与 argon/artplayer 也是动态区块：后台开关决定走播放器库还是原生降级，
+   这段判断只应有一份，故与短代码共用 argon_render_aplayer / argon_render_artplayer。 */
+function argon_init_gutenberg_player_blocks() {
+	register_block_type(
+		'argon/aplayer',
+		array(
+			'editor_script'   => 'argon-gutenberg-block-js',
+			'editor_style'    => 'argon-gutenberg-block-backend-css',
+			'render_callback' => 'argon_render_aplayer_block',
+			'attributes'      => array(
+				'tracks'      => array('type' => 'array', 'default' => array()),
+				'theme'       => array('type' => 'string', 'default' => ''),
+				'mode'        => array('type' => 'string', 'default' => 'normal'),
+				'autoplay'    => array('type' => 'boolean', 'default' => false),
+				'muted'       => array('type' => 'boolean', 'default' => false),
+				'loop'        => array('type' => 'boolean', 'default' => false),
+				'random'      => array('type' => 'boolean', 'default' => false),
+				'volume'      => array('type' => 'string', 'default' => ''),
+				'list_folded' => array('type' => 'boolean', 'default' => false),
+			),
+		)
+	);
+	register_block_type(
+		'argon/artplayer',
+		array(
+			'editor_script'   => 'argon-gutenberg-block-js',
+			'editor_style'    => 'argon-gutenberg-block-backend-css',
+			'render_callback' => 'argon_render_artplayer_block',
+			'attributes'      => array(
+				'src'      => array('type' => 'string', 'default' => ''),
+				'poster'   => array('type' => 'string', 'default' => ''),
+				'title'    => array('type' => 'string', 'default' => ''),
+				'autoplay' => array('type' => 'boolean', 'default' => false),
+				'muted'    => array('type' => 'boolean', 'default' => false),
+				'loop'     => array('type' => 'boolean', 'default' => false),
+				'hotkey'   => array('type' => 'boolean', 'default' => true),
+			),
+		)
+	);
+}
+function argon_render_aplayer_block($attributes){
+	$tracks = array();
+	if (isset($attributes['tracks']) && is_array($attributes['tracks'])){
+		foreach ($attributes['tracks'] as $track){
+			if (!is_array($track)){
+				continue;
+			}
+			$url = isset($track['url']) ? trim($track['url']) : '';
+			if ($url == ''){
+				continue;
+			}
+			$tracks[] = array(
+				'name'   => isset($track['name']) ? $track['name'] : '',
+				'artist' => isset($track['artist']) ? $track['artist'] : '',
+				'url'    => $url,
+				'cover'  => isset($track['cover']) ? $track['cover'] : '',
+				'lrc'    => isset($track['lrc']) ? $track['lrc'] : '',
+			);
+		}
+	}
+	return argon_render_aplayer($tracks, array(
+		'theme'       => isset($attributes['theme']) ? $attributes['theme'] : '',
+		'mode'        => isset($attributes['mode']) ? $attributes['mode'] : 'normal',
+		'autoplay'    => !empty($attributes['autoplay']),
+		'muted'       => !empty($attributes['muted']),
+		'loop'        => !empty($attributes['loop']),
+		'random'      => !empty($attributes['random']),
+		'volume'      => isset($attributes['volume']) ? $attributes['volume'] : '',
+		'list_folded' => !empty($attributes['list_folded']),
+	));
+}
+function argon_render_artplayer_block($attributes){
+	return argon_render_artplayer(array(
+		'src'      => isset($attributes['src']) ? $attributes['src'] : '',
+		'poster'   => isset($attributes['poster']) ? $attributes['poster'] : '',
+		'title'    => isset($attributes['title']) ? $attributes['title'] : '',
+		'autoplay' => !empty($attributes['autoplay']) ? 'true' : 'false',
+		'muted'    => !empty($attributes['muted']) ? 'true' : 'false',
+		'loop'     => !empty($attributes['loop']) ? 'true' : 'false',
+		'hotkey'   => !empty($attributes['hotkey']) ? 'true' : 'false',
+	));
+}
+add_action('init', 'argon_init_gutenberg_player_blocks');
+
+/* 内容门控区块（argon/gate）与 [[link-card]] 区块。
+   门控区块用 InnerBlocks：服务端渲染时未授权就丢弃 $content（内层区块已渲染但不输出），
+   所以被保护内容同样不会出现在 HTML 里。 */
+function argon_init_gutenberg_gate_blocks() {
+	register_block_type(
+		'argon/gate',
+		array(
+			'editor_script'   => 'argon-gutenberg-block-js',
+			'editor_style'    => 'argon-gutenberg-block-backend-css',
+			'render_callback' => 'argon_render_gate_block',
+			'attributes'      => array(
+				'type' => array('type' => 'string', 'default' => 'reply'),
+			),
+		)
+	);
+	register_block_type(
+		'argon/link-card',
+		array(
+			'editor_script'   => 'argon-gutenberg-block-js',
+			'editor_style'    => 'argon-gutenberg-block-backend-css',
+			'render_callback' => 'argon_render_link_card_block',
+			'attributes'      => array(
+				'url'   => array('type' => 'string', 'default' => ''),
+				'title' => array('type' => 'string', 'default' => ''),
+				'desc'  => array('type' => 'string', 'default' => ''),
+				'icon'  => array('type' => 'string', 'default' => ''),
+			),
+		)
+	);
+}
+function argon_render_gate_block($attributes, $content = ''){
+	$type = isset($attributes['type']) && $attributes['type'] == 'login' ? 'login' : 'reply';
+	if (!argon_content_gate_enabled()){
+		return argon_content_gate_disabled_notice($type);
+	}
+	if ($type == 'login'){
+		return (is_user_logged_in() || current_user_can('moderate_comments'))
+			? $content
+			: argon_content_gate_placeholder('login');
+	}
+	return argon_user_has_commented(get_the_ID())
+		? $content
+		: argon_content_gate_placeholder('reply');
+}
+function argon_render_link_card_block($attributes){
+	return shortcode_link_card(array(
+		'url'   => isset($attributes['url']) ? $attributes['url'] : '',
+		'title' => isset($attributes['title']) ? $attributes['title'] : '',
+		'desc'  => isset($attributes['desc']) ? $attributes['desc'] : '',
+		'icon'  => isset($attributes['icon']) ? $attributes['icon'] : '',
+	));
+}
+add_action('init', 'argon_init_gutenberg_gate_blocks');
+
+/* 文章引用卡与文章列表区块：同样走动态区块，与短代码共用渲染函数
+   （卡片外观、密码保护文章的摘要屏蔽、只认已发布文章的过滤都只有一份实现）。 */
+function argon_init_gutenberg_post_ref_blocks() {
+	register_block_type(
+		'argon/post-card',
+		array(
+			'editor_script'   => 'argon-gutenberg-block-js',
+			'editor_style'    => 'argon-gutenberg-block-backend-css',
+			'render_callback' => 'argon_render_post_card_block',
+			'attributes'      => array(
+				'id'  => array('type' => 'integer', 'default' => 0),
+				'url' => array('type' => 'string', 'default' => ''),
+			),
+		)
+	);
+	register_block_type(
+		'argon/post-list',
+		array(
+			'editor_script'   => 'argon-gutenberg-block-js',
+			'editor_style'    => 'argon-gutenberg-block-backend-css',
+			'render_callback' => 'argon_render_post_list_block',
+			'attributes'      => array(
+				'tag'             => array('type' => 'string', 'default' => ''),
+				'category'        => array('type' => 'string', 'default' => ''),
+				'count'           => array('type' => 'integer', 'default' => 4),
+				'orderby'         => array('type' => 'string', 'default' => 'date'),
+				'include_current' => array('type' => 'boolean', 'default' => false),
+			),
+		)
+	);
+}
+function argon_render_post_card_block($attributes){
+	return shortcode_post_card(array(
+		'id'  => isset($attributes['id']) ? $attributes['id'] : 0,
+		'url' => isset($attributes['url']) ? $attributes['url'] : '',
+	));
+}
+function argon_render_post_list_block($attributes){
+	return shortcode_post_list(array(
+		'tag'             => isset($attributes['tag']) ? $attributes['tag'] : '',
+		'category'        => isset($attributes['category']) ? $attributes['category'] : '',
+		'count'           => isset($attributes['count']) ? $attributes['count'] : 4,
+		'orderby'         => isset($attributes['orderby']) ? $attributes['orderby'] : 'date',
+		'include_current' => !empty($attributes['include_current']) ? 'true' : 'false',
+	));
+}
+add_action('init', 'argon_init_gutenberg_post_ref_blocks');
+
+/* argon/review：评分卡区块。优点/缺点在编辑器里按行填写（比逐条增删控件省事），
+   渲染前转成数组交给与短代码共用的 argon_render_review()。
+   结构化数据的收集发生在 argon_render_review() 内部，所以区块形态无需额外挂钩。 */
+function argon_init_gutenberg_review_block() {
+	register_block_type(
+		'argon/review',
+		array(
+			'editor_script'   => 'argon-gutenberg-block-js',
+			'editor_style'    => 'argon-gutenberg-block-backend-css',
+			'render_callback' => 'argon_render_review_block',
+			'attributes'      => array(
+				'title'    => array('type' => 'string', 'default' => ''),
+				'score'    => array('type' => 'number', 'default' => 0),
+				'max'      => array('type' => 'number', 'default' => 5),
+				'author'   => array('type' => 'string', 'default' => ''),
+				'itemtype' => array('type' => 'string', 'default' => 'Product'),
+				'summary'  => array('type' => 'string', 'default' => ''),
+				'pros'     => array('type' => 'string', 'default' => ''),
+				'cons'     => array('type' => 'string', 'default' => ''),
+			),
+		)
+	);
+}
+function argon_render_review_block($attributes){
+	$split_lines = function($value){
+		if (!is_string($value) || trim($value) === ''){
+			return array();
+		}
+		$items = preg_split('/\r\n|\r|\n|\|/', $value);
+		$items = array_map('trim', $items);
+		return array_values(array_filter($items, function($v){ return $v !== ''; }));
+	};
+	return argon_render_review(array(
+		'score'    => isset($attributes['score']) ? $attributes['score'] : 0,
+		'max'      => isset($attributes['max']) ? $attributes['max'] : 5,
+		'title'    => isset($attributes['title']) ? $attributes['title'] : '',
+		'author'   => isset($attributes['author']) ? $attributes['author'] : '',
+		'itemtype' => isset($attributes['itemtype']) ? $attributes['itemtype'] : 'Product',
+		'summary'  => isset($attributes['summary']) ? $attributes['summary'] : '',
+		'pros'     => $split_lines(isset($attributes['pros']) ? $attributes['pros'] : ''),
+		'cons'     => $split_lines(isset($attributes['cons']) ? $attributes['cons'] : ''),
+	));
+}
+add_action('init', 'argon_init_gutenberg_review_block');
+
+/* 四个轻量组件（圆形进度 / 倒计时 / 文内目录 / 展开更多）：
+   全部走动态区块，渲染直接复用短代码函数，保证两种形态行为一致。 */
+function argon_init_gutenberg_small_tools_blocks() {
+	register_block_type(
+		'argon/circle-progress',
+		array(
+			'editor_script'   => 'argon-gutenberg-block-js',
+			'editor_style'    => 'argon-gutenberg-block-backend-css',
+			'render_callback' => 'argon_render_circle_progress_block',
+			'attributes'      => array(
+				'percentage' => array('type' => 'integer', 'default' => 70),
+				'size'       => array('type' => 'integer', 'default' => 96),
+				'stroke'     => array('type' => 'integer', 'default' => 8),
+				'color'      => array('type' => 'string', 'default' => 'indigo'),
+				'label'      => array('type' => 'string', 'default' => ''),
+			),
+		)
+	);
+	register_block_type(
+		'argon/countdown',
+		array(
+			'editor_script'   => 'argon-gutenberg-block-js',
+			'editor_style'    => 'argon-gutenberg-block-backend-css',
+			'render_callback' => 'argon_render_countdown_block',
+			'attributes'      => array(
+				'date'     => array('type' => 'string', 'default' => ''),
+				'title'    => array('type' => 'string', 'default' => ''),
+				'finished' => array('type' => 'string', 'default' => ''),
+			),
+		)
+	);
+	register_block_type(
+		'argon/toc',
+		array(
+			'editor_script'   => 'argon-gutenberg-block-js',
+			'editor_style'    => 'argon-gutenberg-block-backend-css',
+			'render_callback' => 'argon_render_toc_block',
+			'attributes'      => array(
+				'title'     => array('type' => 'string', 'default' => ''),
+				'max'       => array('type' => 'integer', 'default' => 3),
+				'collapsed' => array('type' => 'boolean', 'default' => false),
+			),
+		)
+	);
+	register_block_type(
+		'argon/show-more',
+		array(
+			'editor_script'   => 'argon-gutenberg-block-js',
+			'editor_style'    => 'argon-gutenberg-block-backend-css',
+			'render_callback' => 'argon_render_show_more_block',
+			'attributes'      => array(
+				'lines' => array('type' => 'integer', 'default' => 10),
+				'more'  => array('type' => 'string', 'default' => ''),
+				'less'  => array('type' => 'string', 'default' => ''),
+			),
+		)
+	);
+}
+function argon_render_circle_progress_block($attributes){
+	return shortcode_progressbar_circle(array(
+		'percentage' => isset($attributes['percentage']) ? $attributes['percentage'] : 70,
+		'size'       => isset($attributes['size']) ? $attributes['size'] : 96,
+		'stroke'     => isset($attributes['stroke']) ? $attributes['stroke'] : 8,
+		'color'      => isset($attributes['color']) ? $attributes['color'] : 'indigo',
+		'label'      => isset($attributes['label']) ? $attributes['label'] : '',
+	));
+}
+function argon_render_countdown_block($attributes){
+	return shortcode_countdown(array(
+		'date'     => isset($attributes['date']) ? $attributes['date'] : '',
+		'title'    => isset($attributes['title']) ? $attributes['title'] : '',
+		'finished' => isset($attributes['finished']) && $attributes['finished'] !== '' ? $attributes['finished'] : __('已结束', 'argon'),
+	));
+}
+function argon_render_toc_block($attributes){
+	return shortcode_toc(array(
+		'title'     => isset($attributes['title']) && $attributes['title'] !== '' ? $attributes['title'] : __('目录', 'argon'),
+		'max'       => isset($attributes['max']) ? $attributes['max'] : 3,
+		'collapsed' => !empty($attributes['collapsed']) ? 'true' : 'false',
+	));
+}
+function argon_render_show_more_block($attributes, $content = ''){
+	return shortcode_show_more(array(
+		'lines'        => isset($attributes['lines']) ? $attributes['lines'] : 10,
+		'more'         => isset($attributes['more']) && $attributes['more'] !== '' ? $attributes['more'] : __('展开全文', 'argon'),
+		'less'         => isset($attributes['less']) && $attributes['less'] !== '' ? $attributes['less'] : __('收起', 'argon'),
+		'preprocessed' => 'true',
+	), $content);
+}
+add_action('init', 'argon_init_gutenberg_small_tools_blocks');
 
 /* argon/ref 也是动态区块：脚注编号由服务端按【渲染顺序】累积到全局
    $post_references，文章底部的参考列表由 get_reference_list() 统一输出。
@@ -4176,6 +4631,133 @@ function shortcode_label($attr,$content=""){
 		$out .= " badge-pill";
 	}
 	$out .= "'>" . $content . "</span>";
+	return $out;
+}
+add_shortcode('kbd','shortcode_kbd');
+function shortcode_kbd($attr,$content=""){
+	$content = shortcode_content_preprocess($attr, $content);
+	return "<kbd>" . $content . "</kbd>";
+}
+add_shortcode('mark','shortcode_mark');
+function shortcode_mark($attr,$content=""){
+	$content = shortcode_content_preprocess($attr, $content);
+	$color = isset( $attr['color'] ) ? strtolower( trim( $attr['color'] ) ) : 'yellow';
+	if ($color == 'gray'){
+		$color = 'grey';
+	}
+	if (!in_array($color, array('yellow','indigo','green','red','orange','blue','grey'), true)){
+		$color = 'yellow';
+	}
+	$style = isset( $attr['style'] ) ? strtolower( trim( $attr['style'] ) ) : 'flat';
+	if (!in_array($style, array('flat','underline','wavy'), true)){
+		$style = 'flat';
+	}
+	return "<mark class='argon-mark argon-mark-" . $color . " argon-mark-" . $style . "'>" . $content . "</mark>";
+}
+add_shortcode('btn','shortcode_btn');
+function shortcode_btn($attr,$content=""){
+	$content = shortcode_content_preprocess($attr, $content);
+	$href = isset( $attr['href'] ) ? trim( $attr['href'] ) : (isset( $attr['url'] ) ? trim( $attr['url'] ) : '');
+	if ($href == ''){
+		/* 没有链接就没有行为：只渲染文字，避免输出一个点了没反应的按钮 */
+		return $content;
+	}
+	/* 颜色映射与 [label] 同款：indigo→primary green→success red→danger orange→warning blue→info */
+	$colorMap = array(
+		'indigo' => 'primary',
+		'green'  => 'success',
+		'red'    => 'danger',
+		'orange' => 'warning',
+		'blue'   => 'info',
+	);
+	$color = isset( $attr['color'] ) ? strtolower( trim( $attr['color'] ) ) : 'indigo';
+	$color = isset( $colorMap[$color] ) ? $colorMap[$color] : 'primary';
+	$size = isset( $attr['size'] ) ? strtolower( trim( $attr['size'] ) ) : '';
+	if (!in_array($size, array('sm','lg'), true)){
+		$size = '';
+	}
+	$shape = isset( $attr['shape'] ) ? strtolower( trim( $attr['shape'] ) ) : 'square';
+	$outline = isset( $attr['outline'] ) && $attr['outline'] == 'true';
+	$newtab = isset( $attr['newtab'] ) ? $attr['newtab'] == 'true' : false;
+	$icon = isset( $attr['icon'] ) ? trim( $attr['icon'] ) : '';
+	$out = "<a href='" . esc_url($href) . "' class='btn btn-" . ($outline ? "outline-" : "") . $color;
+	if ($size != ''){
+		$out .= " btn-" . $size;
+	}
+	if ($shape == 'round'){
+		$out .= " btn-round";
+	}
+	$out .= "'";
+	if ($newtab){
+		$out .= " target='_blank' rel='noopener'";
+	}
+	$out .= ">";
+	if ($icon != ''){
+		$out .= "<i class='fa fa-" . esc_attr($icon) . "'></i> ";
+	}
+	$out .= $content . "</a>";
+	return $out;
+}
+add_shortcode('download','shortcode_download');
+function shortcode_download($attr,$content=""){
+	$content = shortcode_content_preprocess($attr, $content);
+	/* 类型 → 图标 / 徽章色 / 文案。新增网盘类型在这里加一行即可；
+	   徽章色取自主题可用的 badge-*（primary/success/danger/warning/info） */
+	static $types = array(
+		'direct'   => array('fa-download', 'success', '直链下载'),
+		'lanzou'   => array('fa-cloud', 'info', '蓝奏云'),
+		'baidu'    => array('fa-cloud', 'danger', '百度网盘'),
+		'quark'    => array('fa-cloud', 'primary', '夸克网盘'),
+		'123'      => array('fa-cloud', 'success', '123云盘'),
+		'ali'      => array('fa-cloud', 'info', '阿里云盘'),
+		'weiyun'   => array('fa-cloud', 'info', '腾讯微云'),
+		'onedrive' => array('fa-cloud', 'primary', 'OneDrive'),
+		'google'   => array('fa-cloud', 'warning', 'Google Drive'),
+		'other'    => array('fa-cloud', 'primary', '网盘下载'),
+	);
+	$type = isset( $attr['type'] ) ? strtolower( trim( $attr['type'] ) ) : 'other';
+	if (!isset($types[$type])){
+		$type = 'other';
+	}
+	list($icon, $badge, $label) = $types[$type];
+	$url = isset( $attr['url'] ) ? trim( $attr['url'] ) : (isset( $attr['href'] ) ? trim( $attr['href'] ) : '');
+	if ($url == ''){
+		/* 没有链接的下载卡片没有意义：渲染为空 */
+		return "";
+	}
+	$icon = isset( $attr['icon'] ) && trim( $attr['icon'] ) != '' ? trim( $attr['icon'] ) : $icon;
+	$name = isset( $attr['name'] ) ? trim( $attr['name'] ) : '';
+	if ($name == ''){
+		$name = $label;
+	}
+	$size = isset( $attr['size'] ) ? trim( $attr['size'] ) : '';
+	$version = isset( $attr['version'] ) ? trim( $attr['version'] ) : '';
+	$date = isset( $attr['date'] ) ? trim( $attr['date'] ) : '';
+	$pwd = isset( $attr['pwd'] ) ? trim( $attr['pwd'] ) : '';
+	$out = "<div class='download-card download-card-type-" . sanitize_html_class($type) . "'>";
+	$out .= "<div class='download-card-icon'><i class='fa " . esc_attr($icon) . "'></i></div>";
+	$out .= "<div class='download-card-body'>";
+	$out .= "<div class='download-card-title'>" . esc_html($name) . "</div>";
+	$out .= "<div class='download-card-meta'><span class='badge badge-" . $badge . "'>" . esc_html($label) . "</span>";
+	if ($size != ''){
+		$out .= "<span class='download-card-meta-item'>" . esc_html($size) . "</span>";
+	}
+	if ($version != ''){
+		$out .= "<span class='download-card-meta-item'>" . sprintf(__('版本 %s', 'argon'), esc_html($version)) . "</span>";
+	}
+	if ($date != ''){
+		$out .= "<span class='download-card-meta-item'>" . sprintf(__('更新于 %s', 'argon'), esc_html($date)) . "</span>";
+	}
+	if ($pwd != ''){
+		$out .= "<span class='download-card-meta-item download-card-pwd'>" . sprintf(__('提取码 %s', 'argon'), "<code>" . esc_html($pwd) . "</code>") . "</span>";
+	}
+	$out .= "</div>";
+	if ($content != ''){
+		$out .= "<div class='download-card-description'>" . $content . "</div>";
+	}
+	$out .= "</div>";
+	$out .= "<div class='download-card-action'><a class='btn btn-" . $badge . "' href='" . esc_url($url) . "' target='_blank' rel='noopener'><i class='fa fa-download'></i> " . __('下载', 'argon') . "</a></div>";
+	$out .= "</div>";
 	return $out;
 }
 add_shortcode('progressbar','shortcode_progressbar');
@@ -4377,7 +4959,9 @@ function shortcode_friend_link($attr, $content = ""){
 	return argon_render_friendlinks(
 		isset($attr['style']) ? $attr['style'] : '1',
 		isset($attr['sort'])  ? $attr['sort']  : 'name',
-		isset($attr['order']) ? $attr['order'] : 'ASC'
+		isset($attr['order']) ? $attr['order'] : 'ASC',
+		isset($attr['category']) ? $attr['category'] : '',
+		isset($attr['grouped'])  ? $attr['grouped']  : 'false'
 	);
 }
 add_shortcode('friendlinks','shortcode_friend_link');
@@ -4386,17 +4970,18 @@ function argon_render_friendlinks_block($attributes){
 	return argon_render_friendlinks(
 		isset($attributes['style']) ? $attributes['style'] : '1',
 		isset($attributes['sort'])  ? $attributes['sort']  : 'name',
-		isset($attributes['order']) ? $attributes['order'] : 'ASC'
+		isset($attributes['order']) ? $attributes['order'] : 'ASC',
+		isset($attributes['category']) ? $attributes['category'] : '',
+		isset($attributes['grouped']) && $attributes['grouped'] ? 'true' : 'false'
 	);
 }
 /* 友链列表的渲染。短代码与古腾堡区块【共用这一个函数】——
    两处各写一遍必然会跑偏（颜色/样式/转义规则都可能不一致）。 */
-function argon_render_friendlinks($style = '1', $sort = 'name', $order = 'ASC'){
-	$friendlinks = get_bookmarks( array(
-		'orderby' => $sort ,
-		'order'   => $order
-	));
-
+/* 渲染友链卡片网格：数据由调用方查询好传入（短代码 / 区块 / 分组模式共用一份循环） */
+function argon_render_friendlink_items($style, $friendlinks){
+	if (empty($friendlinks)){
+		return "";
+	}
 	switch ($style) {
 		case '1':
 			$class = "friend-links-style1";
@@ -4444,10 +5029,83 @@ function argon_render_friendlinks($style = '1', $sort = 'name', $order = 'ASC'){
 			</div>";
 	}
 	$out .= "</div></div>";
-	// 申请友链按钮（启用时）
-		if (get_option('argon_fl_enable', 'false') == 'true'){
-			$out .= argon_fl_apply_button_html($style);
+	return $out;
+}
+function argon_render_friendlinks($style = '1', $sort = 'name', $order = 'ASC', $category = '', $grouped = 'false'){
+	$out = "";
+	if ($grouped == 'true' && trim($category) == ''){
+		/* 分组模式（#539/#114）：按链接分类逐组渲染，标题为组名；
+		   分类本身按名称排序，组内仍按 sort/order 排 */
+		$terms = get_terms(array(
+			'taxonomy'   => 'link_category',
+			'hide_empty' => true,
+			'orderby'    => 'name',
+			'order'      => ($order == 'DESC' ? 'DESC' : 'ASC'),
+		));
+		if (is_wp_error($terms)){
+			$terms = array();
 		}
+		foreach ($terms as $term){
+			$group = argon_render_friendlink_items($style, get_bookmarks(array(
+				'orderby'  => $sort,
+				'order'    => $order,
+				'category' => $term -> term_id,
+			)));
+			if ($group == ""){
+				continue;
+			}
+			$out .= "<h5 class='friend-links-group-title text-primary'>" . esc_html($term -> name) . "</h5>" . $group;
+		}
+		/* 没有归入任何分类的友链归入「未分类」，避免分组模式下凭空消失 */
+		$uncategorized = array();
+		foreach (get_bookmarks(array('orderby' => $sort, 'order' => $order)) as $link){
+			$link_cats = wp_get_object_terms($link -> link_id, 'link_category', array('fields' => 'ids'));
+			if (empty($link_cats)){
+				$uncategorized[] = $link;
+			}
+		}
+		if (!empty($uncategorized)){
+			$out .= "<h5 class='friend-links-group-title text-primary'>" . __('未分类', 'argon') . "</h5>"
+				. argon_render_friendlink_items($style, $uncategorized);
+		}
+	}else{
+		$query_args = array(
+			'orderby' => $sort,
+			'order'   => $order,
+		);
+		$category = trim($category);
+		if ($category != ''){
+			/* category 支持 ID / slug / 名称的逗号混合列表，统一解析成 term_id
+			   （get_bookmarks 原生 category 只认 ID、category_name 只认单个名称，这里做一层兼容） */
+			$cat_ids = array();
+			foreach (array_filter(explode(',', $category)) as $cat){
+				$cat = trim($cat);
+				$term = false;
+				if (ctype_digit($cat)){
+					$term = get_term_by('id', intval($cat), 'link_category');
+				}
+				if ($term === false){
+					$term = get_term_by('slug', $cat, 'link_category');
+				}
+				if ($term === false){
+					$term = get_term_by('name', $cat, 'link_category');
+				}
+				if ($term !== false){
+					$cat_ids[] = $term -> term_id;
+				}
+			}
+			if (empty($cat_ids)){
+				/* 指定的分类都不存在：渲染为空 */
+				return "";
+			}
+			$query_args['category'] = implode(',', $cat_ids);
+		}
+		$out = argon_render_friendlink_items($style, get_bookmarks($query_args));
+	}
+	/* 申请友链按钮（启用时，整个短代码/区块只渲染一次） */
+	if (get_option('argon_fl_enable', 'false') == 'true'){
+		$out .= argon_fl_apply_button_html($style);
+	}
 	return $out;
 }
 add_shortcode('sfriendlinks','shortcode_friend_link_simple');
@@ -4679,6 +5337,393 @@ function shortcode_video($attr,$content=""){
 	$out .= "</video>";
 	return $out;
 }
+/* ---------- 外链媒体：B 站 / 网易云（#532 接手实现，上游 not_planned） ---------- */
+
+/* 解析 BV 号 / av 号 / B 站 URL，返回 array('bvid','aid','page') 或 null。
+   b23.tv 短链需要解析跳转，暂不支持。 */
+function argon_parse_bilibili($input){
+	$input = trim($input);
+	if ($input == ''){
+		return null;
+	}
+	$bvid = '';
+	$aid = '';
+	$page = 0;
+	if (preg_match('/^bv([0-9A-Za-z]{10})$/i', $input)){
+		$bvid = 'BV' . substr($input, 2);
+	}elseif (preg_match('/^av(\d+)$/i', $input)){
+		$aid = substr($input, 2);
+	}elseif (preg_match('/bilibili\.com\/video\/BV([0-9A-Za-z]{10})/i', $input, $m)){
+		$bvid = 'BV' . $m[1];
+	}elseif (preg_match('/bilibili\.com\/video\/av(\d+)/i', $input, $m)){
+		$aid = $m[1];
+	}elseif (preg_match('/b23\.tv\//i', $input)){
+		return null;
+	}
+	if ($bvid == '' && $aid == ''){
+		return null;
+	}
+	if (preg_match('/[?&]p=(\d+)/', $input, $m)){
+		$page = intval($m[1]);
+	}
+	return array('bvid' => $bvid, 'aid' => $aid, 'page' => max(1, $page));
+}
+
+/* 拉取 B 站视频信息（transient 缓存：成功 6 小时，失败 30 分钟防止每次渲染都打 API）。
+   失败返回 null，卡片降级为无信息形态，仍可点击加载。 */
+function argon_fetch_bilibili_view($bvid, $aid){
+	$key = 'argon_bili_view_' . md5($bvid != '' ? $bvid : 'av' . $aid);
+	$cached = get_transient($key);
+	if ($cached !== false){
+		return $cached;
+	}
+	$query = $bvid != '' ? 'bvid=' . urlencode($bvid) : 'aid=' . intval($aid);
+	$response = wp_remote_get('https://api.bilibili.com/x/web-interface/view?' . $query, array(
+		'timeout' => 5,
+		'headers' => array('User-Agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) ArgonTheme/1.0'),
+	));
+	if (is_wp_error($response) || wp_remote_retrieve_response_code($response) != 200){
+		set_transient($key, null, 30 * MINUTE_IN_SECONDS);
+		return null;
+	}
+	$body = json_decode(wp_remote_retrieve_body($response), true);
+	if (!is_array($body) || !isset($body['code']) || $body['code'] != 0 || !isset($body['data'])){
+		set_transient($key, null, 30 * MINUTE_IN_SECONDS);
+		return null;
+	}
+	$data = $body['data'];
+	$view = array(
+		'title'    => isset($data['title']) ? (string)$data['title'] : '',
+		'pic'      => isset($data['pic']) ? (string)$data['pic'] : '',
+		'up'       => isset($data['owner']['name']) ? (string)$data['owner']['name'] : '',
+		'duration' => isset($data['duration']) ? intval($data['duration']) : 0,
+		'view'     => isset($data['stat']['view']) ? intval($data['stat']['view']) : 0,
+	);
+	set_transient($key, $view, 6 * HOUR_IN_SECONDS);
+	return $view;
+}
+
+function argon_format_bilibili_count($n){
+	/* 中文计数习惯（与 B 站一致）；不进翻译表 */
+	if ($n >= 100000000){
+		return round($n / 100000000, 1) . '亿';
+	}
+	if ($n >= 10000){
+		return round($n / 10000, 1) . '万';
+	}
+	return (string)$n;
+}
+
+function argon_format_bilibili_duration($sec){
+	$h = floor($sec / 3600);
+	$m = floor(($sec % 3600) / 60);
+	$s = $sec % 60;
+	return ($h > 0 ? sprintf('%02d:', $h) : '') . sprintf('%02d:%02d', $m, $s);
+}
+
+/* 渲染 B 站视频。mode=card（默认）信息卡 + 点击加载播放器；mode=iframe 直接嵌 iframe */
+function argon_render_bilibili($input, $mode = 'card', $page = 0, $autoplay = 'false', $danmaku = 'false'){
+	$parsed = argon_parse_bilibili($input);
+	if ($parsed === null){
+		$input = trim($input);
+		if (preg_match('#^https?://#i', $input)){
+			/* 解析失败但确实是 URL：退化为外链按钮，至少可点击跳转 */
+			return "<p><a class='btn btn-primary btn-sm' href='" . esc_url($input) . "' target='_blank' rel='noopener'><i class='fa fa-external-link'></i> Bilibili</a></p>";
+		}
+		return "";
+	}
+	$page = $page > 0 ? $page : $parsed['page'];
+	$params = array(
+		($parsed['bvid'] != '' ? 'bvid=' . urlencode($parsed['bvid']) : 'aid=' . intval($parsed['aid'])),
+		'page=' . max(1, $page),
+		'autoplay=' . ($autoplay == 'true' ? '1' : '0'),
+		'danmaku=' . ($danmaku == 'true' ? '1' : '0'),
+		'high_quality=1',
+	);
+	$embed = 'https://player.bilibili.com/player.html?' . implode('&', $params);
+	if ($mode == 'iframe'){
+		return "<div class='bilibili-embed'><iframe src='" . esc_url($embed) . "' loading='lazy' scrolling='no' allowfullscreen='true'></iframe></div>";
+	}
+	$info = argon_fetch_bilibili_view($parsed['bvid'], $parsed['aid']);
+	$out = "<div class='bilibili-card' data-embed='" . esc_attr($embed) . "' role='button' tabindex='0' aria-label='" . esc_attr__('播放 B 站视频', 'argon') . "'>";
+	if (is_array($info)){
+		if ($info['pic'] != ''){
+			$out .= "<img class='bilibili-card-cover' src='" . esc_url($info['pic']) . "' loading='lazy' alt='" . esc_attr($info['title']) . "'/>";
+		}
+		$out .= "<div class='bilibili-card-info'>";
+		$out .= "<div class='bilibili-card-title'>" . esc_html($info['title']) . "</div>";
+		$out .= "<div class='bilibili-card-meta'>";
+		if ($info['up'] != ''){
+			$out .= "<span>" . esc_html($info['up']) . "</span>";
+		}
+		if ($info['duration'] > 0){
+			$out .= "<span>" . esc_html(argon_format_bilibili_duration($info['duration'])) . "</span>";
+		}
+		if ($info['view'] > 0){
+			$out .= "<span>" . esc_html(argon_format_bilibili_count($info['view'])) . " " . __('播放', 'argon') . "</span>";
+		}
+		$out .= "</div></div>";
+	}else{
+		$out .= "<div class='bilibili-card-noinfo'><i class='fa fa-play-circle'></i> " . __('点击加载 B 站视频', 'argon') . "</div>";
+	}
+	$out .= "<div class='bilibili-card-play'><i class='fa fa-play'></i></div>";
+	$out .= "<span class='bilibili-card-badge'>bilibili</span>";
+	$out .= "</div>";
+	return $out;
+}
+
+/* 解析网易云单曲 / 歌单 ID 或 URL。官方外链播放器只验证过单曲(2)与歌单(0)两种形态，
+   专辑等类型不支持（返回 null 走外链降级）。 */
+function argon_parse_netease($input, $type = ''){
+	$input = trim($input);
+	if ($input == ''){
+		return null;
+	}
+	$id = 0;
+	if (preg_match('/^(\d+)$/', $input)){
+		$id = intval($input);
+	}else{
+		$path_type = '';
+		if (preg_match('/music\.163\.com\/(#\/)?(song|playlist)\?id=(\d+)/i', $input, $m)){
+			$path_type = strtolower($m[2]);
+			$id = intval($m[3]);
+		}
+		if ($id == 0){
+			return null;
+		}
+		if ($type == ''){
+			$type = $path_type;
+		}
+	}
+	if ($id == 0){
+		return null;
+	}
+	$type_map = array('song' => 2, 'playlist' => 0);
+	if (!isset($type_map[$type])){
+		$type = 'song';
+	}
+	return array('id' => $id, 'type' => $type_map[$type]);
+}
+
+function argon_render_netease($input, $type = '', $height = 0, $autoplay = 'false'){
+	$parsed = argon_parse_netease($input, $type);
+	if ($parsed === null){
+		$input = trim($input);
+		if (preg_match('#^https?://#i', $input)){
+			return "<p><a class='btn btn-primary btn-sm' href='" . esc_url($input) . "' target='_blank' rel='noopener'><i class='fa fa-external-link'></i> 网易云音乐</a></p>";
+		}
+		return "";
+	}
+	$h = $height > 0 ? $height : ($parsed['type'] == 0 ? 330 : 66);
+	$src = 'https://music.163.com/outchain/player?type=' . $parsed['type'] . '&id=' . $parsed['id'] . '&auto=' . ($autoplay == 'true' ? '1' : '0') . '&height=' . $h;
+	return "<div class='netease-embed'><iframe src='" . esc_url($src) . "' loading='lazy' style='height:" . $h . "px;'></iframe></div>";
+}
+
+add_shortcode('bilibili','shortcode_bilibili');
+function shortcode_bilibili($attr,$content=""){
+	$input = isset( $attr['url'] ) ? $attr['url'] : trim($content);
+	$mode = isset( $attr['mode'] ) ? strtolower( trim( $attr['mode'] ) ) : 'card';
+	if (!in_array($mode, array('card','iframe'), true)){
+		$mode = 'card';
+	}
+	$page = isset( $attr['page'] ) ? intval( $attr['page'] ) : 0;
+	$autoplay = isset( $attr['autoplay'] ) && $attr['autoplay'] == 'true' ? 'true' : 'false';
+	$danmaku = isset( $attr['danmaku'] ) && $attr['danmaku'] == 'true' ? 'true' : 'false';
+	return argon_render_bilibili($input, $mode, $page, $autoplay, $danmaku);
+}
+add_shortcode('netease','shortcode_netease');
+function shortcode_netease($attr,$content=""){
+	$input = isset( $attr['id'] ) ? $attr['id'] : (isset( $attr['url'] ) ? $attr['url'] : trim($content));
+	$type = isset( $attr['type'] ) ? strtolower( trim( $attr['type'] ) ) : '';
+	$height = isset( $attr['height'] ) ? intval( $attr['height'] ) : 0;
+	$autoplay = isset( $attr['autoplay'] ) && $attr['autoplay'] == 'true' ? 'true' : 'false';
+	return argon_render_netease($input, $type, $height, $autoplay);
+}
+add_shortcode('mermaid','shortcode_mermaid');
+function shortcode_mermaid($attr,$content=""){
+	/* 不做嵌套短代码处理：图表源码按字面输出。
+	   先输出 <pre> 源码，前端 mermaid.js 渲染成功后替换，失败则源码可读兜底（#563） */
+	return "<div class='argon-mermaid'><pre>" . esc_html(trim($content)) . "</pre></div>";
+}
+/* ---------- 音视频播放器：APlayer（音频）/ ArtPlayer（视频） ----------
+   已拍板的策略：可选依赖 + 按需加载。
+   · 后台开关 argon_enable_media_player 默认关闭；关闭时短代码/区块降级为
+     浏览器原生 <audio>/<video>，功能不丢，只是没有歌词/播放列表/弹幕；
+   · 打开后，播放器库只在当前页面真的含有播放器元素时才由前端按需注入
+     （argontheme.js 的 argonRenderMediaPlayers + header.php 的 lazy_assets），
+     库文件随主题分发（assets/vendor/），不依赖第三方 CDN，也不内置公共音乐 API。 */
+
+/* 音频条目归一化：[aplayer] 支持两种写法
+   ① 单曲属性：src / name / artist / cover / lrc
+   ② 多曲正文：每行 "名称 | 音频地址 | 艺术家 | 封面 | 歌词地址"（与 [timeline]、[sfriendlinks] 的行式约定一致） */
+function argon_aplayer_parse_tracks($attr, $content){
+	$tracks = array();
+	$src = isset($attr['src']) ? trim($attr['src']) : (isset($attr['url']) ? trim($attr['url']) : '');
+	if ($src != ''){
+		$tracks[] = array(
+			'name'   => isset($attr['name']) ? trim($attr['name']) : '',
+			'artist' => isset($attr['artist']) ? trim($attr['artist']) : '',
+			'url'    => $src,
+			'cover'  => isset($attr['cover']) ? trim($attr['cover']) : '',
+			'lrc'    => isset($attr['lrc']) ? trim($attr['lrc']) : '',
+		);
+	}
+	$content = trim(strip_tags($content));
+	if ($content != ''){
+		foreach (preg_split('/\r\n|\r|\n/', $content) as $line){
+			$line = trim($line);
+			if ($line == ''){
+				continue;
+			}
+			$fields = array_map('trim', explode('|', $line));
+			/* 单行只写了地址时当单曲处理，其余字段留空 */
+			$url = '';
+			$name = '';
+			if (count($fields) == 1){
+				$url = $fields[0];
+			}else{
+				$name = $fields[0];
+				$url  = isset($fields[1]) ? $fields[1] : '';
+			}
+			if ($url == ''){
+				continue;
+			}
+			$tracks[] = array(
+				'name'   => $name,
+				'artist' => isset($fields[2]) ? $fields[2] : '',
+				'url'    => $url,
+				'cover'  => isset($fields[3]) ? $fields[3] : '',
+				'lrc'    => isset($fields[4]) ? $fields[4] : '',
+			);
+		}
+	}
+	return $tracks;
+}
+
+/* 渲染音频。$engine 为 true 表示后台已开启播放器库 */
+function argon_render_aplayer($tracks, $opts = array()){
+	if (empty($tracks)){
+		return "";
+	}
+	$enable = get_option('argon_enable_media_player', 'false') == 'true';
+	$autoplay = !empty($opts['autoplay']);
+	$muted = !empty($opts['muted']);
+	if (!$enable){
+		/* 降级：原生 <audio>。多曲时逐条列出，行为与没装插件一样朴素 */
+		$out = "<div class='argon-media-fallback'>";
+		foreach ($tracks as $track){
+			$out .= "<div class='argon-media-fallback-item'>";
+			if ($track['name'] != ''){
+				$out .= "<span class='argon-media-fallback-name'>" . esc_html($track['name']) . "</span>";
+			}
+			$out .= "<audio controls preload='none'"
+				. ($autoplay ? " autoplay" : "")
+				. ($muted ? " muted" : "")
+				. " src='" . esc_url($track['url']) . "'></audio>";
+			$out .= "</div>";
+		}
+		$out .= "</div>";
+		return $out;
+	}
+	$theme = isset($opts['theme']) && trim($opts['theme']) != '' ? trim($opts['theme']) : get_option('argon_theme_color', '#5e72e4');
+	$mode = isset($opts['mode']) ? $opts['mode'] : 'normal';
+	if (!in_array($mode, array('normal','mini','fixed'), true)){
+		$mode = 'normal';
+	}
+	$config = array(
+		'theme'      => $theme,
+		'mode'       => $mode,
+		'loop'       => !empty($opts['loop']) ? 'all' : 'none',
+		'order'      => !empty($opts['random']) ? 'random' : 'list',
+		'autoplay'   => $autoplay,
+		'volume'     => isset($opts['volume']) && $opts['volume'] !== '' ? floatval($opts['volume']) : 0.7,
+		'listFolded' => !empty($opts['list_folded']),
+		'listMaxHeight' => '340px',
+		'preload'    => 'none',
+		'mutex'      => true,
+		'audio'      => array(),
+	);
+	if ($muted){
+		$config['volume'] = 0;
+	}
+	foreach ($tracks as $track){
+		$item = array(
+			'name'   => $track['name'] != '' ? $track['name'] : __('未命名音频', 'argon'),
+			'artist' => $track['artist'],
+			'url'    => $track['url'],
+			'cover'  => $track['cover'],
+		);
+		if ($track['lrc'] != ''){
+			$item['lrc'] = $track['lrc'];
+		}
+		$config['audio'][] = $item;
+	}
+	return "<div class='argon-aplayer' data-argon-player='aplayer' data-config='" . esc_attr(wp_json_encode($config)) . "'></div>";
+}
+
+/* 渲染视频。$attr 支持 src/poster/title/autoplay/muted/loop/hotkey。
+   弹幕未实现：artplayer-plugin-danmuku 未随主题分发，等有实际需求再引入（避免为一个
+   用不上的功能把包体积抬上去）。 */
+function argon_render_artplayer($attr){
+	$src = isset($attr['src']) ? trim($attr['src']) : (isset($attr['url']) ? trim($attr['url']) : '');
+	if ($src == ''){
+		return "";
+	}
+	$poster = isset($attr['poster']) ? trim($attr['poster']) : '';
+	$autoplay = isset($attr['autoplay']) && $attr['autoplay'] == 'true';
+	$muted = isset($attr['muted']) && $attr['muted'] == 'true';
+	/* 自动播放必须有静音兜底，否则浏览器直接拦掉，用户只会看到「点了没反应」。
+	   注意不能写成 !isset($attr['muted'])：区块总会显式传 muted=false，那样兜底就失效了。 */
+	if ($autoplay && !$muted){
+		$muted = true;
+	}
+	$loop = isset($attr['loop']) && $attr['loop'] == 'true';
+	$enable = get_option('argon_enable_media_player', 'false') == 'true';
+	if (!$enable){
+		return "<div class='argon-media-fallback'>"
+			. "<video controls preload='none'"
+			. ($autoplay ? " autoplay" : "")
+			. ($muted ? " muted" : "")
+			. ($loop ? " loop" : "")
+			. ($poster != '' ? " poster='" . esc_url($poster) . "'" : "")
+			. " src='" . esc_url($src) . "'></video></div>";
+	}
+	$config = array(
+		'url'      => $src,
+		'poster'   => $poster,
+		'title'    => isset($attr['title']) ? trim($attr['title']) : '',
+		'autoplay' => $autoplay,
+		'muted'    => $muted,
+		'loop'     => $loop,
+		'volume'   => $muted ? 0 : 0.7,
+		'hotkey'   => !isset($attr['hotkey']) || $attr['hotkey'] != 'false',
+		'setting'  => true,
+		'playbackRate' => true,
+		'aspectRatio'  => '16:9',
+	);
+	return "<div class='argon-artplayer' data-argon-player='artplayer' data-config='" . esc_attr(wp_json_encode($config)) . "'></div>";
+}
+
+add_shortcode('aplayer','shortcode_aplayer');
+function shortcode_aplayer($attr,$content=""){
+	$content = shortcode_content_preprocess($attr, $content);
+	$tracks = argon_aplayer_parse_tracks($attr, $content);
+	return argon_render_aplayer($tracks, array(
+		'theme'       => isset($attr['theme']) ? $attr['theme'] : '',
+		'mode'        => isset($attr['mode']) ? $attr['mode'] : 'normal',
+		'autoplay'    => isset($attr['autoplay']) && $attr['autoplay'] == 'true',
+		'muted'       => isset($attr['muted']) && $attr['muted'] == 'true',
+		'loop'        => isset($attr['loop']) && $attr['loop'] == 'true',
+		'random'      => isset($attr['random']) && $attr['random'] == 'true',
+		'volume'      => isset($attr['volume']) ? $attr['volume'] : '',
+		'list_folded' => isset($attr['list_folded']) && $attr['list_folded'] == 'true',
+	));
+}
+add_shortcode('artplayer','shortcode_artplayer');
+function shortcode_artplayer($attr,$content=""){
+	$attr['src'] = isset($attr['src']) ? $attr['src'] : trim(strip_tags($content));
+	return argon_render_artplayer($attr);
+}
 add_shortcode('hide_reading_time','shortcode_hide_reading_time');
 function shortcode_hide_reading_time($attr,$content=""){
 	return "";
@@ -4697,6 +5742,1028 @@ add_shortcode('noshortcode','shortcode_noshortcode');
 function shortcode_noshortcode($attr,$content=""){
 	return $content;
 }
+
+/* ---------- 内容门控：[reply] 回复可见 / [login] 登录可见 ----------
+   上游把这条需求标了 not_planned（#505），本分支接手实现。
+   安全原则：**失败即关闭（fail-closed）**——未授权时内容根本不进入 HTML，
+   而不是用 CSS 藏起来。相关的几条泄漏路径在下面对应位置都有处理。 */
+
+function argon_content_gate_enabled(){
+	return get_option('argon_enable_content_gate', 'false') == 'true';
+}
+
+/* 判断当前访客是否"已在本篇下评论过"（评论已通过审核才算）。
+   三条来源都查：登录用户 ID、登录用户邮箱、游客评论后 WP 留下的 comment_author_email_* cookie。
+   注意这里依赖 the_content 渲染时全局 $post 就是本篇（前台正文 / 摘要 / 列表循环都满足）。
+   REST 的 content.rendered 不 setup_postdata，届时 get_the_ID() 通常为 0 → 直接判否，
+   属 fail-closed，不会误放行。 */
+function argon_user_has_commented($post_id){
+	if (!$post_id){
+		return false;
+	}
+	/* 站点管理员/编辑不受门控限制，方便预览 */
+	if (current_user_can('moderate_comments')){
+		return true;
+	}
+	$emails = array();
+	if (is_user_logged_in()){
+		$user = wp_get_current_user();
+		$by_id = get_comments(array(
+			'post_id' => $post_id,
+			'user_id' => $user -> ID,
+			'status'  => 'approve',
+			'count'   => true,
+		));
+		if (intval($by_id) > 0){
+			return true;
+		}
+		if (!empty($user -> user_email)){
+			$emails[] = $user -> user_email;
+		}
+	}
+	$cookie = 'comment_author_email_' . COOKIEHASH;
+	if (isset($_COOKIE[$cookie])){
+		$email = sanitize_email(wp_unslash($_COOKIE[$cookie]));
+		if ($email != ''){
+			$emails[] = $email;
+		}
+	}
+	foreach (array_unique($emails) as $email){
+		$by_email = get_comments(array(
+			'post_id'      => $post_id,
+			'author_email' => $email,
+			'status'       => 'approve',
+			'count'        => true,
+		));
+		if (intval($by_email) > 0){
+			return true;
+		}
+	}
+	return false;
+}
+
+/* 未授权时显示的占位卡片（不含任何被保护内容） */
+function argon_content_gate_placeholder($type){
+	$is_login = $type == 'login';
+	$title = $is_login ? __('登录后可见', 'argon') : __('回复后可见', 'argon');
+	$tip = $is_login ? __('登录后即可查看此处内容。', 'argon') : __('在本篇留下评论（通过审核）后即可查看此处内容。', 'argon');
+	$action = '';
+	if ($is_login && !is_user_logged_in()){
+		$action = "<a class='argon-content-gate-action' href='" . esc_url(wp_login_url(get_permalink())) . "'>" . esc_html__('去登录', 'argon') . "</a>";
+	}
+	return "<div class='argon-content-gate'><div class='argon-content-gate-icon'><i class='fa fa-lock'></i></div>"
+		. "<div class='argon-content-gate-body'><div class='argon-content-gate-title'>" . esc_html($title) . "</div>"
+		. "<div class='argon-content-gate-tip'>" . esc_html($tip) . "</div></div>" . $action . "</div>";
+}
+
+/* 开关关闭时的处理：同样不输出内容（fail-closed）。
+   只给管理员看一行配置提示——访客看到的是空白，不会误以为内容已公开。 */
+function argon_content_gate_disabled_notice($type){
+	if (!current_user_can('manage_options')){
+		return "";
+	}
+	return "<div class='argon-content-gate argon-content-gate-disabled'><i class='fa fa-exclamation-triangle'></i> "
+		. sprintf(
+			/* translators: %s: 短代码名（reply 或 login） */
+			esc_html__('内容门控未启用：[%s] 里的内容对访客不可见。请到「Argon 主题选项 → 内容门控」打开开关。', 'argon'),
+			esc_html($type)
+		)
+		. "</div>";
+}
+
+add_shortcode('reply','shortcode_content_gate_reply');
+function shortcode_content_gate_reply($attr,$content=""){
+	if (!argon_content_gate_enabled()){
+		return argon_content_gate_disabled_notice('reply');
+	}
+	if (argon_user_has_commented(get_the_ID())){
+		return shortcode_content_preprocess($attr, $content);
+	}
+	return argon_content_gate_placeholder('reply');
+}
+add_shortcode('login','shortcode_content_gate_login');
+function shortcode_content_gate_login($attr,$content=""){
+	if (!argon_content_gate_enabled()){
+		return argon_content_gate_disabled_notice('login');
+	}
+	if (is_user_logged_in() || current_user_can('moderate_comments')){
+		return shortcode_content_preprocess($attr, $content);
+	}
+	return argon_content_gate_placeholder('login');
+}
+
+/* 页面缓存会带来一条反向泄漏：登录用户看到的"已解锁"页面若被整页缓存，
+   随后发给访客就连内容一起发出去了。这里在渲染前告诉常见缓存插件别缓存这一页。
+   注意这只是尽力而为——不保证所有缓存层都遵守，设置页也写了对应提示。 */
+add_action('template_redirect', 'argon_content_gate_nocache');
+function argon_content_gate_nocache(){
+	if (!argon_content_gate_enabled() || !is_singular()){
+		return;
+	}
+	$post = get_queried_object();
+	if (!is_object($post) || !isset($post -> post_content)){
+		return;
+	}
+	if (!has_shortcode($post -> post_content, 'reply') && !has_shortcode($post -> post_content, 'login')){
+		return;
+	}
+	if (!defined('DONOTCACHEPAGE')){
+		define('DONOTCACHEPAGE', true);
+	}
+	if (!headers_sent()){
+		/* private：任何共享缓存都不该存；no-cache：浏览器每次回来都重新校验 */
+		header('Cache-Control: private, no-cache, must-revalidate, max-age=0');
+	}
+}
+
+/* 摘要泄漏：核心 wp_trim_excerpt() 的顺序是【先 strip_shortcodes，再跑 the_content】，
+   于是 [reply]机密[/reply] 剥掉短代码后会把「机密」当纯文本塞进摘要——
+   而摘要会进 <meta name="description">、RSS、搜索结果摘要与 REST 的 excerpt.rendered。
+   这里接管核心挂在 get_the_excerpt 上的 wp_trim_excerpt：先把门控段落整体删掉再交给核心生成。
+   区块形态（<!-- wp:argon/gate -->…<!-- /wp:argon/gate -->）同样处理。 */
+function argon_gate_strip_protected($text){
+	if ($text === ''){
+		return $text;
+	}
+	$has_shortcode_gate = (strpos($text, '[reply') !== false || strpos($text, '[login') !== false);
+	$has_block_gate = (strpos($text, 'argon/gate') !== false);
+	if (!$has_shortcode_gate && !$has_block_gate){
+		return $text;
+	}
+	$patterns = array(
+		'|<!--\s+wp:argon/gate\b.*?-->.*?<!--\s+/wp:argon/gate\s+-->|s',
+		'|\[(?:reply|login)\b[^\]]*\].*?\[/(?:reply|login)\]|s',
+	);
+	/* 跑两遍以处理一层嵌套 */
+	for ($i = 0; $i < 2; $i++){
+		foreach ($patterns as $pattern){
+			$text = preg_replace($pattern, '', $text);
+		}
+	}
+	/* 极端嵌套会剩下孤立的闭合标签，一并清掉，免得摘要里露出 "[/reply]" */
+	$text = preg_replace('|\[/(?:reply|login)\]|', '', $text);
+	return $text;
+}
+add_action('after_setup_theme', 'argon_gate_take_over_excerpt');
+function argon_gate_take_over_excerpt(){
+	/* 核心在 default-filters.php 里把 wp_trim_excerpt 挂在 get_the_excerpt 上，
+	   这里换成自己的包装，其余行为（长度、more、手填摘要）照旧交给核心 */
+	remove_filter('get_the_excerpt', 'wp_trim_excerpt', 10);
+	add_filter('get_the_excerpt', 'argon_gate_trim_excerpt', 10, 2);
+}
+function argon_gate_trim_excerpt($text = '', $post = null){
+	if (!argon_content_gate_enabled()){
+		return wp_trim_excerpt($text, $post);
+	}
+	$post_obj = get_post($post);
+	if (!$post_obj || empty($post_obj -> post_content)){
+		return wp_trim_excerpt($text, $post);
+	}
+	$content = $post_obj -> post_content;
+	if (strpos($content, 'argon/gate') === false && !has_shortcode($content, 'reply') && !has_shortcode($content, 'login')){
+		return wp_trim_excerpt($text, $post);
+	}
+	$clone = clone $post_obj;
+	$clone -> post_content = argon_gate_strip_protected($content);
+	return wp_trim_excerpt(argon_gate_strip_protected($text), $clone);
+}
+
+/* ---------- 外链卡片 ----------
+   [link-card url="..." title="..." desc="..." icon="..."]
+   好友链卡片不同：这是任意外链的通用卡片。
+   刻意不自动去抓目标站点的标题/favicon——那会让每个访客的 IP 与 Referer 泄漏给第三方，
+   而且慢。icon 留空时用首字生成的纯 CSS 头像兜底。 */
+add_shortcode('link-card','shortcode_link_card');
+add_shortcode('linkcard','shortcode_link_card');
+function shortcode_link_card($attr,$content=""){
+	$url = isset( $attr['url'] ) ? trim( $attr['url'] ) : (isset( $attr['href'] ) ? trim( $attr['href'] ) : '');
+	if ($url == ''){
+		return "";
+	}
+	$title = isset( $attr['title'] ) ? trim( $attr['title'] ) : '';
+	$desc = isset( $attr['desc'] ) ? trim( $attr['desc'] ) : (isset( $attr['description'] ) ? trim( $attr['description'] ) : '');
+	if ($desc == ''){
+		$desc = trim(strip_tags($content));
+	}
+	if ($title == ''){
+		/* 没给标题时用域名兜底，总比一个空白卡片强 */
+		$host = wp_parse_url($url, PHP_URL_HOST);
+		$title = $host != '' ? $host : $url;
+	}
+	$icon = isset( $attr['icon'] ) ? trim( $attr['icon'] ) : '';
+	$out = "<a class='argon-link-card' href='" . esc_url($url) . "' target='_blank' rel='noopener noreferrer'>";
+	if ($icon != ''){
+		$out .= "<span class='argon-link-card-icon'><img src='" . esc_url($icon) . "' alt='' loading='lazy'/></span>";
+	}else{
+		$initial = function_exists('mb_substr') ? mb_substr($title, 0, 1) : substr($title, 0, 1);
+		$out .= "<span class='argon-link-card-icon argon-link-card-icon-text'>" . esc_html($initial) . "</span>";
+	}
+	$out .= "<span class='argon-link-card-body'><span class='argon-link-card-title'>" . esc_html($title) . "</span>";
+	if ($desc != ''){
+		$out .= "<span class='argon-link-card-desc'>" . esc_html($desc) . "</span>";
+	}
+	$out .= "</span><span class='argon-link-card-arrow'><i class='fa fa-angle-right'></i></span></a>";
+	return $out;
+}
+
+/* ---------- 复制按钮 ----------
+   [copy]npm install argon[/copy]  或  [copy text="实际复制的内容"]显示的文字[/copy]
+   复用主题既有做法（navigator.clipboard + execCommand 兜底），不引入新依赖。 */
+add_shortcode('copy','shortcode_copy');
+function shortcode_copy($attr,$content=""){
+	$display = trim(strip_tags($content));
+	$text = isset( $attr['text'] ) ? trim($attr['text']) : $display;
+	if ($text === ''){
+		$text = $display;
+	}
+	if ($text === ''){
+		return "";
+	}
+	if ($display === ''){
+		$display = $text;
+	}
+	return "<span class='argon-copy'><code class='argon-copy-text'>" . esc_html($display) . "</code>"
+		. "<button type='button' class='argon-copy-btn' data-copy='" . esc_attr($text) . "'"
+		. " data-copied-label='" . esc_attr__('已复制', 'argon') . "'"
+		. " aria-label='" . esc_attr__('复制', 'argon') . "'"
+		. " tooltip='" . esc_attr__('复制', 'argon') . "'>"
+		. "<i class='fa fa-clipboard'></i></button></span>";
+}
+
+/* ---------- 文章引用卡 / 文章列表 / 反向链接 ----------
+   [post-card id="123"] 或 [post-card url="..."]：把站内某篇文章渲染成卡片（handsome 的 [post cid=] 同类）。
+   [post-list tag="x" category="y" count="4"]：按标签/分类内嵌一组文章卡片。
+   [backlinks]：显示"哪些文章引用了本篇"——引用关系在保存时写入目标文章的 post meta。 */
+
+/* 取文章对象并做安全过滤：只接受已发布的 post/page，避免把草稿/私密内容漏出去 */
+function argon_post_card_get_post($id = 0, $url = ''){
+	$post = null;
+	if (intval($id) > 0){
+		$post = get_post(intval($id));
+	}elseif ($url !== ''){
+		$resolved = url_to_postid($url);
+		if ($resolved){
+			$post = get_post($resolved);
+		}
+	}
+	if (!$post){
+		return null;
+	}
+	if ($post -> post_status !== 'publish'){
+		return null;
+	}
+	if (!in_array($post -> post_type, array('post', 'page'), true)){
+		return null;
+	}
+	return $post;
+}
+
+function argon_render_post_card($post, $opts = array()){
+	if (!$post){
+		return "";
+	}
+	$link = get_permalink($post);
+	$title = get_the_title($post);
+	if (trim($title) === ''){
+		$title = __('无标题', 'argon');
+	}
+	/* 密码保护的文章不展示摘要（否则等于绕过密码页） */
+	$excerpt = '';
+	if (!post_password_required($post)){
+		$excerpt = wp_strip_all_tags(get_the_excerpt($post));
+		$excerpt = wp_trim_words($excerpt, 30, '…');
+	}else{
+		$excerpt = __('这篇文章受密码保护', 'argon');
+	}
+	$thumb = get_the_post_thumbnail_url($post, 'medium');
+	$date = get_the_date(get_option('argon_dateformat', 'YMD'), $post);
+	$out = "<a class='argon-post-card' href='" . esc_url($link) . "'>";
+	if ($thumb){
+		$out .= "<span class='argon-post-card-thumb'><img src='" . esc_url($thumb) . "' alt='' loading='lazy'/></span>";
+	}else{
+		$initial = function_exists('mb_substr') ? mb_substr($title, 0, 1) : substr($title, 0, 1);
+		$out .= "<span class='argon-post-card-thumb argon-post-card-thumb-text'>" . esc_html($initial) . "</span>";
+	}
+	$out .= "<span class='argon-post-card-body'>";
+	$out .= "<span class='argon-post-card-title'>" . esc_html($title) . "</span>";
+	if ($excerpt !== ''){
+		$out .= "<span class='argon-post-card-excerpt'>" . esc_html($excerpt) . "</span>";
+	}
+	$out .= "<span class='argon-post-card-meta'>" . esc_html($date) . "</span>";
+	$out .= "</span></a>";
+	return $out;
+}
+
+add_shortcode('post-card','shortcode_post_card');
+add_shortcode('postcard','shortcode_post_card');
+function shortcode_post_card($attr,$content=""){
+	$post = argon_post_card_get_post(
+		isset($attr['id']) ? $attr['id'] : 0,
+		isset($attr['url']) ? trim($attr['url']) : ''
+	);
+	if (!$post){
+		return "";
+	}
+	return argon_render_post_card($post);
+}
+
+add_shortcode('post-list','shortcode_post_list');
+add_shortcode('postlist','shortcode_post_list');
+function shortcode_post_list($attr,$content=""){
+	$count = isset($attr['count']) ? intval($attr['count']) : 4;
+	if ($count <= 0 || $count > 20){
+		$count = 4;
+	}
+	$args = array(
+		'post_type'           => 'post',
+		'post_status'         => 'publish',
+		'posts_per_page'      => $count,
+		'ignore_sticky_posts' => true,
+		'no_found_rows'       => true,
+		'suppress_filters'    => false,
+	);
+	if (isset($attr['tag']) && trim($attr['tag']) != ''){
+		$args['tag'] = trim($attr['tag']);
+	}
+	if (isset($attr['category']) && trim($attr['category']) != ''){
+		$args['category_name'] = trim($attr['category']);
+	}
+	if (isset($attr['orderby']) && $attr['orderby'] == 'rand'){
+		$args['orderby'] = 'rand';
+	}
+	/* 默认不把当前文章算进去，避免"相关文章里出现自己" */
+	$exclude_current = !isset($attr['include_current']) || $attr['include_current'] != 'true';
+	$current_id = get_the_ID();
+	if ($exclude_current && $current_id){
+		$args['post__not_in'] = array($current_id);
+	}
+	$posts = get_posts($args);
+	if (empty($posts)){
+		return "";
+	}
+	$out = "<div class='argon-post-list'>";
+	foreach ($posts as $item){
+		$out .= argon_render_post_card($item);
+	}
+	$out .= "</div>";
+	return $out;
+}
+
+/* 从文章内容里提取被引用的文章 ID（短代码形态 id="12" + 区块形态 {"id":12}）。
+   只写了 url 的引用也能追踪：保存时把 URL 解析成文章 ID（url_to_postid 有 DB 查询，
+   但只在保存时跑一次，不在前台渲染路径上）。 */
+function argon_extract_post_card_targets($content){
+	$ids = array();
+	if (preg_match_all('/\[(?:post-card|postcard)\b([^\]]*)\]/i', $content, $matches)){
+		foreach ($matches[1] as $attrs){
+			if (preg_match('/\bid\s*=\s*["\']?(\d+)["\']?/i', $attrs, $m)){
+				$ids[] = intval($m[1]);
+				continue;
+			}
+			if (preg_match('/\burl\s*=\s*["\']?([^\s"\'\]]+)/i', $attrs, $m)){
+				$resolved = url_to_postid(html_entity_decode($m[1]));
+				if ($resolved){
+					$ids[] = intval($resolved);
+				}
+			}
+		}
+	}
+	if (preg_match_all('/<!--\s+wp:argon\/post-card\s+(\{.*?\})\s*-->/s', $content, $matches)){
+		foreach ($matches[1] as $json){
+			$attrs = json_decode($json, true);
+			if (!is_array($attrs)){
+				continue;
+			}
+			if (!empty($attrs['id'])){
+				$ids[] = intval($attrs['id']);
+				continue;
+			}
+			if (!empty($attrs['url'])){
+				$resolved = url_to_postid($attrs['url']);
+				if ($resolved){
+					$ids[] = intval($resolved);
+				}
+			}
+		}
+	}
+	$ids = array_filter(array_unique($ids));
+	return array_values($ids);
+}
+
+/* 保存时维护反向引用：目标文章的 _argon_ref_backlinks 记录"谁引用了它"。
+   用源文章自己的 _argon_ref_targets 做差集，才能正确处理"删掉某条引用"的情况。 */
+add_action('save_post', 'argon_update_post_backlinks', 20, 3);
+function argon_update_post_backlinks($post_id, $post, $update){
+	if (wp_is_post_revision($post_id) || wp_is_post_autosave($post_id)){
+		return;
+	}
+	if (!$post || !in_array($post -> post_type, array('post', 'page'), true)){
+		return;
+	}
+	if ($post -> post_status === 'auto-draft'){
+		return;
+	}
+	$targets = argon_extract_post_card_targets($post -> post_content);
+	$previous = get_post_meta($post_id, '_argon_ref_targets', true);
+	if (!is_array($previous)){
+		$previous = array();
+	}
+	foreach (array_diff($previous, $targets) as $target_id){
+		$links = get_post_meta($target_id, '_argon_ref_backlinks', true);
+		if (!is_array($links)){
+			continue;
+		}
+		$links = array_values(array_diff($links, array($post_id)));
+		if (empty($links)){
+			delete_post_meta($target_id, '_argon_ref_backlinks');
+		}else{
+			update_post_meta($target_id, '_argon_ref_backlinks', $links);
+		}
+	}
+	foreach (array_diff($targets, $previous) as $target_id){
+		if (intval($target_id) === intval($post_id)){
+			continue; /* 自己引用自己不算反向链接 */
+		}
+		$links = get_post_meta($target_id, '_argon_ref_backlinks', true);
+		if (!is_array($links)){
+			$links = array();
+		}
+		if (!in_array($post_id, $links, true)){
+			$links[] = $post_id;
+			update_post_meta($target_id, '_argon_ref_backlinks', $links);
+		}
+	}
+	if (empty($targets)){
+		delete_post_meta($post_id, '_argon_ref_targets');
+	}else{
+		update_post_meta($post_id, '_argon_ref_targets', $targets);
+	}
+}
+
+function argon_render_backlinks($post_id){
+	$links = get_post_meta($post_id, '_argon_ref_backlinks', true);
+	if (!is_array($links) || empty($links)){
+		return "";
+	}
+	$items = "";
+	foreach ($links as $source_id){
+		$source = get_post($source_id);
+		if (!$source || $source -> post_status !== 'publish'){
+			continue;
+		}
+		$items .= argon_render_post_card($source);
+	}
+	if ($items === ""){
+		return "";
+	}
+	return "<div class='argon-backlinks'><div class='argon-backlinks-title'><i class='fa fa-link'></i> "
+		. esc_html__('被以下文章引用', 'argon') . "</div>" . $items . "</div>";
+}
+
+add_shortcode('backlinks','shortcode_backlinks');
+function shortcode_backlinks($attr,$content=""){
+	$post_id = get_the_ID();
+	if (!$post_id){
+		return "";
+	}
+	return argon_render_backlinks($post_id);
+}
+
+/* 自动在正文末尾追加反向引用（设置里默认关闭）。只在真正的单篇正文里追加：
+   in_the_loop() 能挡掉 REST / 摘要 / 小工具等场景，避免污染那些输出。 */
+add_filter('the_content', 'argon_append_backlinks', 21);
+function argon_append_backlinks($content){
+	if (get_option('argon_enable_post_backlinks', 'false') != 'true'){
+		return $content;
+	}
+	if (is_feed() || !is_singular() || !in_the_loop() || post_password_required()){
+		return $content;
+	}
+	$post_id = get_the_ID();
+	if (!$post_id || strpos($content, 'argon-backlinks') !== false){
+		return $content;
+	}
+	return $content . argon_render_backlinks($post_id);
+}
+
+/* ---------- 评分卡 + Review 结构化数据 ----------
+   [review score="4.5" max="5" title="产品名" author="我" pros="轻量|免插件" cons="无自动更新"]评价正文[/review]
+   可见部分：星级 + 分数 + 优缺点 + 评价正文。
+   结构化数据：Review（含 itemReviewed / reviewRating），在 wp_footer 与前三条一起合并输出。
+
+   收集方式和 FAQ/HowTo 略有不同：那两块只能以区块存在，用 render_block 收集；
+   review 同时有短代码形态，短代码在 the_content 里渲染，拿不到 render_block 事件，
+   所以统一走 argon_review_collect()，两条入口都塞同一个全局。 */
+
+function argon_review_collect($data){
+	global $argon_review_items;
+	if (!is_array($argon_review_items)){
+		$argon_review_items = array();
+	}
+	/* 同一篇内容被渲染两次（如正文 + 摘要）时不重复计数 */
+	$key = md5(wp_json_encode($data));
+	$argon_review_items[$key] = $data;
+}
+
+function argon_render_review($args){
+	$score = isset($args['score']) ? floatval($args['score']) : 0;
+	$max = isset($args['max']) ? floatval($args['max']) : 5;
+	if ($max <= 0){
+		$max = 5;
+	}
+	if ($score <= 0){
+		return "";
+	}
+	$score = min($score, $max);
+	$title = isset($args['title']) ? trim((string) $args['title']) : '';
+	$summary = isset($args['summary']) ? trim((string) $args['summary']) : '';
+	$author = isset($args['author']) ? trim((string) $args['author']) : '';
+	$item_type = isset($args['itemtype']) ? trim((string) $args['itemtype']) : 'Product';
+	$allowed_types = array('Product', 'Book', 'Movie', 'Course', 'SoftwareApplication', 'Recipe', 'Game');
+	if (!in_array($item_type, $allowed_types, true)){
+		$item_type = 'Product';
+	}
+	$pros = isset($args['pros']) && is_array($args['pros']) ? $args['pros'] : array();
+	$cons = isset($args['cons']) && is_array($args['cons']) ? $args['cons'] : array();
+
+	$percent = max(0, min(100, ($score / $max) * 100));
+
+	$out = "<div class='argon-review'>";
+	$out .= "<div class='argon-review-head'>";
+	$out .= "<div class='argon-review-title'>" . esc_html($title !== '' ? $title : __('评分', 'argon')) . "</div>";
+	$out .= "<div class='argon-review-score'><span class='argon-review-score-value'>" . esc_html(rtrim(rtrim(number_format($score, 1, '.', ''), '0'), '.')) . "</span>";
+	$out .= "<span class='argon-review-score-max'>/" . esc_html(rtrim(rtrim(number_format($max, 1, '.', ''), '0'), '.')) . "</span></div>";
+	$out .= "</div>";
+	/* 星级用两层同样的字符叠出来，前景层按百分比裁切 —— 不依赖图标字体，半星自然 */
+	$out .= "<div class='argon-review-stars' aria-label='" . esc_attr(sprintf(__('评分 %s / %s', 'argon'), $score, $max)) . "'>"
+		. "<span class='argon-review-stars-bg' aria-hidden='true'>" . str_repeat('★', (int) round($max)) . "</span>"
+		. "<span class='argon-review-stars-fg' aria-hidden='true' style='width:" . esc_attr($percent) . "%'>" . str_repeat('★', (int) round($max)) . "</span>"
+		. "</div>";
+	if ($summary !== ''){
+		$out .= "<div class='argon-review-summary'>" . wp_kses_post($summary) . "</div>";
+	}
+	if ($pros || $cons){
+		$out .= "<div class='argon-review-pros-cons'>";
+		if ($pros){
+			$out .= "<div class='argon-review-list argon-review-pros'><div class='argon-review-list-title'><i class='fa fa-thumbs-up'></i> " . esc_html__('优点', 'argon') . "</div><ul>";
+			foreach ($pros as $item){
+				$out .= "<li>" . esc_html($item) . "</li>";
+			}
+			$out .= "</ul></div>";
+		}
+		if ($cons){
+			$out .= "<div class='argon-review-list argon-review-cons'><div class='argon-review-list-title'><i class='fa fa-thumbs-down'></i> " . esc_html__('缺点', 'argon') . "</div><ul>";
+			foreach ($cons as $item){
+				$out .= "<li>" . esc_html($item) . "</li>";
+			}
+			$out .= "</ul></div>";
+		}
+		$out .= "</div>";
+	}
+	$out .= "</div>";
+
+	argon_review_collect(array(
+		'title'  => $title,
+		'score'  => $score,
+		'max'    => $max,
+		'author' => $author,
+		'type'   => $item_type,
+		'summary'=> argon_schema_plain(wp_strip_all_tags($summary)),
+	));
+
+	return $out;
+}
+
+add_shortcode('review','shortcode_review');
+function shortcode_review($attr,$content=""){
+	$split = function($value){
+		if (!is_string($value) || trim($value) === ''){
+			return array();
+		}
+		$items = array_map('trim', explode('|', $value));
+		return array_values(array_filter($items, function($v){ return $v !== ''; }));
+	};
+	return argon_render_review(array(
+		'score'    => isset($attr['score']) ? $attr['score'] : 0,
+		'max'      => isset($attr['max']) ? $attr['max'] : 5,
+		'title'    => isset($attr['title']) ? $attr['title'] : '',
+		'author'   => isset($attr['author']) ? $attr['author'] : '',
+		'itemtype' => isset($attr['itemtype']) ? $attr['itemtype'] : 'Product',
+		'summary'  => trim($content) !== '' ? trim($content) : (isset($attr['summary']) ? $attr['summary'] : ''),
+		'pros'     => $split(isset($attr['pros']) ? $attr['pros'] : ''),
+		'cons'     => $split(isset($attr['cons']) ? $attr['cons'] : ''),
+	));
+}
+
+/* ---------- 圆形进度 / 倒计时 / 展开更多 / 文内目录 ----------
+   都是"纯前端或轻服务端"的小组件，共同点是：PHP 只输出结构与数据，交互交给 argontheme.js。 */
+
+/* 圆形进度：SVG stroke-dashoffset 实现，比 conic-gradient 边缘更干净，也不依赖新语法 */
+add_shortcode('progressbar-circle','shortcode_progressbar_circle');
+add_shortcode('progress-circle','shortcode_progressbar_circle');
+function shortcode_progressbar_circle($attr,$content=""){
+	$percent = 0;
+	if (isset($attr['percentage'])){
+		$percent = intval($attr['percentage']);
+	}elseif (isset($attr['progress'])){
+		$percent = intval($attr['progress']);
+	}
+	$percent = max(0, min(100, $percent));
+	$size = isset($attr['size']) ? intval($attr['size']) : 96;
+	$size = max(40, min(240, $size));
+	$stroke = isset($attr['stroke']) ? intval($attr['stroke']) : 8;
+	$stroke = max(2, min(30, $stroke));
+	$color = isset($attr['color']) ? strtolower(trim($attr['color'])) : 'indigo';
+	if (!in_array($color, array('indigo','green','red','orange','blue','grey'), true)){
+		$color = 'indigo';
+	}
+	$label = '';
+	if (trim(strip_tags($content)) !== ''){
+		$label = trim(strip_tags($content));
+	}elseif (isset($attr['label']) && trim($attr['label']) !== ''){
+		$label = trim($attr['label']);
+	}else{
+		$label = $percent . '%';
+	}
+	$radius = ($size - $stroke) / 2;
+	$circumference = 2 * M_PI * $radius;
+	$offset = $circumference * (1 - $percent / 100);
+	return "<div class='argon-circle-progress argon-circle-" . $color . "' style='--argon-circle-size:" . $size . "px;'>"
+		. "<svg viewBox='0 0 " . $size . " " . $size . "' width='" . $size . "' height='" . $size . "' role='img' aria-label='"
+		. esc_attr(sprintf(__('%s%%', 'argon'), $percent)) . "'>"
+		. "<circle class='argon-circle-track' cx='" . ($size / 2) . "' cy='" . ($size / 2) . "' r='" . $radius . "' stroke-width='" . $stroke . "' fill='none'/>"
+		. "<circle class='argon-circle-bar' cx='" . ($size / 2) . "' cy='" . ($size / 2) . "' r='" . $radius . "' stroke-width='" . $stroke . "' fill='none'"
+		. " stroke-dasharray='" . round($circumference, 2) . "' stroke-dashoffset='" . round($offset, 2) . "'"
+		. " transform='rotate(-90 " . ($size / 2) . " " . ($size / 2) . ")'/>"
+		. "</svg><span class='argon-circle-label'>" . esc_html($label) . "</span></div>";
+}
+
+/* 倒计时：时间在服务端按站点时区解析成 UNIX 时间戳，前端只负责 ticking，避免时区错位 */
+add_shortcode('countdown','shortcode_countdown');
+function shortcode_countdown($attr,$content=""){
+	$date = isset($attr['date']) ? trim($attr['date']) : '';
+	if ($date === ''){
+		return "";
+	}
+	$timestamp = strtotime($date);
+	if ($timestamp === false){
+		return "";
+	}
+	$title = isset($attr['title']) ? trim($attr['title']) : trim(strip_tags($content));
+	$finished = isset($attr['finished']) ? trim($attr['finished']) : __('已结束', 'argon');
+	$out = "<div class='argon-countdown' data-argon-countdown='" . esc_attr($timestamp) . "' data-finished='" . esc_attr($finished) . "'>";
+	if ($title !== ''){
+		$out .= "<div class='argon-countdown-title'>" . esc_html($title) . "</div>";
+	}
+	$out .= "<div class='argon-countdown-body'>";
+	foreach (array('day' => __('天', 'argon'), 'hour' => __('时', 'argon'), 'minute' => __('分', 'argon'), 'second' => __('秒', 'argon')) as $unit => $label){
+		$out .= "<span class='argon-countdown-item'><span class='argon-countdown-value' data-unit='" . $unit . "'>0</span>"
+			. "<span class='argon-countdown-unit'>" . esc_html($label) . "</span></span>";
+	}
+	$out .= "</div></div>";
+	return $out;
+}
+
+/* 展开更多：内容始终在 HTML 里（这是渐进披露，不是门控——需要保密请用 [reply]） */
+add_shortcode('show-more','shortcode_show_more');
+add_shortcode('expand','shortcode_show_more');
+function shortcode_show_more($attr,$content=""){
+	/* preprocessed：区块形态传进来的是【已经渲染好的内层 HTML】，不能再跑一次 do_shortcode，
+	   否则正文里字面出现的 [xxx] 会被二次解析 */
+	if (!isset($attr['preprocessed']) || $attr['preprocessed'] != 'true'){
+		$content = shortcode_content_preprocess($attr, $content);
+	}
+	if (trim($content) === ''){
+		return "";
+	}
+	$lines = isset($attr['lines']) ? intval($attr['lines']) : 10;
+	$lines = max(2, min(80, $lines));
+	$more = isset($attr['more']) ? trim($attr['more']) : __('展开全文', 'argon');
+	$less = isset($attr['less']) ? trim($attr['less']) : __('收起', 'argon');
+	return "<div class='argon-show-more' style='--argon-show-more-lines:" . $lines . ";'>"
+		. "<div class='argon-show-more-content'>" . $content . "</div>"
+		. "<button type='button' class='argon-show-more-btn' data-more='" . esc_attr($more) . "' data-less='" . esc_attr($less) . "'>"
+		. "<span>" . esc_html($more) . "</span> <i class='fa fa-angle-down'></i></button>"
+		. "</div>";
+}
+
+/* 文内目录：由前端扫描正文标题生成（Pjax 换页后要重新生成，故不放在 PHP 侧） */
+add_shortcode('toc','shortcode_toc');
+function shortcode_toc($attr,$content=""){
+	$title = isset($attr['title']) ? trim($attr['title']) : __('目录', 'argon');
+	$max = isset($attr['max']) ? intval($attr['max']) : 3;
+	$max = max(1, min(6, $max));
+	$collapsed = isset($attr['collapsed']) && $attr['collapsed'] == 'true';
+	return "<div class='argon-toc" . ($collapsed ? " argon-toc-collapsed" : "") . "' data-max-level='" . $max . "'>"
+		. "<div class='argon-toc-title'><i class='fa fa-list-ul'></i> " . esc_html($title)
+		. "<i class='fa fa-angle-down argon-toc-toggle'></i></div>"
+		. "<div class='argon-toc-body'></div></div>";
+}
+
+/* ---------- 友链朋友圈：聚合友链 RSS（#634） ----------
+   数据来自 wp_links 的 link_rss（后台「友链管理」里可填）；没填就用网站 URL，
+   交给 SimplePie 从首页自动发现订阅源。
+
+   性能与安全问题都在这一层处理：
+   · 抓取结果整体缓存 1 小时（transient），页面渲染只读缓存，不在请求路径上抓网络；
+   · 用一个短时 lock 防止并发请求同时抓取（缓存刚过期时并发量最大的场景）；
+   · 每小时 cron 预热缓存，正常情况下访客永远命中缓存；
+   · 单条源的失败不影响整体，失败清单单独记录，方便排查；
+   · 输出一律转义 + strip_tags 截断 —— 第三方 RSS 里的 HTML/脚本绝不原样输出。 */
+
+define('ARGON_FL_MOMENTS_CACHE', 'argon_fl_moments_cache');
+define('ARGON_FL_MOMENTS_LOCK', 'argon_fl_moments_lock');
+
+/* 取参与聚合的友链：只取可见的（隐藏的友链不应该出现在朋友圈里） */
+function argon_fl_moments_links(){
+	$links = get_bookmarks(array(
+		'orderby'        => 'name',
+		'order'          => 'ASC',
+		'hide_invisible' => 1,
+	));
+	if (!is_array($links)){
+		return array();
+	}
+	return $links;
+}
+
+/* 抓取一批源并写回缓存。
+   为什么分批：友链动辄几十条，一次抓完 = 几十次外部 HTTP，容易踩 PHP 执行时限，
+   也会让碰巧触发抓取的访客等很久。这里每次只抓「最久没抓过」的一批，
+   其余站点沿用上一轮缓存，靠每小时 cron 循环把全部站点轮完。
+   缓存按【站点分桶】存，增量更新才不会把别的站点的文章冲掉。 */
+function argon_fl_moments_fetch($batch = 25, $force_all = false){
+	if (!function_exists('fetch_feed')){
+		require_once ABSPATH . WPINC . '/feed.php';
+	}
+	$cached = get_transient(ARGON_FL_MOMENTS_CACHE);
+	$sites  = (is_array($cached) && isset($cached['sites']) && is_array($cached['sites'])) ? $cached['sites'] : array();
+	$failed = array();
+
+	$links = argon_fl_moments_links();
+	if (empty($links)){
+		$data = array('time' => time(), 'sites' => array(), 'failed' => array());
+		set_transient(ARGON_FL_MOMENTS_CACHE, $data, HOUR_IN_SECONDS);
+		return $data;
+	}
+
+	/* 按「上次抓取时间」升序，最久没抓的排前面 */
+	$stamps = get_option('argon_fl_moments_stamps', array());
+	if (!is_array($stamps)){
+		$stamps = array();
+	}
+	usort($links, function($a, $b) use ($stamps){
+		$ta = isset($stamps[$a -> link_id]) ? intval($stamps[$a -> link_id]) : 0;
+		$tb = isset($stamps[$b -> link_id]) ? intval($stamps[$b -> link_id]) : 0;
+		return $ta <=> $tb;
+	});
+	/* 手动刷新给一个更大的批次（200），但仍设上限：友链上百条时一次抓完同样会超时，
+	   多刷几次即可轮完全部（顺序是最久没抓的优先） */
+	$to_fetch = array_slice($links, 0, $force_all ? 200 : max(1, intval($batch)));
+
+	/* 缩短 SimplePie 自身的缓存（默认 12 小时），否则我们说的「1 小时新鲜」只是假话；
+	   同时把单次 HTTP 超时压到 5 秒，避免一个慢站拖垮整批。两者都只在本函数内生效。 */
+	$lifetime_filter = function(){ return 10 * MINUTE_IN_SECONDS; };
+	$timeout_filter  = function($args){
+		$args['timeout'] = 5;
+		return $args;
+	};
+	add_filter('wp_feed_cache_transient_lifetime', $lifetime_filter);
+	add_filter('http_request_args', $timeout_filter);
+
+	foreach ($to_fetch as $link){
+		$feed_url = trim((string) $link -> link_rss);
+		if ($feed_url === ''){
+			$feed_url = (string) $link -> link_url;
+		}
+		if ($feed_url === ''){
+			continue;
+		}
+		$stamps[$link -> link_id] = time();
+		$feed = fetch_feed($feed_url);
+		if (is_wp_error($feed)){
+			$failed[$link -> link_id] = array('name' => $link -> link_name, 'url' => $feed_url, 'msg' => $feed -> get_error_message());
+			continue;
+		}
+		$max = $feed -> get_item_quantity(5);
+		if (!$max){
+			continue;
+		}
+		$items = array();
+		foreach ($feed -> get_items(0, $max) as $item){
+			$ts = $item -> get_date('U');
+			$ts = $ts ? intval($ts) : 0;
+			$title = argon_schema_plain($item -> get_title());
+			if ($title === ''){
+				continue;
+			}
+			/* 摘要只保留纯文本：第三方 RSS 里的 HTML / 脚本一律不原样输出 */
+			$excerpt = argon_schema_plain($item -> get_description());
+			if ($excerpt === ''){
+				$excerpt = argon_schema_plain($item -> get_content());
+			}
+			$items[] = array(
+				'title'   => $title,
+				'excerpt' => wp_trim_words($excerpt, 40, '…'),
+				'url'     => esc_url_raw($item -> get_permalink()),
+				'time'    => $ts,
+			);
+		}
+		$sites[$link -> link_id] = array(
+			'name'   => $link -> link_name,
+			'avatar' => (string) $link -> link_image,
+			'items'  => $items,
+			'time'   => time(),
+		);
+	}
+
+	remove_filter('wp_feed_cache_transient_lifetime', $lifetime_filter);
+	remove_filter('http_request_args', $timeout_filter);
+	update_option('argon_fl_moments_stamps', $stamps, false);
+
+	/* 已经删掉的友链，其缓存桶也一并清掉 */
+	$alive = array();
+	foreach ($links as $link){
+		$alive[$link -> link_id] = true;
+	}
+	foreach (array_keys($sites) as $site_id){
+		if (!isset($alive[$site_id])){
+			unset($sites[$site_id]);
+		}
+	}
+
+	$data = array('time' => time(), 'sites' => $sites, 'failed' => $failed);
+	set_transient(ARGON_FL_MOMENTS_CACHE, $data, HOUR_IN_SECONDS);
+	return $data;
+}
+
+/* 读缓存；没有缓存且没有别的请求在抓时才真正去抓 */
+function argon_fl_moments_get($force = false){
+	if (!$force){
+		$cached = get_transient(ARGON_FL_MOMENTS_CACHE);
+		if (is_array($cached) && !empty($cached['sites'])){
+			return $cached;
+		}
+	}
+	/* lock：5 分钟内已有请求在抓，就先用旧数据（哪怕过期），别让访客一起等 */
+	if (get_transient(ARGON_FL_MOMENTS_LOCK)){
+		$stale = get_transient(ARGON_FL_MOMENTS_CACHE);
+		return is_array($stale) ? $stale : array('time' => 0, 'sites' => array(), 'failed' => array());
+	}
+	set_transient(ARGON_FL_MOMENTS_LOCK, 1, 5 * MINUTE_IN_SECONDS);
+	$data = argon_fl_moments_fetch($force ? 200 : 25, $force);
+	delete_transient(ARGON_FL_MOMENTS_LOCK);
+	return $data;
+}
+
+/* 把按站点分桶的缓存摊平成按时间倒序的条目列表 */
+function argon_fl_moments_flatten($data){
+	$items = array();
+	if (!is_array($data) || empty($data['sites'])){
+		return $items;
+	}
+	foreach ($data['sites'] as $site){
+		if (empty($site['items']) || !is_array($site['items'])){
+			continue;
+		}
+		foreach ($site['items'] as $item){
+			$item['site'] = isset($site['name']) ? $site['name'] : '';
+			$item['avatar'] = isset($site['avatar']) ? $site['avatar'] : '';
+			$items[] = $item;
+		}
+	}
+	usort($items, function($a, $b){
+		return $b['time'] <=> $a['time'];
+	});
+	return $items;
+}
+
+function argon_fl_moments_render($args = array()){
+	$count = isset($args['count']) ? intval($args['count']) : 20;
+	$count = max(1, min(100, $count));
+	$days = isset($args['days']) ? intval($args['days']) : 120;
+	$days = max(1, min(3650, $days));
+	$title = isset($args['title']) ? trim($args['title']) : __('友链朋友圈', 'argon');
+
+	$data = argon_fl_moments_get();
+	$items = argon_fl_moments_flatten($data);
+	if (empty($items)){
+		if (current_user_can('manage_options')){
+			return '<div class="argon-content-gate argon-content-gate-disabled"><i class="fa fa-exclamation-triangle"></i> '
+				. esc_html__('友链朋友圈暂无数据：可能还没开启、友链没有 RSS 地址，或抓取全部失败。可在「友链管理」里给友链填写 RSS 地址，并到设置里点「立即刷新」。', 'argon')
+				. '</div>';
+		}
+		return '';
+	}
+
+	$cutoff = time() - $days * DAY_IN_SECONDS;
+	$shown = 0;
+	$list = '';
+	foreach ($items as $item){
+		if ($shown >= $count){
+			break;
+		}
+		if ($item['time'] && $item['time'] < $cutoff){
+			continue;
+		}
+		$shown++;
+		$list .= '<li class="argon-fl-moment">';
+		if ($item['avatar'] !== ''){
+			$list .= '<span class="argon-fl-moment-avatar"><img src="' . esc_url($item['avatar']) . '" alt="" loading="lazy"/></span>';
+		}else{
+			$initial = function_exists('mb_substr') ? mb_substr($item['site'], 0, 1) : substr($item['site'], 0, 1);
+			$list .= '<span class="argon-fl-moment-avatar argon-fl-moment-avatar-text">' . esc_html($initial) . '</span>';
+		}
+		$list .= '<span class="argon-fl-moment-body">';
+		$list .= '<span class="argon-fl-moment-meta"><span class="argon-fl-moment-site">' . esc_html($item['site']) . '</span>';
+		if ($item['time']){
+			$list .= '<span class="argon-fl-moment-time">' . esc_html(sprintf(__('%s前', 'argon'), human_time_diff($item['time'], time()))) . '</span>';
+		}
+		$list .= '</span>';
+		$list .= '<a class="argon-fl-moment-title" href="' . esc_url($item['url']) . '" target="_blank" rel="noopener nofollow">'
+			. esc_html($item['title']) . '</a>';
+		if ($item['excerpt'] !== ''){
+			$list .= '<span class="argon-fl-moment-excerpt">' . esc_html($item['excerpt']) . '</span>';
+		}
+		$list .= '</span></li>';
+	}
+
+	if ($shown === 0){
+		return '';
+	}
+
+	$out = '<div class="argon-fl-moments">';
+	if ($title !== ''){
+		$out .= '<div class="argon-fl-moments-title"><i class="fa fa-rss"></i> ' . esc_html($title) . '</div>';
+	}
+	$out .= '<ul class="argon-fl-moments-list">' . $list . '</ul>';
+	if (!empty($data['time'])){
+		$out .= '<div class="argon-fl-moments-footer">' . esc_html(sprintf(
+			__('数据更新于 %s', 'argon'),
+			wp_date('Y-m-d H:i', $data['time'])
+		)) . '</div>';
+	}
+	$out .= '</div>';
+	return $out;
+}
+
+add_shortcode('friend-moments','shortcode_friend_moments');
+add_shortcode('friendmoments','shortcode_friend_moments');
+function shortcode_friend_moments($attr,$content=""){
+	if (!argon_fl_moments_enabled()){
+		if (current_user_can('manage_options')){
+			return '<div class="argon-content-gate argon-content-gate-disabled"><i class="fa fa-exclamation-triangle"></i> '
+				. esc_html__('友链朋友圈未启用：请到「Argon 主题选项 → 友链朋友圈」打开开关。', 'argon') . '</div>';
+		}
+		return '';
+	}
+	return argon_fl_moments_render(array(
+		'count' => isset($attr['count']) ? $attr['count'] : 20,
+		'days'  => isset($attr['days']) ? $attr['days'] : 120,
+		'title' => isset($attr['title']) ? $attr['title'] : __('友链朋友圈', 'argon'),
+	));
+}
+
+function argon_fl_moments_enabled(){
+	return get_option('argon_fl_moments_enable', 'false') == 'true';
+}
+
+/* 每小时 cron 预热缓存；开关关掉时顺手清掉计划任务，不留下没人用的钩子 */
+add_action('init', 'argon_fl_moments_schedule_cron');
+function argon_fl_moments_schedule_cron(){
+	if (!argon_fl_moments_enabled()){
+		if (wp_next_scheduled('argon_fl_moments_cron')){
+			wp_clear_scheduled_hook('argon_fl_moments_cron');
+		}
+		return;
+	}
+	if (!wp_next_scheduled('argon_fl_moments_cron')){
+		wp_schedule_event(time() + 60, 'hourly', 'argon_fl_moments_cron');
+	}
+}
+add_action('argon_fl_moments_cron', 'argon_fl_moments_cron_refresh');
+function argon_fl_moments_cron_refresh(){
+	/* cron 里强制刷新；lock 仍然生效，避免和用户点击「立即刷新」撞车 */
+	if (!argon_fl_moments_enabled()){
+		return;
+	}
+	argon_fl_moments_get(true);
+}
+
+/* 后台「立即刷新」：清缓存后重抓。走 admin-post + nonce，只有能改主题选项的人可用 */
+add_action('admin_post_argon_fl_moments_refresh', 'argon_fl_moments_handle_refresh');
+function argon_fl_moments_handle_refresh(){
+	if (!current_user_can('edit_theme_options') || !wp_verify_nonce($_REQUEST['_wpnonce'] ?? '', 'argon_fl_moments_refresh')){
+		wp_die(__('无效的请求。', 'argon'));
+	}
+	delete_transient(ARGON_FL_MOMENTS_CACHE);
+	delete_transient(ARGON_FL_MOMENTS_LOCK);
+	argon_fl_moments_get(true);
+	/* 回到「Argon 主题选项」页（菜单 slug 就是本文件名），刷新结果提示显示在那里 */
+	wp_safe_redirect(add_query_arg(array('page' => basename(__FILE__), 'fl_moments_refreshed' => '1'), admin_url('admin.php')));
+	exit;
+}
+
 //Reference Footnote
 add_shortcode('ref','shortcode_ref');
 $post_references = array();
@@ -6131,6 +8198,7 @@ function argon_fl_render_link_form($link_id, $link = null, $meta = array(), $pan
 	$visible  = $link ? $link->link_visible : 'Y';
 	$linkpage = isset($meta['linkpage']) ? $meta['linkpage'] : '';
 	$email    = isset($meta['email']) ? $meta['email'] : '';
+	$rss      = $link ? (string) $link->link_rss : '';
 
 	$link_cats = array();
 	if ($link_id > 0){
@@ -6171,6 +8239,11 @@ function argon_fl_render_link_form($link_id, $link = null, $meta = array(), $pan
 	$out .= argon_fl_form_field(
 		__('头像 URL', 'argon'),
 		'<input type="url" name="link_image" value="' . esc_attr($image) . '" placeholder="https://">'
+	);
+	$out .= argon_fl_form_field(
+		__('RSS / Atom 地址', 'argon'),
+		'<input type="url" name="link_rss" value="' . esc_attr($rss) . '" placeholder="https://">',
+		__('用于「友链朋友圈」抓取对方最新文章；留空则自动从网站首页发现订阅源', 'argon')
 	);
 
 	$categories = argon_fl_link_categories();
@@ -6647,6 +8720,7 @@ function argon_fl_admin_save_link(){
 	$notes    = sanitize_textarea_field(wp_unslash($_POST['link_notes'] ?? ''));
 	$linkpage = esc_url_raw(trim(wp_unslash($_POST['linkpage'] ?? '')));
 	$email    = sanitize_email(wp_unslash($_POST['email'] ?? ''));
+	$link_rss = esc_url_raw(trim(wp_unslash($_POST['link_rss'] ?? '')));
 	$visible  = (isset($_POST['link_visible']) && $_POST['link_visible'] !== 'N') ? 'Y' : 'N';
 	$target   = (($_POST['link_target'] ?? '') === '_blank') ? '_blank' : '';
 	$cats     = isset($_POST['link_category']) ? array_map('intval', (array) $_POST['link_category']) : array();
@@ -6663,6 +8737,9 @@ function argon_fl_admin_save_link(){
 	}
 	if ($email !== '' && !is_email($email)){
 		$errors[] = __('联系邮箱格式不正确', 'argon');
+	}
+	if ($link_rss !== '' && !preg_match('#^https?://#i', $link_rss)){
+		$errors[] = __('RSS 地址需以 http:// 或 https:// 开头', 'argon');
 	}
 	if ($link_id > 0 && !get_bookmark($link_id)){
 		$errors[] = __('友链不存在', 'argon');
@@ -6690,6 +8767,7 @@ function argon_fl_admin_save_link(){
 		'link_notes'       => $notes,
 		'link_visible'     => $visible,
 		'link_target'      => $target,
+		'link_rss'         => $link_rss,
 	);
 	if ($link_id > 0){
 		// wp_update_link 会先合并旧数据，不会把未出现在表单里的字段（rel / rss / owner）清空
@@ -7407,7 +9485,7 @@ add_filter('render_block', 'argon_collect_schema_block', 10, 2);
 
 /* 页面底部输出合并后的 JSON-LD */
 function argon_print_schema_jsonld(){
-	global $argon_faq_items, $argon_howto_items;
+	global $argon_faq_items, $argon_howto_items, $argon_review_items;
 
 	$graph = array();
 
@@ -7454,6 +9532,34 @@ function argon_print_schema_jsonld(){
 				$item['description'] = $howto['description'];
 			}
 			$graph[] = $item;
+		}
+	}
+
+	/* 评分卡：Review 节点（itemReviewed + reviewRating）。
+	   reviewRating 的 best/worst 要给全，Google 才认；作者未填时留空让搜索引擎按本站推断。 */
+	if (is_array($argon_review_items) && $argon_review_items){
+		$page_title = argon_schema_plain(get_the_title());
+		foreach ($argon_review_items as $review){
+			$node = array(
+				'@type'        => 'Review',
+				'itemReviewed' => array(
+					'@type' => $review['type'],
+					'name'  => $review['title'] !== '' ? $review['title'] : $page_title,
+				),
+				'reviewRating' => array(
+					'@type'       => 'Rating',
+					'ratingValue' => $review['score'],
+					'bestRating'  => $review['max'],
+					'worstRating' => 1,
+				),
+			);
+			if ($review['author'] !== ''){
+				$node['author'] = array('@type' => 'Person', 'name' => $review['author']);
+			}
+			if ($review['summary'] !== ''){
+				$node['reviewBody'] = $review['summary'];
+			}
+			$graph[] = $node;
 		}
 	}
 

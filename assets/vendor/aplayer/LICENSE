@@ -1,0 +1,6 @@
+APlayer
+https://github.com/DIYgod/APlayer
+版本：1.10.1（取自 npm dist）
+许可：MIT License
+版权：Copyright (c) DIYgod
+文件：APlayer.min.js、APlayer.min.css（仅移除指向未分发 .map 的 sourceMappingURL 注释）

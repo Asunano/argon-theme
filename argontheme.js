@@ -2932,6 +2932,19 @@ $(document).pjax("a[href]:not([no-pjax]):not(.no-pjax):not([target='_blank']):no
 }).on('pjax:send', function() {
 	NProgress.set(0.618);
 }).on('pjax:beforeReplace', function(e, dom) {
+	/* #271：跳转离开前停掉本页媒体。HTML5 video/audio 被 Pjax 从 DOM 摘除后，
+	   部分浏览器里 detached 元素仍会继续出声；跨域 iframe（B 站 / 网易云外链等）
+	   没有 pause 可用，只能重置 src 停掉播放器。 */
+	$("video, audio").each(function(){
+		try{ this.pause(); }catch(err){}
+	});
+	$("iframe").each(function(){
+		try{
+			if (this.src && this.src !== "about:blank"){
+				this.setAttribute("src", "about:blank");
+			}
+		}catch(err){}
+	});
 	if ($("#post_comment", dom[0]).length > 0){
 		$("#fabtn_go_to_comment").removeClass("d-none");
 	}else{
@@ -2990,6 +3003,9 @@ $(document).pjax("a[href]:not([no-pjax]):not(.no-pjax):not([target='_blank']):no
 	zoomifyInit();
 	highlightJsRender();
 	argonLightboxReload();
+	argonRenderMermaid();
+	argonRenderMediaPlayers();
+	argonInitSmallTools();
 	panguInit();
 	clampInit();
 	tippyInit();
@@ -3725,6 +3741,17 @@ function highlightJsRender(){
 		if (argonConfig.code_highlight.transparent_linenumber){
 			$(block).parent().addClass("hljs-transparent-linenumber");
 		}
+		/* 超行折叠（#605）：超过设定行数自动折叠成预览高度，点「展开」恢复。
+		   行数从源文本统计（lineNumbersBlock 是异步的，DOM 行数此刻还不可靠）；
+		   单块豁免：给 pre 加 no-fold 类（与 no-hljs 同样的用法） */
+		let foldLines = parseInt(argonConfig.code_highlight.fold_lines || 0);
+		if (foldLines > 0 && !$(block).hasClass("no-fold")){
+			let lineCount = $(block).text().replace(/\n$/, "").split("\n").length;
+			if (lineCount > foldLines){
+				$(block).parent().addClass("hljs-codeblock-folded");
+				$(block).parent().append(`<div class="hljs-control-fold"><i class="fa fa-chevron-down"></i><span>` + __("展开") + `</span></div>`);
+			}
+		}
 		$(block).attr("hljs-codeblock-inner", "");
 		let copyBtnID = "copy_btn_" + randomString();
 		$(block).parent().append(`<div class="hljs-control hljs hljs-title">
@@ -3780,6 +3807,9 @@ function highlightJsRender(){
 }
 $(document).ready(function(){
 	highlightJsRender();
+	argonRenderMermaid();
+	argonRenderMediaPlayers();
+	argonInitSmallTools();
 	waterflowInit();
 	/* 本访客私有 UI 状态（点赞态 / 编辑按钮 / 主题色）恢复 —— 首次加载 */
 	argonThemeColorPrivInit();
@@ -3811,6 +3841,380 @@ $(document).on("click" , ".hljs-control-toggle-linenumber" , function(){
 	let block = $(this).parent().parent();
 	block.toggleClass("hljs-hide-linenumber");
 });
+$(document).on("click" , ".hljs-control-fold" , function(){
+	let pre = $(this).parent();
+	pre.toggleClass("hljs-codeblock-folded");
+	let folded = pre.hasClass("hljs-codeblock-folded");
+	$(this).find("span").text(folded ? __("展开") : __("收起"));
+	$(this).find("i").toggleClass("fa-chevron-down fa-chevron-up");
+});
+
+/* B 站卡片：点击时才插入播放器 iframe（#532）。
+   不预载 iframe 省流量，也避免 autoplay 参数在用户没点开时就出声。 */
+$(document).on("click keydown", ".bilibili-card[data-embed]", function(e){
+	if (e.type === "keydown" && e.key !== "Enter" && e.key !== " "){
+		return;
+	}
+	e.preventDefault();
+	let card = $(this);
+	if (card.hasClass("bilibili-card-loaded")){
+		return;
+	}
+	let iframe = document.createElement("iframe");
+	iframe.src = card.attr("data-embed");
+	iframe.setAttribute("allowfullscreen", "true");
+	iframe.setAttribute("scrolling", "no");
+	iframe.style.border = "0";
+	iframe.className = "bilibili-card-iframe";
+	card.addClass("bilibili-card-loaded");
+	card.html(iframe);
+});
+
+/* Mermaid 图表（#563）：页面里出现 .argon-mermaid 才按需加载 mermaid.js。
+   渲染失败或脚本加载失败时保留源码（<pre>），不吞内容。
+   mermaid 用 v11（mermaid.render 返回 Promise 的 API），主题色跟随暗色模式。 */
+let argonMermaidLoading = false;
+function argonRenderMermaid(){
+	let blocks = document.querySelectorAll(".argon-mermaid:not(.argon-mermaid-done)");
+	if (blocks.length === 0){
+		return;
+	}
+	if (typeof mermaid === "undefined"){
+		if (argonMermaidLoading){
+			return;
+		}
+		argonMermaidLoading = true;
+		let script = document.createElement("script");
+		script.src = "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js";
+		script.onload = function(){
+			argonMermaidLoading = false;
+			try{
+				mermaid.initialize({
+					startOnLoad: false,
+					theme: document.documentElement.classList.contains("darkmode") ? "dark" : "default",
+					fontFamily: "inherit"
+				});
+			}catch(err){}
+			argonRenderMermaid();
+		};
+		script.onerror = function(){
+			argonMermaidLoading = false;
+		};
+		document.head.appendChild(script);
+		return;
+	}
+	blocks.forEach(function(box){
+		let pre = box.querySelector("pre");
+		if (!pre){
+			return;
+		}
+		let source = pre.textContent;
+		let renderID = "argon-mermaid-svg-" + Math.random().toString(36).slice(2);
+		try{
+			mermaid.render(renderID, source).then(function(result){
+				let div = document.createElement("div");
+				div.className = "argon-mermaid-render";
+				div.innerHTML = result.svg;
+				box.innerHTML = "";
+				box.appendChild(div);
+				box.classList.add("argon-mermaid-done");
+			}).catch(function(err){
+				/* 语法错误：保留源码展示 */
+			});
+		}catch(err){
+			/* 保留源码展示 */
+		}
+	});
+}
+
+/* 音视频播放器（APlayer / ArtPlayer）：可选依赖 + 按需加载。
+   后台开关关闭时 PHP 已直接输出原生 <audio>/<video>，这里不会命中任何元素；
+   打开后只有页面里真的出现 [data-argon-player] 才注入对应库（清单在 argonConfig.lazy_assets）。
+   与 mermaid 同样的理由放在前端扫描而不是 PHP 条件 enqueue：Pjax 换页后 DOM 变了但
+   argontheme.js 不重新执行，前端扫描才能在每次换页后正确补渲染。 */
+let argonPlayerLibPending = {};
+function argonEnsurePlayerLib(kind){
+	if (typeof argonConfig === "undefined" || !argonConfig.lazy_assets || !argonConfig.lazy_assets[kind]){
+		return Promise.reject(new Error("player assets not configured: " + kind));
+	}
+	if (argonPlayerLibPending[kind]){
+		return argonPlayerLibPending[kind];
+	}
+	argonPlayerLibPending[kind] = argonLoadAssets(argonConfig.lazy_assets[kind])['catch'](function(err){
+		argonPlayerLibPending[kind] = null;
+		throw err;
+	});
+	return argonPlayerLibPending[kind];
+}
+function argonInitAplayer(box){
+	let config;
+	try{
+		config = JSON.parse(box.getAttribute("data-config") || "{}");
+	}catch(e){
+		return;
+	}
+	config.container = box;
+	/* 主题色跟随：APlayer 只认实际色值，这里把 CSS 变量解析成 hex 再传进去 */
+	try{
+		let varColor = getComputedStyle(document.documentElement).getPropertyValue("--themecolor").trim();
+		if (varColor){
+			config.theme = varColor;
+		}
+	}catch(e){}
+	/* 暗色模式下 APlayer 自身背景由 CSS 变量控制，这里只标记，样式在 style.css 兜 */
+	box.classList.add("argon-player-ready");
+	try{
+		new APlayer(config);
+	}catch(e){
+		box.classList.remove("argon-player-ready");
+		if (window.console){ console.warn("APlayer init failed:", e); }
+	}
+}
+function argonInitArtplayer(box){
+	let config;
+	try{
+		config = JSON.parse(box.getAttribute("data-config") || "{}");
+	}catch(e){
+		return;
+	}
+	config.container = box;
+	box.classList.add("argon-player-ready");
+	try{
+		new Artplayer(config);
+	}catch(e){
+		box.classList.remove("argon-player-ready");
+		if (window.console){ console.warn("Artplayer init failed:", e); }
+	}
+}
+function argonRenderMediaPlayers(){
+	let boxes = document.querySelectorAll("[data-argon-player]:not(.argon-player-ready)");
+	if (boxes.length === 0){
+		return;
+	}
+	let needAplayer = false;
+	let needArtplayer = false;
+	for (let i = 0; i < boxes.length; i++){
+		if (boxes[i].getAttribute("data-argon-player") === "aplayer"){
+			needAplayer = true;
+		}else{
+			needArtplayer = true;
+		}
+	}
+	if (needAplayer){
+		argonEnsurePlayerLib("aplayer").then(function(){
+			document.querySelectorAll("[data-argon-player='aplayer']:not(.argon-player-ready)").forEach(argonInitAplayer);
+		})['catch'](function(err){
+			if (window.console){ console.warn(err); }
+		});
+	}
+	if (needArtplayer){
+		argonEnsurePlayerLib("artplayer").then(function(){
+			document.querySelectorAll("[data-argon-player='artplayer']:not(.argon-player-ready)").forEach(argonInitArtplayer);
+		})['catch'](function(err){
+			if (window.console){ console.warn(err); }
+		});
+	}
+}
+
+/* 复制按钮 [copy]：优先 navigator.clipboard，不支持或被拒时退回 execCommand。
+   与 fl-site-info 弹窗里的做法一致，不引入 clipboard.js 依赖。 */
+function argonCopyTextFallback(text){
+	return new Promise(function(resolve, reject){
+		var ta = document.createElement("textarea");
+		ta.value = text;
+		ta.style.position = "fixed";
+		ta.style.opacity = "0";
+		document.body.appendChild(ta);
+		ta.select();
+		var ok = false;
+		try{ ok = document.execCommand("copy"); }catch(e){ ok = false; }
+		ta.remove();
+		if (ok){ resolve(); }else{ reject(new Error("copy failed")); }
+	});
+}
+function argonCopyText(text){
+	if (navigator.clipboard && navigator.clipboard.writeText){
+		return navigator.clipboard.writeText(text)['catch'](function(){
+			return argonCopyTextFallback(text);
+		});
+	}
+	return argonCopyTextFallback(text);
+}
+$(document).on("click", ".argon-copy-btn", function(){
+	var btn = $(this);
+	var text = btn.attr("data-copy") || "";
+	if (text === ""){
+		return;
+	}
+	var icon = btn.find("i");
+	var originalClass = icon.attr("class");
+	var copiedLabel = btn.attr("data-copied-label") || "";
+	argonCopyText(text).then(function(){
+		btn.addClass("copied");
+		icon.attr("class", "fa fa-check");
+		if (copiedLabel !== ""){
+			btn.attr("aria-label", copiedLabel);
+		}
+		setTimeout(function(){
+			btn.removeClass("copied");
+			icon.attr("class", originalClass);
+		}, 1500);
+	})['catch'](function(){
+		/* 复制失败：不改图标，避免误导用户以为已复制 */
+	});
+});
+
+/* —— 倒计时 / 展开更多 / 文内目录（2026-11） ——
+   三者都要在 Pjax 换页后重新初始化，所以统一由一个入口 argonInitSmallTools() 调用，
+   且都做幂等标记（data-argon-ready），重复调用不会叠加计时器或重复生成目录。 */
+
+/* 倒计时：服务端已经把时间解析成 UNIX 时间戳（站点时区），这里只做 ticking */
+var argonCountdownTimer = null;
+function argonInitCountdowns(){
+	/* Pjax 换页后旧节点已被替换：先停掉旧计时器，否则它会对着一批脱离文档的节点空转，
+	   而新页面的倒计时永远不会更新 */
+	if (argonCountdownTimer){
+		clearInterval(argonCountdownTimer);
+		argonCountdownTimer = null;
+	}
+	var nodes = document.querySelectorAll(".argon-countdown[data-argon-countdown]");
+	if (nodes.length === 0){
+		return;
+	}
+	function tick(){
+		var alive = false;
+		nodes.forEach(function(box){
+			var target = parseInt(box.getAttribute("data-argon-countdown"), 10);
+			if (!target || isNaN(target)){
+				return;
+			}
+			var left = target - Math.floor(Date.now() / 1000);
+			if (left <= 0){
+				/* 到点后只写一次“已结束”，避免每帧重写 DOM */
+				if (!box.classList.contains("argon-countdown-finished")){
+					box.classList.add("argon-countdown-finished");
+					var body = box.querySelector(".argon-countdown-body");
+					if (body){
+						body.textContent = box.getAttribute("data-finished") || "";
+					}
+				}
+				return;
+			}
+			alive = true;
+			var day = Math.floor(left / 86400);
+			var hour = Math.floor((left % 86400) / 3600);
+			var minute = Math.floor((left % 3600) / 60);
+			var second = left % 60;
+			var values = { day: day, hour: hour, minute: minute, second: second };
+			Object.keys(values).forEach(function(unit){
+				var el = box.querySelector("[data-unit='" + unit + "']");
+				if (el){
+					var text = String(values[unit]);
+					if (el.textContent !== text){
+						el.textContent = text;
+					}
+				}
+			});
+		});
+		if (!alive && argonCountdownTimer){
+			clearInterval(argonCountdownTimer);
+			argonCountdownTimer = null;
+		}
+	}
+	tick();
+	if (!argonCountdownTimer){
+		argonCountdownTimer = setInterval(tick, 1000);
+	}
+}
+
+/* 展开更多：只切换 class，内容始终在 DOM 里（这是渐进披露，不是门控） */
+$(document).on("click", ".argon-show-more-btn", function(){
+	var wrap = $(this).closest(".argon-show-more");
+	if (wrap.length === 0){
+		return;
+	}
+	wrap.toggleClass("argon-show-more-expanded");
+	var expanded = wrap.hasClass("argon-show-more-expanded");
+	var label = expanded ? $(this).attr("data-less") : $(this).attr("data-more");
+	if (label){
+		$(this).find("span").text(label);
+	}
+	$(this).find("i").toggleClass("fa-angle-down fa-angle-up");
+});
+
+/* 文内目录：扫描正文标题生成。锚点复用主题已有的标题 id；没有 id 的按顺序补，
+   并跳过目录自身与代码块里的标题 */
+function argonBuildToc(){
+	var boxes = document.querySelectorAll(".argon-toc");
+	if (boxes.length === 0){
+		return;
+	}
+	var article = document.querySelector("article .post-content") || document.querySelector("article");
+	if (!article){
+		return;
+	}
+	boxes.forEach(function(box){
+		var body = box.querySelector(".argon-toc-body");
+		if (!body){
+			return;
+		}
+		var maxLevel = parseInt(box.getAttribute("data-max-level") || "3", 10);
+		if (isNaN(maxLevel) || maxLevel < 1){
+			maxLevel = 3;
+		}
+		var headings = article.querySelectorAll("h1, h2, h3, h4, h5, h6");
+		var list = document.createElement("ol");
+		list.className = "argon-toc-list";
+		var count = 0;
+		var used = {};
+		headings.forEach(function(h){
+			var level = parseInt(h.tagName.substring(1), 10);
+			if (level > maxLevel){
+				return;
+			}
+			if (h.closest(".argon-toc") || h.closest("pre") || h.closest(".hljs-codeblock")){
+				return;
+			}
+			var text = (h.textContent || "").trim();
+			if (text === ""){
+				return;
+			}
+			if (!h.id){
+				var slug = "toc-" + (count + 1);
+				while (used[slug] || document.getElementById(slug)){
+					slug = slug + "x";
+				}
+				h.id = slug;
+			}
+			used[h.id] = true;
+			var li = document.createElement("li");
+			li.className = "argon-toc-item argon-toc-level-" + level;
+			var a = document.createElement("a");
+			a.href = "#" + h.id;
+			a.textContent = text;
+			a.className = "argon-toc-link";
+			li.appendChild(a);
+			list.appendChild(li);
+			count++;
+		});
+		body.innerHTML = "";
+		if (count === 0){
+			box.style.display = "none";
+			return;
+		}
+		box.style.display = "";
+		body.appendChild(list);
+	});
+}
+/* 目录标题点击可折叠 */
+$(document).on("click", ".argon-toc-title", function(){
+	$(this).closest(".argon-toc").toggleClass("argon-toc-collapsed");
+});
+
+function argonInitSmallTools(){
+	argonInitCountdowns();
+	argonBuildToc();
+}
 
 /*时间差计算*/
 function addPreZero(num, n) {

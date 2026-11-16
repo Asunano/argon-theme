@@ -1,0 +1,6 @@
+ArtPlayer
+https://github.com/zhw2590582/ArtPlayer
+版本：5.4.0（取自 npm dist，UMD 自包含，样式由 JS 注入，故无独立 CSS）
+许可：MIT License
+版权：Copyright (c) 2017-2026 Harvey Zhao
+文件：artplayer.js（未修改，仅重命名为去 min 的发行文件）

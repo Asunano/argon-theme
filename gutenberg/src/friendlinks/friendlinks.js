@@ -13,7 +13,7 @@
 
 import { __ } from './../i18n/i18n.js';
 import { InspectorControls, useBlockProps } from '@wordpress/block-editor';
-import { PanelBody, PanelRow, SelectControl } from '@wordpress/components';
+import { PanelBody, PanelRow, SelectControl, TextControl, ToggleControl } from '@wordpress/components';
 import ServerSideRender from '@wordpress/server-side-render';
 
 const { registerBlockType } = wp.blocks;
@@ -41,6 +41,15 @@ registerBlockType('argon/friendlinks', {
 		order: {
 			type: 'string',
 			default: 'ASC',
+		},
+		/* 2026-11 快赢包（#539/#114）：按分类过滤 / 按分类分组 */
+		category: {
+			type: 'string',
+			default: '',
+		},
+		grouped: {
+			type: 'boolean',
+			default: false,
 		},
 	},
 	edit: (props) => {
@@ -87,6 +96,21 @@ registerBlockType('argon/friendlinks', {
 											{ label: __('降序'), value: 'DESC' },
 										]}
 										onChange={(value) => props.setAttributes({ order: value })}
+									/>
+								</fieldset>
+								<fieldset>
+									<TextControl
+										label={__('分类（可选）')}
+										help={__('逗号分隔的分类 ID / slug / 名称，留空显示全部')}
+										value={props.attributes.category}
+										onChange={(value) => props.setAttributes({ category: value })}
+									/>
+								</fieldset>
+								<fieldset>
+									<ToggleControl
+										label={__('按分类分组')}
+										checked={props.attributes.grouped}
+										onChange={(value) => props.setAttributes({ grouped: value })}
 									/>
 								</fieldset>
 							</div>

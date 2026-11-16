@@ -951,6 +951,76 @@ function themeoptions_page(){
 							<p class="description"><?php _e('HTML , 支持 script 等标签', 'argon');?></p>
 						</td>
 					</tr>
+					<tr><th class="subtitle"><h2><?php _e('友链朋友圈', 'argon');?></h2></th></tr>
+					<tr>
+						<th><label><?php _e('启用友链朋友圈', 'argon');?></label></th>
+						<td>
+							<select name="argon_fl_moments_enable">
+								<?php $argon_fl_moments_enable = get_option('argon_fl_moments_enable', 'false'); ?>
+								<option value="false" <?php if ($argon_fl_moments_enable!='true'){echo 'selected';} ?>><?php _e('不启用', 'argon');?></option>
+								<option value="true" <?php if ($argon_fl_moments_enable=='true'){echo 'selected';} ?>><?php _e('启用', 'argon');?></option>
+							</select>
+							<p class="description">
+								<?php _e('启用后用 <code>[friend-moments count="20" days="120"]</code> 在任意页面聚合展示友链的最新文章。', 'argon');?><br/>
+								<?php _e('RSS 地址在 <a href="' . esc_url(admin_url('admin.php?page=argon-friendlinks')) . '">友链管理</a> 里逐条填写；留空则自动从对方网站首页发现订阅源。', 'argon');?><br/>
+								<?php _e('抓取结果整体缓存 1 小时，并由每小时计划任务预热，访客访问时只读缓存、不会等网络抓取。', 'argon');?>
+							</p>
+							<p>
+								<a class="button" href="<?php echo esc_url(wp_nonce_url(admin_url('admin-post.php?action=argon_fl_moments_refresh'), 'argon_fl_moments_refresh')); ?>">
+									<?php _e('立即刷新朋友圈缓存', 'argon');?>
+								</a>
+							</p>
+							<?php if (isset($_GET['fl_moments_refreshed'])){ ?>
+								<p class="description" style="color:#2dce89;"><?php _e('已尝试刷新。若仍为空，说明友链没有可用的订阅源。', 'argon');?></p>
+							<?php } ?>
+						</td>
+					</tr>
+					<tr><th class="subtitle"><h2><?php _e('内容门控', 'argon');?></h2></th></tr>					<tr>
+						<th><label><?php _e('启用内容门控', 'argon');?></label></th>
+						<td>
+							<select name="argon_enable_content_gate">
+								<?php $argon_enable_content_gate = get_option('argon_enable_content_gate', 'false'); ?>
+								<option value="false" <?php if ($argon_enable_content_gate!='true'){echo 'selected';} ?>><?php _e('不启用', 'argon');?></option>
+								<option value="true" <?php if ($argon_enable_content_gate=='true'){echo 'selected';} ?>><?php _e('启用', 'argon');?></option>
+							</select>
+							<p class="description">
+								<?php _e('启用后可用 <code>[reply]…[/reply]</code>（评论通过审核后可见）与 <code>[login]…[/login]</code>（登录后可见）。', 'argon');?><br/>
+								<strong><?php _e('安全说明', 'argon');?></strong>：
+								<?php _e('未授权时被保护内容<strong>不会进入页面 HTML</strong>（不是用 CSS 藏起来），因此右键查看源代码也拿不到。', 'argon');?><br/>
+								<?php _e('已知限制：① WordPress 的站内搜索匹配的是数据库原文，搜到被保护内容里的词仍会命中标题；② 页面缓存插件若整页缓存了「已解锁」的页面，可能把内容发给访客——主题已尝试发出「不要缓存本页」信号，但不能保证所有缓存层都遵守，正式使用前请自行验证。', 'argon');?>
+							</p>
+						</td>
+					</tr>
+					<tr><th class="subtitle"><h2><?php _e('文章引用', 'argon');?></h2></th></tr>
+					<tr>
+						<th><label><?php _e('自动显示反向引用', 'argon');?></label></th>
+						<td>
+							<select name="argon_enable_post_backlinks">
+								<?php $argon_enable_post_backlinks = get_option('argon_enable_post_backlinks', 'false'); ?>
+								<option value="false" <?php if ($argon_enable_post_backlinks!='true'){echo 'selected';} ?>><?php _e('不显示', 'argon');?></option>
+								<option value="true" <?php if ($argon_enable_post_backlinks=='true'){echo 'selected';} ?>><?php _e('显示', 'argon');?></option>
+							</select>
+							<p class="description">
+								<?php _e('用 <code>[post-card id="123"]</code> 或「文章引用卡」区块引用其它文章后，被引用文章的正文末尾会自动列出「被以下文章引用」。', 'argon');?><br/>
+								<?php _e('引用关系在文章保存时写入，因此给旧文章补上引用后需要重新保存一次那篇旧文章才会显示。也可以在任意位置手写 <code>[backlinks]</code> 控制展示位置。', 'argon');?>
+							</p>
+						</td>
+					</tr>
+					<tr><th class="subtitle"><h2><?php _e('音视频播放器', 'argon');?></h2></th></tr>
+					<tr>
+						<th><label><?php _e('启用 APlayer / ArtPlayer 播放器', 'argon');?></label></th>
+						<td>
+							<select name="argon_enable_media_player">
+								<?php $argon_enable_media_player = get_option('argon_enable_media_player', 'false'); ?>
+								<option value="false" <?php if ($argon_enable_media_player!='true'){echo 'selected';} ?>><?php _e('不启用', 'argon');?></option>
+								<option value="true" <?php if ($argon_enable_media_player=='true'){echo 'selected';} ?>><?php _e('启用', 'argon');?></option>
+							</select>
+							<p class="description">
+								<?php _e('不启用时，[aplayer] / [artplayer] 降级为浏览器原生播放器（仍然可用，只是没有歌词/播放列表/弹幕等外观）。', 'argon');?><br/>
+								<?php _e('启用后，播放器库<strong>只在当前页面真的含有播放器时</strong>才按需下载，其余页面零额外体积；库已随主题分发，不依赖任何第三方 CDN。', 'argon');?>
+							</p>
+						</td>
+					</tr>
 					<tr><th class="subtitle"><h2><?php _e('代码高亮', 'argon');?></h2></th></tr>
 					<tr>
 						<th><label><?php _e('启用 Highlight.js 代码高亮', 'argon');?></label></th>
@@ -1014,6 +1084,13 @@ function themeoptions_page(){
 								<option value="true" <?php if ($argon_code_highlight_transparent_linenumber=='true'){echo 'selected';} ?>><?php _e('透明', 'argon');?></option>
 							</select>
 							<p class="description"><?php _e('适用于某些背景渐变的高亮主题', 'argon');?></p>
+						</td>
+					</tr>
+					<tr>
+						<th><label><?php _e('代码块超行折叠', 'argon');?></label></th>
+						<td>
+							<input type="number" min="0" max="1000" name="argon_code_highlight_fold_lines" value="<?php echo intval(get_option('argon_code_highlight_fold_lines', 0)); ?>" />
+							<p class="description"><?php _e('代码超过 N 行时自动折叠成预览高度，点「展开」按钮恢复（0 为不折叠）。给代码块添加 no-fold 类可单独豁免', 'argon');?></p>
 						</td>
 					</tr>
 					<tr style="opacity: 0.5;">
@@ -2365,6 +2442,11 @@ function argon_update_themeoptions(){
 		argon_update_option('argon_code_highlight_hide_linenumber');
 		argon_update_option('argon_code_highlight_transparent_linenumber');
 		argon_update_option('argon_code_highlight_break_line');
+		update_option('argon_code_highlight_fold_lines', isset($_POST['argon_code_highlight_fold_lines']) ? intval($_POST['argon_code_highlight_fold_lines']) : 0);
+		argon_update_option('argon_enable_media_player');
+		argon_update_option('argon_enable_content_gate');
+		argon_update_option('argon_enable_post_backlinks');
+		argon_update_option('argon_fl_moments_enable');
 		argon_update_option('argon_code_theme');
 		argon_update_option('argon_comment_enable_qq_avatar');
 		argon_update_option('argon_enable_login_css');

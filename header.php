@@ -476,6 +476,18 @@
 			'js'  => array($GLOBALS['assets_path'] . '/assets/vendor/nouislider/js/nouislider.min.js?ver=' . $GLOBALS['theme_version']),
 		);
 	}
+	if (argon_get_option('argon_enable_media_player') == 'true'){
+		/* 音视频播放器（APlayer / ArtPlayer）：库随主题分发在 assets/vendor/，
+		   只在页面里真的出现 [data-argon-player] 时才由 argontheme.js 注入。
+		   这里只下发清单；开关关闭时不下发，前端自然也就不会加载。 */
+		$argon_lazy_assets['aplayer'] = array(
+			'js'  => array($GLOBALS['assets_path'] . '/assets/vendor/aplayer/APlayer.min.js?ver=' . $GLOBALS['theme_version']),
+			'css' => array($GLOBALS['assets_path'] . '/assets/vendor/aplayer/APlayer.min.css?ver=' . $GLOBALS['theme_version']),
+		);
+		$argon_lazy_assets['artplayer'] = array(
+			'js'  => array($GLOBALS['assets_path'] . '/assets/vendor/artplayer/artplayer.js?ver=' . $GLOBALS['theme_version']),
+		);
+	}
 	?>
 	<script>
 		document.documentElement.classList.remove("no-js");
@@ -512,7 +524,9 @@
 				enable: <?php echo get_option('argon_enable_code_highlight', 'false'); ?>,
 				hide_linenumber: <?php echo get_option('argon_code_highlight_hide_linenumber', 'false'); ?>,
 				transparent_linenumber: <?php echo get_option('argon_code_highlight_transparent_linenumber', 'false'); ?>,
-				break_line: <?php echo get_option('argon_code_highlight_break_line', 'false'); ?>
+				break_line: <?php echo get_option('argon_code_highlight_break_line', 'false'); ?>,
+				/* 超过 N 行自动折叠（0 = 不折叠），#605 */
+				fold_lines: <?php echo intval(get_option('argon_code_highlight_fold_lines', 0)); ?>
 			},
 			/* 按需加载清单（fancybox / pickr / nouislider），见文件上方 $argon_lazy_assets */
 			lazy_assets: <?php echo wp_json_encode($argon_lazy_assets); ?>

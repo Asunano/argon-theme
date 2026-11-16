@@ -14,7 +14,7 @@
 
 import { __ } from './../i18n/i18n.js';
 import { InspectorControls, useBlockProps } from '@wordpress/block-editor';
-import { PanelBody, PanelRow, SelectControl, TextControl, ToggleControl } from '@wordpress/components';
+import { Notice, PanelBody, PanelRow, SelectControl, TextControl, ToggleControl } from '@wordpress/components';
 import ServerSideRender from '@wordpress/server-side-render';
 
 const { registerBlockType } = wp.blocks;
@@ -65,6 +65,11 @@ registerBlockType('argon/post-card', {
 						</PanelRow>
 					</PanelBody>
 				</InspectorControls>
+				{!props.attributes.id && !props.attributes.url && (
+					<Notice status="warning" isDismissible={false}>
+						{__('请在右侧「区块设置」中填写文章 ID 或文章链接。')}
+					</Notice>
+				)}
 				<ServerSideRender block="argon/post-card" attributes={props.attributes} />
 			</div>
 		);

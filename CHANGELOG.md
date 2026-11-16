@@ -2,6 +2,14 @@
 
 本文件记录 Argon Theme 增强分支（[Asunano/argon-theme](https://github.com/Asunano/argon-theme)）的全部版本变更，按版本号倒序排列。本分支基于 [solstice23/argon-theme](https://github.com/solstice23/argon-theme) 开发，版本号序列沿用上游。分类术语含义：**新增**（新功能）、**变更**（对既有行为的调整）、**修复**（问题修正）、**性能**（性能优化）、**安全**（安全相关修正）、**构建**（构建与发布流程）。v1.3.18 之前的变更记录请查阅 Git 提交历史。
 
+## 未发布
+
+### 修复
+
+- 动态区块在关键参数为空时静默渲染为空的问题。此前下载卡片、视频播放器等在未填写链接时返回空字符串，编辑器中显示「区块渲染为空」，无从判断原因。现改为：
+  - 编辑器画布内直接显示配置提醒（download / artplayer / bilibili / netease / post-card / link-card 六个区块）；
+  - 前台对管理员可见配置提示卡，访客仍不可见内容（download / artplayer）。
+
 ## 1.3.35（2026-11-16）
 
 ### 新增

@@ -12,7 +12,7 @@
 
 import { __ } from './../i18n/i18n.js';
 import { InspectorControls, useBlockProps } from '@wordpress/block-editor';
-import { PanelBody, PanelRow, TextControl, TextareaControl } from '@wordpress/components';
+import { Notice, PanelBody, PanelRow, TextControl, TextareaControl } from '@wordpress/components';
 import ServerSideRender from '@wordpress/server-side-render';
 
 const { registerBlockType } = wp.blocks;
@@ -84,6 +84,11 @@ registerBlockType('argon/link-card', {
 						</PanelRow>
 					</PanelBody>
 				</InspectorControls>
+				{!props.attributes.url && (
+					<Notice status="warning" isDismissible={false}>
+						{__('请在右侧「区块设置」中填写「链接地址」，卡片才会渲染。')}
+					</Notice>
+				)}
 				<ServerSideRender block="argon/link-card" attributes={props.attributes} />
 			</div>
 		);

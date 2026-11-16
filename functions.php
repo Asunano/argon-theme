@@ -4751,7 +4751,13 @@ function shortcode_download($attr,$content=""){
 	list($icon, $badge, $label) = $types[$type];
 	$url = isset( $attr['url'] ) ? trim( $attr['url'] ) : (isset( $attr['href'] ) ? trim( $attr['href'] ) : '');
 	if ($url == ''){
-		/* 没有链接的下载卡片没有意义：渲染为空 */
+		/* 没有链接的下载卡片没有意义。但不能静默返回空——那会在编辑器里显示
+		   「区块渲染为空」，让人以为组件坏了。管理员看配置提示，访客不可见。 */
+		if (current_user_can('manage_options')){
+			return "<div class='argon-content-gate argon-content-gate-disabled'><i class='fa fa-exclamation-triangle'></i> "
+				. esc_html__('下载卡片缺少「下载链接」：请在区块右侧「区块设置 → 下载链接」填写（短代码则补全 url 属性）。', 'argon')
+				. '</div>';
+		}
 		return "";
 	}
 	$icon = isset( $attr['icon'] ) && trim( $attr['icon'] ) != '' ? trim( $attr['icon'] ) : $icon;
@@ -5696,6 +5702,12 @@ function argon_render_aplayer($tracks, $opts = array()){
 function argon_render_artplayer($attr){
 	$src = isset($attr['src']) ? trim($attr['src']) : (isset($attr['url']) ? trim($attr['url']) : '');
 	if ($src == ''){
+		/* 同 [download]：不静默返回空，管理员看提示 */
+		if (current_user_can('manage_options')){
+			return "<div class='argon-content-gate argon-content-gate-disabled'><i class='fa fa-exclamation-triangle'></i> "
+				. esc_html__('视频播放器缺少「视频地址」：请在区块右侧「区块设置 → 视频地址」填写（短代码则补全 src 属性）。', 'argon')
+				. '</div>';
+		}
 		return "";
 	}
 	$poster = isset($attr['poster']) ? trim($attr['poster']) : '';

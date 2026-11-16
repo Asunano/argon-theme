@@ -10,7 +10,7 @@
 
 import { __ } from './../i18n/i18n.js';
 import { InspectorControls, useBlockProps } from '@wordpress/block-editor';
-import { PanelBody, PanelRow, SelectControl, TextareaControl, TextControl } from '@wordpress/components';
+import { Notice, PanelBody, PanelRow, SelectControl, TextareaControl, TextControl } from '@wordpress/components';
 import ServerSideRender from '@wordpress/server-side-render';
 
 const { registerBlockType } = wp.blocks;
@@ -150,6 +150,12 @@ registerBlockType('argon/download', {
 						</PanelRow>
 					</PanelBody>
 				</InspectorControls>
+				{!props.attributes.url && (
+					<Notice status="warning" isDismissible={false}>
+						{__('请在右侧「区块设置」中填写「下载链接」，卡片才会渲染。')}
+					</Notice>
+				)}
+
 				<ServerSideRender
 					block="argon/download"
 					attributes={props.attributes}

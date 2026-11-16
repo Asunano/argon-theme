@@ -6861,12 +6861,12 @@ function argon_fetch_github_release($repo, $tag){
 		),
 	));
 	if (is_wp_error($response) || wp_remote_retrieve_response_code($response) != 200){
-		set_transient($key, null, 30 * MINUTE_IN_SECONDS);
+		set_transient($key . '_fail', 1, 30 * MINUTE_IN_SECONDS);
 		return null;
 	}
 	$body = json_decode(wp_remote_retrieve_body($response), true);
 	if (!is_array($body) || empty($body['assets']) || !is_array($body['assets'])){
-		set_transient($key, null, 30 * MINUTE_IN_SECONDS);
+		set_transient($key . '_fail', 1, 30 * MINUTE_IN_SECONDS);
 		return null;
 	}
 	$assets = array();
@@ -6881,7 +6881,7 @@ function argon_fetch_github_release($repo, $tag){
 		);
 	}
 	if (empty($assets)){
-		set_transient($key, null, 30 * MINUTE_IN_SECONDS);
+		set_transient($key . '_fail', 1, 30 * MINUTE_IN_SECONDS);
 		return null;
 	}
 	$data = array(
@@ -6890,6 +6890,7 @@ function argon_fetch_github_release($repo, $tag){
 		'assets' => $assets,
 	);
 	set_transient($key, $data, 6 * HOUR_IN_SECONDS);
+	delete_transient($key . '_fail');
 	return $data;
 }
 
@@ -6914,11 +6915,21 @@ function argon_render_gh_release($args){
 		}
 		return "";
 	}
-	$data = argon_fetch_github_release($repo, isset($args['tag']) ? trim($args['tag']) : '');
-	if ($data === null){
+	$key = 'argon_gh_release_' . md5($repo . '|' . trim($args['tag'] ?? ''));
+	$data = get_transient($key);
+	if (!is_array($data)){
+		/* 未预热：交给计划任务后台抓取，访客请求不阻塞在 GitHub API 上（其匿名限流很紧，
+		   且部分服务器根本连不通 api.github.com）。计划任务在下一个请求周期执行。 */
+		$failed = get_transient($key . '_fail');
+		if (!wp_next_scheduled('argon_gh_release_warm', array($repo, trim($args['tag'] ?? ''))) && !$failed){
+			wp_schedule_single_event(time(), 'argon_gh_release_warm', array($repo, trim($args['tag'] ?? '')));
+		}
 		if (current_user_can('manage_options')){
+			$hint = $failed
+				? __('GitHub Release 数据获取失败（接口限流或仓库 / 标签不存在），30 分钟后自动重试。')
+				: __('正在后台获取 Release 数据，稍后刷新本页即可看到。');
 			return "<div class='argon-content-gate argon-content-gate-disabled'><i class='fa fa-exclamation-triangle'></i> "
-				. esc_html__('GitHub Release 数据暂不可用（接口限流或仓库 / 标签不存在），缓存过期后自动重试。', 'argon') . '</div>';
+				. esc_html($hint) . '</div>';
 		}
 		return "";
 	}
@@ -6947,6 +6958,10 @@ function argon_render_gh_release($args){
 	return $out;
 }
 
+add_action('argon_gh_release_warm', 'argon_gh_release_warm_handler', 10, 2);
+function argon_gh_release_warm_handler($repo, $tag){
+	argon_fetch_github_release($repo, $tag);
+}
 add_shortcode('gh-release','shortcode_gh_release');
 add_shortcode('github-release','shortcode_gh_release');
 function shortcode_gh_release($attr,$content=""){
@@ -7198,6 +7213,13 @@ function argon_enqueue_block_library_always(){
 	}
 }
 add_action('wp_enqueue_scripts', 'argon_enqueue_block_library_always', 20);
+
+/* 区块编辑器里加载 FA 子集：编辑器预览卡片里的图标依赖它，
+   否则画布里的 <i class="fa ..."> 全部是空白（前台样式不进编辑器）。 */
+add_action('enqueue_block_editor_assets', 'argon_enqueue_editor_fontawesome');
+function argon_enqueue_editor_fontawesome(){
+	wp_enqueue_style('font-awesome-subset', $GLOBALS['assets_path'] . '/assets/css/argon-fontawesome.css', null, $GLOBALS['theme_version']);
+}
 
 /* ============================================================
    Enhanced 功能（本分支新增，区别于原版 Argon）

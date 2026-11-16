@@ -9,6 +9,7 @@
 - Font Awesome 6 子集缺少本轮新组件用到的 14 个图标（fa-download / fa-play / fa-cloud / fa-music / fa-rss / fa-chevron-down / fa-chevron-up / fa-list-ul / fa-external-link / fa-play-circle / fa-user / fa-thumbs-down / fa-file-text-o），前台图标渲染为空白。已重新生成字体子集与 CSS（覆盖率校验 PASS）。
 - 区块编辑器此前不加载 Font Awesome，画布内所有组件预览的图标（含 GitHub 信息卡片）均为空白。现已随编辑器资源加载 FA 子集。
 - GitHub Release 下载卡首次渲染不再同步阻塞访客请求（部分服务器无法直连 api.github.com）：缓存未预热时改为计划任务后台抓取，下一轮请求生效；失败状态独立标记并在 30 分钟后自动重试。
+- GitHub API 调用支持经由镜像路由：配置了 `mirror` 时优先以「镜像域名 + api.github.com 地址」获取数据（gh-proxy 类镜像同时代理 API，实测可用），直连兜底——解决服务器侧无法直连 api.github.com 导致下载卡始终无法出现的问题。
 
 ## 1.3.36（2026-11-17）
 

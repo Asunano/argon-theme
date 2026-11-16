@@ -6839,9 +6839,10 @@ function argon_fl_moments_handle_refresh(){
    列出指定 Release 的全部附件，每条一个下载按钮；mirror 为下载加速前缀，
    拼接规则与常见镜像站一致：镜像域名 + 完整原始地址（含 https://）。
    tag 留空时取该仓库最新 Release。数据经 transient 缓存：成功 6 小时，失败 30 分钟，
-   访客请求永远读缓存，不会在渲染路径上打 GitHub API（其匿名限流为每 IP 每小时 60 次）。 */
+   访客请求永远读缓存，不会在渲染路径上打 GitHub API（其匿名限流为每 IP 每小时 60 次）。
+   API 调用路由：配置了 mirror 时优先经镜像（gh-proxy 类镜像同时代理 api.github.com），直连兜底。 */
 
-function argon_fetch_github_release($repo, $tag){
+function argon_fetch_github_release($repo, $tag, $mirror = ''){
 	$repo = trim($repo);
 	if (!preg_match('#^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$#', $repo)){
 		return null;
@@ -6853,19 +6854,33 @@ function argon_fetch_github_release($repo, $tag){
 		return $cached;
 	}
 	$path = $tag !== '' ? 'releases/tags/' . rawurlencode($tag) : 'releases/latest';
-	$response = wp_remote_get('https://api.github.com/repos/' . $repo . '/' . $path, array(
-		'timeout' => 8,
-		'headers' => array(
-			'User-Agent'   => 'ArgonTheme/1.0',
-			'Accept'       => 'application/vnd.github+json',
-		),
-	));
-	if (is_wp_error($response) || wp_remote_retrieve_response_code($response) != 200){
-		set_transient($key . '_fail', 1, 30 * MINUTE_IN_SECONDS);
-		return null;
+	$api = 'https://api.github.com/repos/' . $repo . '/' . $path;
+	/* 路由候选：配置了镜像时优先走镜像（gh-proxy 类镜像同样代理 api.github.com，
+	   实测可返回 JSON），直连作为兜底——部分服务器根本连不通 api.github.com */
+	$urls = array();
+	if ($mirror !== '' && preg_match('#^https?://[^/]+/#i', $mirror)){
+		$urls[] = rtrim($mirror, '/') . '/' . $api;
 	}
-	$body = json_decode(wp_remote_retrieve_body($response), true);
-	if (!is_array($body) || empty($body['assets']) || !is_array($body['assets'])){
+	$urls[] = $api;
+	$body = null;
+	foreach ($urls as $url){
+		$response = wp_remote_get($url, array(
+			'timeout' => 8,
+			'headers' => array(
+				'User-Agent'   => 'ArgonTheme/1.0',
+				'Accept'       => 'application/vnd.github+json',
+			),
+		));
+		if (is_wp_error($response) || wp_remote_retrieve_response_code($response) != 200){
+			continue;
+		}
+		$decoded = json_decode(wp_remote_retrieve_body($response), true);
+		if (is_array($decoded) && !empty($decoded['assets']) && is_array($decoded['assets'])){
+			$body = $decoded;
+			break;
+		}
+	}
+	if ($body === null){
 		set_transient($key . '_fail', 1, 30 * MINUTE_IN_SECONDS);
 		return null;
 	}
@@ -6915,14 +6930,15 @@ function argon_render_gh_release($args){
 		}
 		return "";
 	}
-	$key = 'argon_gh_release_' . md5($repo . '|' . trim($args['tag'] ?? ''));
+	$tag_value = trim($args['tag'] ?? '');
+	$key = 'argon_gh_release_' . md5($repo . '|' . $tag_value);
 	$data = get_transient($key);
 	if (!is_array($data)){
 		/* 未预热：交给计划任务后台抓取，访客请求不阻塞在 GitHub API 上（其匿名限流很紧，
-		   且部分服务器根本连不通 api.github.com）。计划任务在下一个请求周期执行。 */
+		   且部分服务器根本连不通 api.github.com——配置了镜像时走镜像路由）。 */
 		$failed = get_transient($key . '_fail');
-		if (!wp_next_scheduled('argon_gh_release_warm', array($repo, trim($args['tag'] ?? ''))) && !$failed){
-			wp_schedule_single_event(time(), 'argon_gh_release_warm', array($repo, trim($args['tag'] ?? '')));
+		if (!wp_next_scheduled('argon_gh_release_warm', array($repo, $tag_value, $mirror)) && !$failed){
+			wp_schedule_single_event(time(), 'argon_gh_release_warm', array($repo, $tag_value, $mirror));
 		}
 		if (current_user_can('manage_options')){
 			$hint = $failed
@@ -6958,9 +6974,9 @@ function argon_render_gh_release($args){
 	return $out;
 }
 
-add_action('argon_gh_release_warm', 'argon_gh_release_warm_handler', 10, 2);
-function argon_gh_release_warm_handler($repo, $tag){
-	argon_fetch_github_release($repo, $tag);
+add_action('argon_gh_release_warm', 'argon_gh_release_warm_handler', 10, 3);
+function argon_gh_release_warm_handler($repo, $tag, $mirror = ''){
+	argon_fetch_github_release($repo, $tag, $mirror);
 }
 add_shortcode('gh-release','shortcode_gh_release');
 add_shortcode('github-release','shortcode_gh_release');

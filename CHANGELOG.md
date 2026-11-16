@@ -2,7 +2,7 @@
 
 本文件记录 Argon Theme 增强分支（[Asunano/argon-theme](https://github.com/Asunano/argon-theme)）的全部版本变更，按版本号倒序排列。本分支基于 [solstice23/argon-theme](https://github.com/solstice23/argon-theme) 开发，版本号序列沿用上游。分类术语含义：**新增**（新功能）、**变更**（对既有行为的调整）、**修复**（问题修正）、**性能**（性能优化）、**安全**（安全相关修正）、**构建**（构建与发布流程）。v1.3.18 之前的变更记录请查阅 Git 提交历史。
 
-## 未发布
+## 1.3.36（2026-11-17）
 
 ### 新增
 

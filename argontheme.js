@@ -4044,6 +4044,13 @@ $(document).on("click", ".argon-copy-btn", function(){
 	var btn = $(this);
 	var text = btn.attr("data-copy") || "";
 	if (text === ""){
+		/* 区块形态可能不写 data-copy：回落到显示文本本身 */
+		var src = btn.closest(".argon-copy").find(".argon-copy-text").first();
+		if (src.length){
+			text = $.trim(src.text());
+		}
+	}
+	if (text === ""){
 		return;
 	}
 	var icon = btn.find("i");

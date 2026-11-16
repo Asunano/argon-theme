@@ -43,3 +43,6 @@ import './review/review.js';
 /* 轻量组件（2026-11）：圆形进度 / 倒计时 / 文内目录 / 展开更多 */
 import './circle-countdown/circle-countdown.js';
 import './toc-show-more/toc-show-more.js';
+/* copy 与 friend-moments 区块（2026-11）：补齐最后两个仅短代码的组件 */
+import './copy/copy.js';
+import './friend-moments/friend-moments.js';

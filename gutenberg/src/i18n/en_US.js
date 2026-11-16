@@ -204,5 +204,16 @@ export const translations = {
 	'折叠高度（行）': 'Collapsed height (lines)',
 	'展开按钮文字': 'Expand button text',
 	'收起按钮文字': 'Collapse button text',
-	'超过设定行数时折叠（内容始终在页面里，不是门控）': 'Collapsed beyond the set height (content stays in the page; this is not a content gate).'
+	'超过设定行数时折叠（内容始终在页面里，不是门控）': 'Collapsed beyond the set height (content stays in the page; this is not a content gate).',
+
+	/* copy / friend-moments（2026-11） */
+	'复制按钮': 'Copy Button',
+	'复制': 'Copy',
+	'要复制的文本': 'Text to copy',
+	'复制内容': 'Copy content',
+	'需要复制与显示内容不同的文本时填写（例如显示命令、复制完整命令）；留空则复制显示的文本': 'Fill in to copy text different from the displayed one; empty = copy the displayed text.',
+	'朋友圈': 'Moments',
+	'展示条数': 'Items to show',
+	'收录天数范围': 'Time range (days)',
+	'仅展示最近 N 天内发布的文章': 'Only show articles published within the last N days.'
 };

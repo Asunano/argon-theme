@@ -4103,6 +4103,8 @@ function argon_init_gutenberg_blocks() {
 		'argon/btn',
 		/* 2026-11 媒体包：mermaid 图表（静态区块，前端 mermaid.js 懒加载渲染，#563） */
 		'argon/mermaid',
+		/* 2026-11 特色包：复制按钮（静态区块） */
+		'argon/copy',
 	);
 	foreach ( $argon_blocks as $argon_block ) {
 		register_block_type(
@@ -4542,6 +4544,33 @@ function argon_render_show_more_block($attributes, $content = ''){
 	), $content);
 }
 add_action('init', 'argon_init_gutenberg_small_tools_blocks');
+
+/* argon/friend-moments 动态区块：渲染直接复用短代码函数。
+   SSR 读取的是朋友圈缓存，不触发实时抓取——首次使用请先在设置页点「立即刷新」，
+   或等每小时 cron 预热，否则编辑器与前台都显示为空。 */
+function argon_init_gutenberg_friend_moments_block() {
+	register_block_type(
+		'argon/friend-moments',
+		array(
+			'editor_script'   => 'argon-gutenberg-block-js',
+			'editor_style'    => 'argon-gutenberg-block-backend-css',
+			'render_callback' => 'argon_render_friend_moments_block',
+			'attributes'      => array(
+				'count' => array('type' => 'integer', 'default' => 20),
+				'days'  => array('type' => 'integer', 'default' => 120),
+				'title' => array('type' => 'string', 'default' => ''),
+			),
+		)
+	);
+}
+function argon_render_friend_moments_block($attributes){
+	return shortcode_friend_moments(array(
+		'count' => isset($attributes['count']) ? $attributes['count'] : 20,
+		'days'  => isset($attributes['days']) ? $attributes['days'] : 120,
+		'title' => isset($attributes['title']) ? $attributes['title'] : '',
+	));
+}
+add_action('init', 'argon_init_gutenberg_friend_moments_block');
 
 /* argon/ref 也是动态区块：脚注编号由服务端按【渲染顺序】累积到全局
    $post_references，文章底部的参考列表由 get_reference_list() 统一输出。

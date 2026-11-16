@@ -4572,6 +4572,35 @@ function argon_render_friend_moments_block($attributes){
 }
 add_action('init', 'argon_init_gutenberg_friend_moments_block');
 
+/* argon/gh-release 动态区块：附件列表由服务端拉 GitHub API（transient 缓存），
+   渲染与短代码 [gh-release] 共用 argon_render_gh_release()。
+   编辑器画布显示样式化占位卡（附件清单在前台加载）。 */
+function argon_init_gutenberg_gh_release_block() {
+	register_block_type(
+		'argon/gh-release',
+		array(
+			'editor_script'   => 'argon-gutenberg-block-js',
+			'editor_style'    => 'argon-gutenberg-block-backend-css',
+			'render_callback' => 'argon_render_gh_release_block',
+			'attributes'      => array(
+				'repo'   => array('type' => 'string', 'default' => ''),
+				'tag'    => array('type' => 'string', 'default' => ''),
+				'mirror' => array('type' => 'string', 'default' => ''),
+				'title'  => array('type' => 'string', 'default' => ''),
+			),
+		)
+	);
+}
+function argon_render_gh_release_block($attributes){
+	return argon_render_gh_release(array(
+		'repo'   => isset($attributes['repo']) ? $attributes['repo'] : '',
+		'tag'    => isset($attributes['tag']) ? $attributes['tag'] : '',
+		'mirror' => isset($attributes['mirror']) ? $attributes['mirror'] : '',
+		'title'  => isset($attributes['title']) ? $attributes['title'] : '',
+	));
+}
+add_action('init', 'argon_init_gutenberg_gh_release_block');
+
 /* argon/ref 也是动态区块：脚注编号由服务端按【渲染顺序】累积到全局
    $post_references，文章底部的参考列表由 get_reference_list() 统一输出。
    做成静态区块会把编号写死，以后调整顺序就对不上了。
@@ -6803,6 +6832,130 @@ function argon_fl_moments_handle_refresh(){
 	/* 回到「Argon 主题选项」页（菜单 slug 就是本文件名），刷新结果提示显示在那里 */
 	wp_safe_redirect(add_query_arg(array('page' => basename(__FILE__), 'fl_moments_refreshed' => '1'), admin_url('admin.php')));
 	exit;
+}
+
+/* ---------- GitHub Release 下载卡 ----------
+   [gh-release repo="Asunano/UFI-AXIS" tag="v0.1.3" mirror="https://mirror.example.com/" title="…"]
+   列出指定 Release 的全部附件，每条一个下载按钮；mirror 为下载加速前缀，
+   拼接规则与常见镜像站一致：镜像域名 + 完整原始地址（含 https://）。
+   tag 留空时取该仓库最新 Release。数据经 transient 缓存：成功 6 小时，失败 30 分钟，
+   访客请求永远读缓存，不会在渲染路径上打 GitHub API（其匿名限流为每 IP 每小时 60 次）。 */
+
+function argon_fetch_github_release($repo, $tag){
+	$repo = trim($repo);
+	if (!preg_match('#^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$#', $repo)){
+		return null;
+	}
+	$tag = trim($tag);
+	$key = 'argon_gh_release_' . md5($repo . '|' . $tag);
+	$cached = get_transient($key);
+	if ($cached !== false){
+		return $cached;
+	}
+	$path = $tag !== '' ? 'releases/tags/' . rawurlencode($tag) : 'releases/latest';
+	$response = wp_remote_get('https://api.github.com/repos/' . $repo . '/' . $path, array(
+		'timeout' => 8,
+		'headers' => array(
+			'User-Agent'   => 'ArgonTheme/1.0',
+			'Accept'       => 'application/vnd.github+json',
+		),
+	));
+	if (is_wp_error($response) || wp_remote_retrieve_response_code($response) != 200){
+		set_transient($key, null, 30 * MINUTE_IN_SECONDS);
+		return null;
+	}
+	$body = json_decode(wp_remote_retrieve_body($response), true);
+	if (!is_array($body) || empty($body['assets']) || !is_array($body['assets'])){
+		set_transient($key, null, 30 * MINUTE_IN_SECONDS);
+		return null;
+	}
+	$assets = array();
+	foreach ($body['assets'] as $asset){
+		if (empty($asset['browser_download_url'])){
+			continue;
+		}
+		$assets[] = array(
+			'name' => isset($asset['name']) ? (string) $asset['name'] : '',
+			'url'  => (string) $asset['browser_download_url'],
+			'size' => isset($asset['size']) ? intval($asset['size']) : 0,
+		);
+	}
+	if (empty($assets)){
+		set_transient($key, null, 30 * MINUTE_IN_SECONDS);
+		return null;
+	}
+	$data = array(
+		'name'   => isset($body['name']) ? (string) $body['name'] : '',
+		'tag'    => isset($body['tag_name']) ? (string) $body['tag_name'] : $tag,
+		'assets' => $assets,
+	);
+	set_transient($key, $data, 6 * HOUR_IN_SECONDS);
+	return $data;
+}
+
+function argon_format_filesize($bytes){
+	if ($bytes >= 1048576){
+		return round($bytes / 1048576, 1) . ' MB';
+	}
+	if ($bytes >= 1024){
+		return round($bytes / 1024, 1) . ' KB';
+	}
+	return $bytes . ' B';
+}
+
+function argon_render_gh_release($args){
+	$repo = isset($args['repo']) ? trim($args['repo']) : '';
+	$mirror = isset($args['mirror']) ? trim($args['mirror']) : '';
+	$title = isset($args['title']) ? trim($args['title']) : '';
+	if ($repo === ''){
+		if (current_user_can('manage_options')){
+			return "<div class='argon-content-gate argon-content-gate-disabled'><i class='fa fa-exclamation-triangle'></i> "
+				. esc_html__('GitHub 下载卡缺少「仓库」：请填写 owner/repo（例如 Asunano/UFI-AXIS）。', 'argon') . '</div>';
+		}
+		return "";
+	}
+	$data = argon_fetch_github_release($repo, isset($args['tag']) ? trim($args['tag']) : '');
+	if ($data === null){
+		if (current_user_can('manage_options')){
+			return "<div class='argon-content-gate argon-content-gate-disabled'><i class='fa fa-exclamation-triangle'></i> "
+				. esc_html__('GitHub Release 数据暂不可用（接口限流或仓库 / 标签不存在），缓存过期后自动重试。', 'argon') . '</div>';
+		}
+		return "";
+	}
+	/* 镜像前缀必须是合法 URL；拼接规则：镜像域名 + 完整原始地址 */
+	if ($mirror !== '' && !preg_match('#^https?://[^/]+/#i', $mirror)){
+		$mirror = '';
+	}
+	$display_title = $title !== '' ? $title : ($data['name'] !== '' ? $data['name'] : $repo . ' ' . $data['tag']);
+	$out = "<div class='argon-gh-release'>";
+	$out .= "<div class='argon-gh-release-head'><span class='argon-gh-release-title'><i class='fa fa-github'></i> " . esc_html($display_title) . "</span>";
+	$out .= "<span class='argon-gh-release-tag'>" . esc_html($data['tag']) . "</span></div>";
+	$out .= "<div class='argon-gh-release-list'>";
+	foreach ($data['assets'] as $asset){
+		$url = $asset['url'];
+		if ($mirror !== ''){
+			$url = rtrim($mirror, '/') . '/' . $asset['url'];
+		}
+		$out .= "<div class='argon-gh-release-item'>"
+			. "<span class='argon-gh-release-name'><i class='fa fa-download'></i> " . esc_html($asset['name']) . "</span>"
+			. ($asset['size'] > 0 ? "<span class='argon-gh-release-size'>" . esc_html(argon_format_filesize($asset['size'])) . "</span>" : "")
+			. "<a class='argon-gh-release-btn' href='" . esc_url($url) . "' target='_blank' rel='noopener nofollow'>"
+			. esc_html__('下载', 'argon') . "</a>"
+			. "</div>";
+	}
+	$out .= "</div></div>";
+	return $out;
+}
+
+add_shortcode('gh-release','shortcode_gh_release');
+add_shortcode('github-release','shortcode_gh_release');
+function shortcode_gh_release($attr,$content=""){
+	return argon_render_gh_release(array(
+		'repo'   => isset($attr['repo']) ? $attr['repo'] : '',
+		'tag'    => isset($attr['tag']) ? $attr['tag'] : '',
+		'mirror' => isset($attr['mirror']) ? $attr['mirror'] : '',
+		'title'  => isset($attr['title']) ? $attr['title'] : '',
+	));
 }
 
 //Reference Footnote

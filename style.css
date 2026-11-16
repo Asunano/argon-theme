@@ -5223,6 +5223,93 @@ html.darkmode .argon-show-more:not(.argon-show-more-expanded) .argon-show-more-c
 	opacity: .5;
 	text-align: right;
 }
+
+/*GitHub Release 下载卡 [gh-release]：深色 GitHub 风格，列出 Release 附件并支持镜像前缀*/
+.argon-gh-release {
+	margin: 20px 0;
+	padding: 16px 18px;
+	border-radius: 10px;
+	background-color: #24292e;
+	color: #eee;
+	box-shadow: 0 4px 16px rgba(0, 0, 0, .15);
+}
+.argon-gh-release-head {
+	display: flex;
+	align-items: baseline;
+	gap: 10px;
+	margin-bottom: 10px;
+	flex-wrap: wrap;
+}
+.argon-gh-release-title {
+	font-weight: bold;
+	font-size: 16px;
+	color: #eee;
+}
+.argon-gh-release-title i {
+	margin-right: 4px;
+}
+.argon-gh-release-tag {
+	font-size: 12px;
+	padding: 2px 8px;
+	border-radius: 4px;
+	background-color: rgba(255, 255, 255, .12);
+	color: #c9d1d9;
+}
+.argon-gh-release-item {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 9px 4px;
+	border-top: 1px solid rgba(255, 255, 255, .08);
+}
+.argon-gh-release-item:first-child {
+	border-top: 0;
+}
+.argon-gh-release-name {
+	flex: 1;
+	min-width: 0;
+	font-size: 13px;
+	color: #c9d1d9;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.argon-gh-release-name i {
+	margin-right: 6px;
+	opacity: .7;
+}
+.argon-gh-release-size {
+	flex-shrink: 0;
+	font-size: 12px;
+	color: #8b949e;
+}
+.argon-gh-release-btn {
+	flex-shrink: 0;
+	padding: 4px 14px;
+	border-radius: 6px;
+	background-color: #238636;
+	color: #fff;
+	font-size: 12px;
+	white-space: nowrap;
+}
+.argon-gh-release-btn:hover {
+	background-color: #2ea043;
+	color: #fff;
+	text-decoration: none;
+}
+@media (max-width: 576px) {
+	.argon-gh-release-item {
+		flex-wrap: wrap;
+	}
+	.argon-gh-release-name {
+		flex-basis: 100%;
+		white-space: normal;
+	}
+	.argon-gh-release-btn {
+		flex: 1;
+		text-align: center;
+	}
+}
 /* APlayer 暗色模式适配：库自身用白底卡片，深色主题下换成主题变量 */
 html.darkmode .argon-aplayer .aplayer {
 	background: var(--color-widgets, #2b2b2b);

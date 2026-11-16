@@ -47,3 +47,5 @@ import './toc-show-more/toc-show-more.js';
 /* copy 与 friend-moments 区块（2026-11）：补齐最后两个仅短代码的组件 */
 import './copy/copy.js';
 import './friend-moments/friend-moments.js';
+/* GitHub Release 下载卡（2026-11）：服务端拉附件清单，编辑器显示样式化占位 */
+import './gh-release/gh-release.js';

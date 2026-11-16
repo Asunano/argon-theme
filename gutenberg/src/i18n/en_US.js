@@ -215,5 +215,17 @@ export const translations = {
 	'朋友圈': 'Moments',
 	'展示条数': 'Items to show',
 	'收录天数范围': 'Time range (days)',
-	'仅展示最近 N 天内发布的文章': 'Only show articles published within the last N days.'
+	'仅展示最近 N 天内发布的文章': 'Only show articles published within the last N days.',
+	'GitHub 下载卡': 'GitHub Download Card',
+	'仓库': 'Repository',
+	'格式 owner/repo，例如 Asunano/UFI-AXIS': 'Format owner/repo, e.g. Asunano/UFI-AXIS.',
+	'标签（可选）': 'Tag (optional)',
+	'例如 v0.1.3；留空则显示最新 Release': 'e.g. v0.1.3; empty = latest release.',
+	'镜像前缀（可选）': 'Mirror prefix (optional)',
+	'加速下载用；所有附件地址会拼接到该域名后，例如 https://mirror.example.com/': 'Asset URLs are appended after this domain for faster downloads, e.g. https://mirror.example.com/.',
+	'附件经镜像加速下载 · ': 'Assets served via mirror · ',
+	'附件清单在前台自动加载（缓存 6 小时）': 'Asset list loads on the front end (cached for 6 hours).',
+	'仓库（右侧栏填写）': 'Repository (fill in the sidebar)',
+	'发布': 'Release',
+	'篇': 'posts'
 };

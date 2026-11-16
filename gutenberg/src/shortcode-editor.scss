@@ -791,3 +791,80 @@
 	margin: 20px 0 12px;
 	color: #5e72e4;
 }
+
+/* ---------- GitHub Release 下载卡 ---------- */
+.argon-gh-release {
+	margin: 20px 0;
+	padding: 16px 18px;
+	border-radius: 10px;
+	background-color: #24292e;
+	color: #eee;
+	box-shadow: 0 4px 16px rgba(0, 0, 0, .15);
+}
+.argon-gh-release-head {
+	display: flex;
+	align-items: baseline;
+	gap: 10px;
+	margin-bottom: 10px;
+	flex-wrap: wrap;
+}
+.argon-gh-release-title {
+	font-weight: bold;
+	font-size: 16px;
+	color: #eee;
+}
+.argon-gh-release-title i {
+	margin-right: 4px;
+}
+.argon-gh-release-tag {
+	font-size: 12px;
+	padding: 2px 8px;
+	border-radius: 4px;
+	background-color: rgba(255, 255, 255, .12);
+	color: #c9d1d9;
+}
+.argon-gh-release-item {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 9px 4px;
+	border-top: 1px solid rgba(255, 255, 255, .08);
+}
+.argon-gh-release-item:first-child {
+	border-top: 0;
+}
+.argon-gh-release-name {
+	flex: 1;
+	min-width: 0;
+	font-size: 13px;
+	color: #c9d1d9;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.argon-gh-release-name i {
+	margin-right: 6px;
+	opacity: .7;
+}
+.argon-gh-release-size {
+	flex-shrink: 0;
+	font-size: 12px;
+	color: #8b949e;
+}
+.argon-gh-release-btn {
+	flex-shrink: 0;
+	padding: 4px 14px;
+	border-radius: 6px;
+	background-color: #238636;
+	color: #fff;
+	font-size: 12px;
+	text-decoration: none;
+}
+.argon-gh-release-skeleton {
+	opacity: .7;
+}
+.argon-gh-release-editor-note {
+	margin-top: 10px;
+	font-size: 12px;
+	color: #8b949e;
+}
